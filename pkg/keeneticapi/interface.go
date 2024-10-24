@@ -26,12 +26,21 @@ func (*keeneticInterface) GetInterfacesViaRciShowInterfaces(interfaceTypes ...st
 	if err != nil {
 		return interfaces, err
 	}
-	var interfaceTypesLower []string
-	for _, v := range interfaceTypes {
-		v := v
-		interfaceTypesLower = append(interfaceTypesLower, strings.ToLower(v))
+	if len(interfaceTypes) == 0 {
+		return interfaces, nil
 	}
-	return interfaces, nil
+	realInterfaces := map[string]models.RciShowInterface{}
+	for k, interfaceDetails := range interfaces {
+		k := k
+		interfaceDetails := interfaceDetails
+		for _, v := range interfaceTypes {
+			v := v
+			if strings.EqualFold(interfaceDetails.Type, v) {
+				realInterfaces[k] = interfaceDetails
+			}
+		}
+	}
+	return realInterfaces, nil
 }
 
 func (*keeneticInterface) PrintInfoAboutInterfaces(interfaces map[string]models.RciShowInterface) {

@@ -21,10 +21,8 @@ func InfoSubStepf(msg string, args ...any) {
 	fmt.Printf("      ▪ %v\n", s)
 }
 
-func Debug(msg string) {
-	if viper.GetBool(config.ViperDebug) {
-		fmt.Println(msg)
-	}
+func InfoSubStep(msg string) {
+	fmt.Printf("      ▪ %v\n", msg)
 }
 
 func PrintParseResponse(parseResponse []models.ParseResponse) {
@@ -36,7 +34,7 @@ func PrintParseResponse(parseResponse []models.ParseResponse) {
 	}
 	for _, parse := range parseResponse {
 		for _, status := range parse.Parse.Status {
-			InfoSubStepf(status.Message)
+			InfoSubStep(status.Message)
 		}
 	}
 }
