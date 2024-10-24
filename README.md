@@ -2,6 +2,14 @@
 
 ###### [Russian doc (Документация на русском)](https://github.com/Noksa/gokeenapi/blob/main/README_ru.md)
 
+#### Video
+
+
+
+https://github.com/user-attachments/assets/404e89cc-4675-42c4-ae93-4a0955b06348
+
+
+
 ---
 
 #### Limitations | Requirements
