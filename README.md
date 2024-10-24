@@ -4,17 +4,13 @@
 
 #### Video
 
-
-
 https://github.com/user-attachments/assets/404e89cc-4675-42c4-ae93-4a0955b06348
-
-
 
 ---
 
-#### Limitations | Requirements
+#### Important notes
 * No additional configuration is required on a router - just specify the router address in `gokeenapi` (for example, `http://192.168.1.1`)
-* At the moment, `gokeenapi` can only work with a router in a local network (i.e. the device from which `gokeenapi` is launched and the router are in the same network)
+* `gokeenapi` works with Keenetic routers over LAN or Internet using internal router IP address (like `192.168.1.1`) or domain from KeenDNS (like `my-router.keenetic.pro`)
 ---
 
 #### What `gokeenapi` can already do:
