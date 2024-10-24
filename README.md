@@ -38,27 +38,27 @@ The easiest way to start using `gokeenapi` is through docker containers
 
 * Check all existing commands
 ```shell
-export GOKEENAPI_IMAGE="noksa/gokeenapi:latest"
+export GOKEENAPI_IMAGE="noksa/gokeenapi:0.0.1"
 docker pull "${GOKEENAPI_IMAGE}"
 docker run --rm -ti "${GOKEENAPI_IMAGE}" --help
 ```
 
 * View interfaces on the router - passing login\password\api via flags
 ```shell
-export GOKEENAPI_IMAGE="noksa/gokeenapi:latest"
+export GOKEENAPI_IMAGE="noksa/gokeenapi:0.0.1"
 docker pull "${GOKEENAPI_IMAGE}"
 docker run --rm -ti "${GOKEENAPI_IMAGE}" show-interfaces --url http://192.168.1.1 --login admin --password admin
 ```
 
 * View interfaces on the router - passing login\password\api via environment variables
 ```shell
-export GOKEENAPI_IMAGE="noksa/gokeenapi:latest"
+export GOKEENAPI_IMAGE="noksa/gokeenapi:0.0.1"
 docker run --rm -ti -e GOKEENAPI_URL="http://192.168.1.1" -e GOKEENAPI_LOGIN="admin" -e OKEENAPI_PASSWORD="admin" "${GOKEENAPI_IMAGE}" show-interfaces
 ```
 
 * View interfaces on the router - passing login\password\api via a file with environment variables
 ```shell
-export GOKEENAPI_IMAGE="noksa/gokeenapi:latest"
+export GOKEENAPI_IMAGE="noksa/gokeenapi:0.0.1"
 touch .gokeenapienv
 echo -e "GOKEENAPI_URL=http://192.168.1.1\n" >> .gokeenapienv
 echo -e "GOKEENAPI_LOGIN=admin\n" >> .gokeenapienv
@@ -68,6 +68,6 @@ docker run --rm -ti -v "$(pwd)/.gokeenapienv":"/gokeenapi/.gokeenapienv" "${GOKE
 
 * View interfaces on the router - passing login\password\api via YAML config file
 ```shell
-export GOKEENAPI_IMAGE="noksa/gokeenapi:latest"
+export GOKEENAPI_IMAGE="noksa/gokeenapi:0.0.1"
 docker run --rm -ti -v "$(pwd)/config_example.yaml":"/gokeenapi/config.yaml" "${GOKEENAPI_IMAGE}" show-interfaces --config "/gokeenapi/config.yaml"
 ```
