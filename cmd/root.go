@@ -55,7 +55,11 @@ func NewRootCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		keenlog.Infof("API to use: %v", viper.GetString(config.ViperKeeneticUrl))
+		keenlog.Info("Configuration loaded:")
+		keenlog.InfoSubStepf("Keenetic url: %v", viper.GetString(config.ViperKeeneticUrl))
+		if viper.GetString(config.ViperKeeneticConfig) != "" {
+			keenlog.InfoSubStepf("Config: %v", viper.GetString(config.ViperKeeneticConfig))
+		}
 		return keeneticapi.Auth()
 	}
 

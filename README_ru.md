@@ -94,9 +94,11 @@ GOKEENAPI_PASSWORD=password
 
 #### Docker 
 
+Рекомендуется использовать `noksa/gokeenapi:stable` образ
+
 * Посмотреть интерфейсы на роутере - передача логин\пароля\апи через флаги
 ```shell
-export GOKEENAPI_IMAGE="noksa/gokeenapi:0.0.1"
+export GOKEENAPI_IMAGE="noksa/gokeenapi:stable"
 docker pull "${GOKEENAPI_IMAGE}"
 docker run --rm -ti "${GOKEENAPI_IMAGE}" show-interfaces --url http://192.168.1.1 --login admin --password admin
 ```
@@ -104,13 +106,13 @@ docker run --rm -ti "${GOKEENAPI_IMAGE}" show-interfaces --url http://192.168.1.
 * Удалить все созданные маршруты для указанного интерфейса на роутере - передача логин\пароля\апи через переменные окружения
 * Обратите внимание, что флаг `--interface-id` обязателен (он так же может быть передан как переменная окружения либо через yaml конфиг файл)
 ```shell
-export GOKEENAPI_IMAGE="noksa/gokeenapi:0.0.1"
+export GOKEENAPI_IMAGE="noksa/gokeenapi:stable"
 docker run --rm -ti -e GOKEENAPI_URL="http://192.168.1.1" -e GOKEENAPI_LOGIN="admin" -e OKEENAPI_PASSWORD="admin" "${GOKEENAPI_IMAGE}" delete-routes --interface-id "Wireguard0"
 ```
 
 * Посмотреть интерфейсы на роутере - передача логин\пароля\апи через файл с переменными окружениями
 ```shell
-export GOKEENAPI_IMAGE="noksa/gokeenapi:0.0.1"
+export GOKEENAPI_IMAGE="noksa/gokeenapi:stable"
 touch .gokeenapienv
 echo -e "GOKEENAPI_URL=http://192.168.1.1\n" >> .gokeenapienv
 echo -e "GOKEENAPI_LOGIN=admin\n" >> .gokeenapienv
@@ -122,6 +124,6 @@ docker run --rm -ti -v "$(pwd)/.gokeenapienv":"/gokeenapi/.gokeenapienv" "${GOKE
 * Передача `--interface-id` через флаг
 * Передача списков `bat-file` и `bat-url` через yaml конфиг (можно так же через флаг) 
 ```shell
-export GOKEENAPI_IMAGE="noksa/gokeenapi:0.0.1"
+export GOKEENAPI_IMAGE="noksa/gokeenapi:stable"
 docker run --rm -ti -v "$(pwd)/config_example.yaml":"/gokeenapi/config.yaml" "${GOKEENAPI_IMAGE}" add-routes --config "/gokeenapi/config.yaml" --interface-id "Wireguard0"
 ```
