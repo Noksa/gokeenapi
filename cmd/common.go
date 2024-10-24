@@ -12,16 +12,23 @@ import (
 func checkRequiredFields() error {
 	var mErr error
 	if viper.GetString(config.ViperKeeneticUrl) == "" {
-		mErr = multierr.Append(mErr, errors.New("please specify a keenetic api flag/field/variable"))
+		mErr = multierr.Append(mErr, errors.New("please specify a keenetic url via flag/field/variable"))
 	}
 	if viper.GetString(config.ViperKeeneticLogin) == "" {
-		mErr = multierr.Append(mErr, errors.New("please specify a keenetic login flag/field/variable"))
+		mErr = multierr.Append(mErr, errors.New("please specify a keenetic login via flag/field/variable"))
 	}
 	if viper.GetString(config.ViperKeeneticPassword) == "" {
-		mErr = multierr.Append(mErr, errors.New("please specify a keenetic password flag/field/variable"))
+		mErr = multierr.Append(mErr, errors.New("please specify a keenetic password via flag/field/variable"))
 	}
 
 	return mErr
+}
+
+func checkInterfaceId() error {
+	if viper.GetString(config.ViperKeeneticInterfaceId) == "" {
+		return errors.New("please specify a keenetic interface id via flag/field/variable")
+	}
+	return nil
 }
 
 func checkInterfaceExists() error {

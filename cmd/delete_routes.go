@@ -15,14 +15,17 @@ func newDeleteRoutesCmd() *cobra.Command {
 	}
 
 	cmd.Flags().String("interface-id", "", "Keenetic interface ID to delete static routes on")
-	_ = cmd.MarkFlagRequired("interface-id")
 
 	cmd.PreRun = func(cmd *cobra.Command, args []string) {
 		_ = viper.BindPFlag(config.ViperKeeneticInterfaceId, cmd.Flags().Lookup("interface-id"))
 	}
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		err := checkInterfaceExists()
+		err := checkInterfaceId()
+		if err != nil {
+			return err
+		}
+		err = checkInterfaceExists()
 		if err != nil {
 			return err
 		}

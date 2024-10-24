@@ -2,3 +2,4 @@ gokeenapi
 .idea
 .gokeenapienv
 config.yaml
+config_*.yaml
