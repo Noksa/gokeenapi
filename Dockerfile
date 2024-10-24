@@ -5,7 +5,7 @@ ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /workspace
 RUN apk add --no-cache bash
-SHELL [ "/bin/bash", "-c" ]
+SHELL [ "/bin/bash", "-euo", "pipefail", "-c" ]
 COPY go.mod go.mod
 COPY go.sum go.sum
 COPY go.wor[k] go.work
@@ -16,7 +16,7 @@ eot
 COPY . .
 
 RUN --mount=type=cache,id=oobit-go-cache,target=/go/pkg <<eot
-    CGO_ENABLED=0 GOOS=${MY_OS} GOARCH=${MY_ARCH} go build -o gokeenapi
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o gokeenapi
 eot
 
 FROM alpine:3.20 as final
