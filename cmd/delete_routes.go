@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"github.com/noksa/gokeenapi/internal/config"
-	"github.com/noksa/gokeenapi/pkg/keeneticapi"
+	"github.com/noksa/gokeenapi/pkg/gokeenrestapi"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -29,11 +29,11 @@ func newDeleteRoutesCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		routes, err := keeneticapi.Route.GetAllUserRoutesRciIpRoute(viper.GetString(config.ViperKeeneticInterfaceId))
+		routes, err := gokeenrestapi.Route.GetAllUserRoutesRciIpRoute(viper.GetString(config.ViperKeeneticInterfaceId))
 		if err != nil {
 			return err
 		}
-		return keeneticapi.Route.DeleteRoutes(routes)
+		return gokeenrestapi.Route.DeleteRoutes(routes)
 	}
 	return cmd
 }

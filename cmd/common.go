@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/noksa/gokeenapi/internal/config"
-	"github.com/noksa/gokeenapi/pkg/keeneticapi"
+	"github.com/noksa/gokeenapi/pkg/gokeenrestapi"
 	"github.com/spf13/viper"
 	"go.uber.org/multierr"
+	"os"
+	"runtime"
 )
 
 func checkRequiredFields() error {
@@ -32,7 +34,7 @@ func checkInterfaceId() error {
 }
 
 func checkInterfaceExists() error {
-	interfaces, err := keeneticapi.Interface.GetInterfacesViaRciShowInterfaces()
+	interfaces, err := gokeenrestapi.Interface.GetInterfacesViaRciShowInterfaces()
 	if err != nil {
 		return err
 	}
@@ -47,4 +49,11 @@ func checkInterfaceExists() error {
 		return fmt.Errorf("keenetic router doesn't have interface with id '%v'. Verify that you specified correct ID", viper.GetString(config.ViperKeeneticInterfaceId))
 	}
 	return nil
+}
+
+func RestoreCursor() {
+	if !(len(os.Getenv("WT_SESSION")) > 0 && runtime.GOOS == "windows") {
+		// make sure to restore cursor in all cases
+		_, _ = fmt.Fprint(os.Stdout, "\033[?25h")
+	}
 }

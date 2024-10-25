@@ -3,8 +3,9 @@ package cmd
 import (
 	"github.com/joho/godotenv"
 	"github.com/noksa/gokeenapi/internal/config"
-	"github.com/noksa/gokeenapi/internal/keenlog"
-	"github.com/noksa/gokeenapi/pkg/keeneticapi"
+	"github.com/noksa/gokeenapi/internal/gokeenlog"
+	"github.com/noksa/gokeenapi/internal/gokeenversion"
+	"github.com/noksa/gokeenapi/pkg/gokeenrestapi"
 	"github.com/spf13/cobra"
 	"os"
 	"strings"
@@ -23,7 +24,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{}
 	rootCmd.SilenceUsage = true
 	var configFile string
-	rootCmd.Use = "gokeenapi"
+	rootCmd.Use = "gokeenrestapi"
 	rootCmd.Short = "A convenient utility to add/delete routes in Keenetic routers via REST API"
 	rootCmd.PersistentFlags().String("url", "", "Keenetic router url/ip address, example: http://192.168.1.1")
 	rootCmd.PersistentFlags().String("login", "", "Keenetic API login")
@@ -55,12 +56,13 @@ func NewRootCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		keenlog.Info("Configuration loaded:")
-		keenlog.InfoSubStepf("Keenetic url: %v", viper.GetString(config.ViperKeeneticUrl))
+		gokeenlog.Infof("Version: %v, BuildDate: %v", gokeenversion.Version(), gokeenversion.BuildDate())
+		gokeenlog.Info("Configuration loaded:")
+		gokeenlog.InfoSubStepf("Keenetic url: %v", viper.GetString(config.ViperKeeneticUrl))
 		if viper.GetString(config.ViperKeeneticConfig) != "" {
-			keenlog.InfoSubStepf("Config: %v", viper.GetString(config.ViperKeeneticConfig))
+			gokeenlog.InfoSubStepf("Config: %v", viper.GetString(config.ViperKeeneticConfig))
 		}
-		return keeneticapi.Auth()
+		return gokeenrestapi.Auth()
 	}
 
 	rootCmd.AddCommand(

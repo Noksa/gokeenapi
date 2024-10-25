@@ -1,4 +1,4 @@
-package keenlog
+package gokeenlog
 
 import (
 	"fmt"
@@ -12,6 +12,14 @@ func Info(msg string) {
 }
 
 func Infof(msg string, args ...any) {
+	s := fmt.Sprintf(msg, args...)
+	fmt.Printf("%v\n", s)
+}
+
+func Debugf(msg string, args ...any) {
+	if !viper.GetBool(config.ViperDebug) {
+		return
+	}
 	s := fmt.Sprintf(msg, args...)
 	fmt.Printf("%v\n", s)
 }

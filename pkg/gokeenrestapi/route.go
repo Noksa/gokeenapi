@@ -1,4 +1,4 @@
-package keeneticapi
+package gokeenrestapi
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/go-resty/resty/v2"
 	"github.com/noksa/gokeenapi/internal/config"
-	"github.com/noksa/gokeenapi/internal/keenlog"
+	"github.com/noksa/gokeenapi/internal/gokeenlog"
 	"github.com/noksa/gokeenapi/internal/keenspinner"
 	"github.com/noksa/gokeenapi/pkg/models"
 	"github.com/spf13/viper"
@@ -45,13 +45,13 @@ func (*keeneticRoute) GetAllUserRoutesRciIpRoute(keeneticInterface string) ([]mo
 			realRoutes = append(realRoutes, route)
 		}
 	}
-	keenlog.InfoSubStepf("Found %v static routes for %v interface", color.MagentaString("%v", len(realRoutes)), viper.GetString(config.ViperKeeneticInterfaceId))
+	gokeenlog.InfoSubStepf("Found %v static routes for %v interface", color.MagentaString("%v", len(realRoutes)), viper.GetString(config.ViperKeeneticInterfaceId))
 	return realRoutes, err
 }
 
 func (*keeneticRoute) DeleteRoutes(routes []models.RciIpRoute) error {
 	if len(routes) == 0 {
-		keenlog.Info("No need to delete static routes")
+		gokeenlog.Info("No need to delete static routes")
 		return nil
 	}
 	var parseSlice []models.ParseRequest
@@ -93,8 +93,8 @@ func (*keeneticRoute) AddRoutesFromBatFile(batFile string) error {
 		}
 		sl := matcher.FindStringSubmatch(line)
 		if len(sl) != 3 {
-			keenlog.Infof("Skipping line with invalid format: '%v'", line)
-			keenlog.InfoSubStepf("It doesn't satisfy regexp: '%v'", regex)
+			gokeenlog.Infof("Skipping line with invalid format: '%v'", line)
+			gokeenlog.InfoSubStepf("It doesn't satisfy regexp: '%v'", regex)
 			mErr = multierr.Append(mErr, fmt.Errorf("line has invalid format: '%v'", line))
 			continue
 		}
@@ -108,7 +108,7 @@ func (*keeneticRoute) AddRoutesFromBatFile(batFile string) error {
 		parseResponse, executeErr = ExecutePostParse(parseSlice...)
 		return executeErr
 	}))
-	keenlog.PrintParseResponse(parseResponse)
+	gokeenlog.PrintParseResponse(parseResponse)
 	return mErr
 }
 
@@ -136,8 +136,8 @@ func (*keeneticRoute) AddRoutesFromBatUrl(url string) error {
 		}
 		sl := matcher.FindStringSubmatch(line)
 		if len(sl) != 3 {
-			keenlog.Infof("Skipping line with invalid format: '%v'", line)
-			keenlog.InfoSubStepf("It doesn't satisfy regexp: '%v'", regex)
+			gokeenlog.Infof("Skipping line with invalid format: '%v'", line)
+			gokeenlog.InfoSubStepf("It doesn't satisfy regexp: '%v'", regex)
 			mErr = multierr.Append(mErr, fmt.Errorf("line has invalid format: '%v'", line))
 			continue
 		}
@@ -151,6 +151,6 @@ func (*keeneticRoute) AddRoutesFromBatUrl(url string) error {
 		parseResponse, executeErr = ExecutePostParse(parseSlice...)
 		return executeErr
 	}))
-	keenlog.PrintParseResponse(parseResponse)
+	gokeenlog.PrintParseResponse(parseResponse)
 	return mErr
 }

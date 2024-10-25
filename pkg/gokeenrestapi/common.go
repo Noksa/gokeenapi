@@ -1,4 +1,4 @@
-package keeneticapi
+package gokeenrestapi
 
 import (
 	"crypto/md5"

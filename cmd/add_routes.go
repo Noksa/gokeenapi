@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/noksa/gokeenapi/internal/config"
-	"github.com/noksa/gokeenapi/pkg/keeneticapi"
+	"github.com/noksa/gokeenapi/pkg/gokeenrestapi"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"path/filepath"
@@ -43,13 +43,13 @@ func newAddRoutesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			err = keeneticapi.Route.AddRoutesFromBatFile(absFilePath)
+			err = gokeenrestapi.Route.AddRoutesFromBatFile(absFilePath)
 			if err != nil {
 				return err
 			}
 		}
 		for _, url := range viper.GetStringSlice(config.ViperBatUrls) {
-			err := keeneticapi.Route.AddRoutesFromBatUrl(url)
+			err := gokeenrestapi.Route.AddRoutesFromBatUrl(url)
 			if err != nil {
 				return err
 			}

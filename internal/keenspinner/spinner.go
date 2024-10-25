@@ -3,8 +3,6 @@ package keenspinner
 import (
 	"fmt"
 	"github.com/briandowns/spinner"
-	"os"
-	"runtime"
 	"time"
 )
 
@@ -12,12 +10,6 @@ func WrapWithSpinner(spinnerText string, f func() error) error {
 	s := spinner.New(spinner.CharSets[70], 100*time.Millisecond)
 	startTime := time.Now()
 	s.Start()
-	defer func() {
-		if !(len(os.Getenv("WT_SESSION")) > 0 && runtime.GOOS == "windows") {
-			// make sure to restore cursor in all cases
-			_, _ = fmt.Fprint(os.Stdout, "\033[?25h")
-		}
-	}()
 	s.PostUpdate = func(s *spinner.Spinner) {
 		s.Prefix = fmt.Sprintf("⌛   %v ... %s	", spinnerText, getPrettyFormatedDuration(time.Since(startTime).Round(time.Millisecond)))
 	}

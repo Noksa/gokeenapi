@@ -1,9 +1,9 @@
-package keeneticapi
+package gokeenrestapi
 
 import (
 	"encoding/json"
 	"github.com/fatih/color"
-	"github.com/noksa/gokeenapi/internal/keenlog"
+	"github.com/noksa/gokeenapi/internal/gokeenlog"
 	"github.com/noksa/gokeenapi/internal/keenspinner"
 	"github.com/noksa/gokeenapi/pkg/models"
 	"strings"
@@ -45,16 +45,16 @@ func (*keeneticInterface) GetInterfacesViaRciShowInterfaces(interfaceTypes ...st
 
 func (*keeneticInterface) PrintInfoAboutInterfaces(interfaces map[string]models.RciShowInterface) {
 	for k, interfaceDetails := range interfaces {
-		keenlog.Infof("Interface '%v':", color.BlueString(k))
-		keenlog.InfoSubStepf("Id: %v", color.CyanString(interfaceDetails.Id))
-		keenlog.InfoSubStepf("Type: %v", color.CyanString(interfaceDetails.Type))
+		gokeenlog.Infof("Interface '%v':", color.BlueString(k))
+		gokeenlog.InfoSubStepf("Id: %v", color.CyanString(interfaceDetails.Id))
+		gokeenlog.InfoSubStepf("Type: %v", color.CyanString(interfaceDetails.Type))
 		if interfaceDetails.Description != "" {
-			keenlog.InfoSubStepf("Description: %v", color.CyanString(interfaceDetails.Description))
+			gokeenlog.InfoSubStepf("Description: %v", color.CyanString(interfaceDetails.Description))
 		}
 		if interfaceDetails.Address != "" {
-			keenlog.InfoSubStepf("Address: %v", color.CyanString(interfaceDetails.Address))
+			gokeenlog.InfoSubStepf("Address: %v", color.CyanString(interfaceDetails.Address))
 		}
-		keenlog.Infof("")
+		gokeenlog.Infof("")
 	}
 
 }
