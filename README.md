@@ -32,9 +32,9 @@ All options can be combined - for example, login\password and Router URL can be 
 
 ---
 
-#### Examples usage
+#### Examples
 
-The easiest way to start using `gokeenapi` is through docker containers
+The easiest way to start using `gokeenapi` is through docker containers or using the latest available release from [here](https://github.com/Noksa/gokeenapi/releases)
 
 ---
 
