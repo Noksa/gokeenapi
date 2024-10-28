@@ -5,3 +5,5 @@
 config.yaml
 config_*.yaml
 binaries
+scripts/upload_routes*.sh
+batfiles/file*.bat
