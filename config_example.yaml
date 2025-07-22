@@ -1,4 +1,8 @@
 keenetic:
+  # how many routes will be added/deleted per one request to api
+  # default is 50
+  # can't be less than 20
+  routesPerRequest: 50
   # can be replaced by GOKEENAPI_URL variable or --url flag
   url: http://192.168.1.1
   # can be replaced by GOKEENAPI_LOGIN variable or --login flag

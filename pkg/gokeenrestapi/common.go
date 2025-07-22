@@ -64,26 +64,44 @@ func Auth() error {
 }
 
 func ExecutePostParse(parse ...models.ParseRequest) ([]models.ParseResponse, error) {
-	request := GetApiClient().R()
-	request.SetBody(parse)
-	response, err := request.Post("/rci/")
+	parseCopy := parse
 	var parseResponse []models.ParseResponse
 	var mErr error
-	if response != nil {
-		if response.StatusCode() != http.StatusOK {
-			return parseResponse, fmt.Errorf("wrong status code in response from api: %s", response.Status())
+	for len(parseCopy) > 0 {
+		request := GetApiClient().R()
+		maxParse := viper.GetInt("keenetic.routesPerRequest")
+		if maxParse == 0 {
+			maxParse = 50
+		} else if maxParse < 20 {
+			maxParse = 20
 		}
-		decodeErr := json.Unmarshal(response.Body(), &parseResponse)
-		mErr = multierr.Append(mErr, decodeErr)
-		for _, myParse := range parseResponse {
-			for _, status := range myParse.Parse.Status {
-				if status.Status == "error" {
-					mErr = multierr.Append(mErr, fmt.Errorf("%s - %s - %s - %s", status.Status, status.Code, status.Ident, status.Message))
+		currentLen := len(parseCopy)
+		if currentLen < maxParse {
+			maxParse = currentLen
+		}
+		var parseRequest []models.ParseRequest
+		for i := 0; i < maxParse; i++ {
+			parseRequest = append(parseRequest, parseCopy[i])
+		}
+		parseCopy = parseCopy[maxParse:]
+		request.SetBody(parseRequest)
+		response, err := request.Post("/rci/")
+		if response != nil {
+			if response.StatusCode() != http.StatusOK {
+				mErr = multierr.Append(mErr, fmt.Errorf("wrong status code in response from api: %s", response.Status()))
+			}
+			decodeErr := json.Unmarshal(response.Body(), &parseResponse)
+			mErr = multierr.Append(mErr, decodeErr)
+			for _, myParse := range parseResponse {
+				for _, status := range myParse.Parse.Status {
+					if status.Status == "error" {
+						mErr = multierr.Append(mErr, fmt.Errorf("%s - %s - %s - %s", status.Status, status.Code, status.Ident, status.Message))
+					}
 				}
 			}
 		}
+		mErr = multierr.Append(mErr, err)
 	}
-	mErr = multierr.Append(mErr, err)
 	return parseResponse, mErr
 }
 
