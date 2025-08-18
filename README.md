@@ -1,4 +1,4 @@
-## Utility for adding/removing static routes in Keenetic routers via REST API
+## Utility to run commands (such add add/del routes) in Keenetic routers via REST API
 
 ###### [Russian doc (Документация на русском)](https://github.com/Noksa/gokeenapi/blob/main/README_ru.md)
 
@@ -14,6 +14,7 @@ https://github.com/user-attachments/assets/404e89cc-4675-42c4-ae93-4a0955b06348
 ---
 
 #### What `gokeenapi` can already do:
+* Apply ASC parameters to existing WG connections from WG conf files
 * Display a list of interfaces that have already been added to the router - for easy search of the interface ID for which you need to add/remove routes
 * Delete static routes only for the specified interface. In the Web Configurator of the router, at the moment you can only delete all created static routes for all interfaces at once
 * Add\update static routes for the specified interface from bat files from disk
