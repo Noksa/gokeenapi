@@ -232,6 +232,23 @@ docker run --rm -ti -v "$(pwd)/config_example.yaml":/gokeenapi/config.yaml \
 ./gokeenapi delete-known-hosts --config my_config.yaml --name-pattern "паттерн" --force
 ```
 
+#### `exec`
+
+*Псевдонимы: `e`*
+
+Выполняет пользовательские команды CLI Keenetic напрямую на вашем роутере.
+
+```shell
+# Показать информацию о системе
+./gokeenapi exec --config my_config.yaml show version
+
+# Отобразить статистику интерфейсов
+./gokeenapi exec --config my_config.yaml show interface
+
+# Показать таблицу маршрутизации
+./gokeenapi exec --config my_config.yaml show ip route
+```
+
 ---
 
 ### 🤝 Участие в разработке

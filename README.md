@@ -238,6 +238,23 @@ Deletes known hosts by name or MAC using regex pattern.
 ./gokeenapi delete-known-hosts --config my_config.yaml --name-pattern "pattern" --force
 ```
 
+#### `exec`
+
+*Aliases: `e`*
+
+Execute custom Keenetic CLI commands directly on your router.
+
+```shell
+# Show system information
+./gokeenapi exec --config my_config.yaml show version
+
+# Display interface statistics
+./gokeenapi exec --config my_config.yaml show interface
+
+# Show routing table
+./gokeenapi exec --config my_config.yaml show ip route
+```
+
 ---
 
 ### 🤝 Contributing
