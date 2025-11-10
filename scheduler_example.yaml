@@ -57,7 +57,8 @@ tasks:
 #   gokeenapi scheduler --config scheduler.yaml
 #
 # The scheduler will run continuously until stopped (Ctrl+C).
-# All tasks run in parallel according to their schedules.
+# Tasks are executed sequentially in a queue - if multiple tasks trigger
+# at the same time, they will run one after another (not in parallel).
 # Commands within a task run sequentially for each config.
 #
 # Supported commands:
@@ -76,6 +77,6 @@ tasks:
 #   - Use "times" for execution at specific times (24-hour format)
 #   - Cannot use both "interval" and "times" in the same task
 #   - Each task can target multiple router configs
-#   - Tasks run independently and in parallel
+#   - Tasks are queued and executed sequentially
 #   - Commands within a task execute sequentially
 #   - If a command fails, remaining commands for that config are skipped

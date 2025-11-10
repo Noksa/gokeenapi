@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
+	"github.com/enriquebris/goconcurrentqueue"
 	"github.com/fatih/color"
 	"github.com/noksa/gokeenapi/internal/gokeenlog"
+	"github.com/noksa/gokeenapi/internal/gokeenspinner"
 	"github.com/noksa/gokeenapi/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -23,8 +26,9 @@ func newSchedulerCmd() *cobra.Command {
 The scheduler runs tasks at specified intervals or fixed times.
 Each task executes one or more gokeenapi commands sequentially with one or more router configs.
 
-The scheduler runs continuously until stopped (Ctrl+C). All tasks run in parallel 
-according to their schedules. Commands within a task execute sequentially for each config.
+The scheduler runs continuously until stopped (Ctrl+C). Tasks are executed sequentially
+in a queue - if multiple tasks trigger at the same time, they will run one after another.
+Commands within a task execute sequentially for each config.
 If a command fails, remaining commands for that config are skipped.
 
 Examples:
@@ -74,16 +78,36 @@ func runScheduler(cmd *cobra.Command, args []string) error {
 	}
 
 	gokeenlog.Info(color.GreenString("🕐 Scheduler started"))
-	gokeenlog.InfoSubStepf("Tasks: %d", len(schedulerCfg.Tasks))
+	gokeenlog.InfoSubStepf("Tasks: %v", color.CyanString("%v", len(schedulerCfg.Tasks)))
 
 	ctx := cmd.Context()
 
-	for i := range schedulerCfg.Tasks {
-		task := &schedulerCfg.Tasks[i]
+	// Create FIFO queue for sequential task execution
+	queue := goconcurrentqueue.NewFIFO()
+
+	// Start task executor (single worker for sequential execution)
+	go func() {
+		time.Sleep(time.Second)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				item, err := queue.DequeueOrWaitForNextElement()
+				if err == nil {
+					if task, ok := item.(config.ScheduledTask); ok {
+						executeTask(task)
+					}
+				}
+			}
+		}
+	}()
+
+	for _, task := range schedulerCfg.Tasks {
 		if err := validateTask(task); err != nil {
 			return fmt.Errorf("task %q validation failed: %w", task.Name, err)
 		}
-		go runTask(ctx, task)
+		go runTask(ctx, task, queue)
 	}
 
 	<-ctx.Done()
@@ -92,7 +116,7 @@ func runScheduler(cmd *cobra.Command, args []string) error {
 }
 
 // validateTask validates task configuration
-func validateTask(task *config.ScheduledTask) error {
+func validateTask(task config.ScheduledTask) error {
 	if task.Name == "" {
 		return fmt.Errorf("task name is required")
 	}
@@ -122,37 +146,37 @@ func validateTask(task *config.ScheduledTask) error {
 }
 
 // runTask runs a scheduled task
-func runTask(ctx context.Context, task *config.ScheduledTask) {
+func runTask(ctx context.Context, task config.ScheduledTask, queue goconcurrentqueue.Queue) {
 	if task.Interval != "" {
-		runIntervalTask(ctx, task)
+		runIntervalTask(ctx, task, queue)
 	} else {
-		runTimedTask(ctx, task)
+		runTimedTask(ctx, task, queue)
 	}
 }
 
 // runIntervalTask runs task at specified intervals
-func runIntervalTask(ctx context.Context, task *config.ScheduledTask) {
+func runIntervalTask(ctx context.Context, task config.ScheduledTask, queue goconcurrentqueue.Queue) {
 	interval, _ := time.ParseDuration(task.Interval)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	gokeenlog.InfoSubStepf("Task %q: running every %s", task.Name, interval)
+	gokeenlog.InfoSubStepf("Task '%v': running every %s", color.CyanString(task.Name), color.BlueString("%v", interval))
 
-	executeTask(task)
+	_ = queue.Enqueue(task)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			executeTask(task)
+			_ = queue.Enqueue(task)
 		}
 	}
 }
 
 // runTimedTask runs task at specified times
-func runTimedTask(ctx context.Context, task *config.ScheduledTask) {
-	gokeenlog.InfoSubStepf("Task %q: running at %v", task.Name, task.Times)
+func runTimedTask(ctx context.Context, task config.ScheduledTask, queue goconcurrentqueue.Queue) {
+	gokeenlog.InfoSubStepf("Task '%v': running at %v", color.CyanString(task.Name), color.BlueString("%v", task.Times))
 
 	for {
 		nextRun := getNextRunTime(task.Times)
@@ -162,7 +186,7 @@ func runTimedTask(ctx context.Context, task *config.ScheduledTask) {
 		case <-ctx.Done():
 			return
 		case <-time.After(waitDuration):
-			executeTask(task)
+			_ = queue.Enqueue(task)
 		}
 	}
 }
@@ -173,48 +197,56 @@ func getNextRunTime(times []string) time.Time {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
 	var nextRun time.Time
+	var earliestTime time.Time
+
 	for _, t := range times {
 		parsed, _ := time.Parse("15:04", t)
 		runTime := today.Add(time.Hour*time.Duration(parsed.Hour()) + time.Minute*time.Duration(parsed.Minute()))
 
+		// Track earliest time for tomorrow
+		if earliestTime.IsZero() || runTime.Before(earliestTime) {
+			earliestTime = runTime
+		}
+
+		// Find next run today
 		if runTime.After(now) && (nextRun.IsZero() || runTime.Before(nextRun)) {
 			nextRun = runTime
 		}
 	}
 
+	// If no time left today, use earliest time tomorrow
 	if nextRun.IsZero() {
-		parsed, _ := time.Parse("15:04", times[0])
-		nextRun = today.Add(24*time.Hour + time.Hour*time.Duration(parsed.Hour()) + time.Minute*time.Duration(parsed.Minute()))
+		nextRun = earliestTime.Add(24 * time.Hour)
 	}
 
 	return nextRun
 }
 
 // executeTask executes a single task
-func executeTask(task *config.ScheduledTask) {
-	gokeenlog.Info(color.CyanString("▶ Executing task: %s", task.Name))
+func executeTask(task config.ScheduledTask) {
+	gokeenlog.Infof("▶ Executing task: %v", color.BlueString(task.Name))
 
 	for _, configPath := range task.Configs {
-		gokeenlog.InfoSubStepf("Config: %s", configPath)
+		gokeenlog.InfoSubStepf("Config: %s", color.CyanString(configPath))
 
 		for _, command := range task.Commands {
-			gokeenlog.InfoSubStepf("  Command: %s", command)
-
 			executable, err := os.Executable()
 			if err != nil {
-				gokeenlog.Info(color.RedString("    ✗ Failed to get executable path: %v", err))
+				gokeenlog.InfoSubStepf("%s Failed to get executable path: %v", color.RedString("✗"), err)
 				continue
 			}
 
-			cmd := exec.Command(executable, command, "--config", configPath)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
+			b := &strings.Builder{}
+			err = gokeenspinner.WrapWithSpinner(fmt.Sprintf("Executing %s", color.BlueString(command)), func() error {
+				cmd := exec.Command(executable, command, "--config", configPath)
+				cmd.Stdout = b
+				cmd.Stderr = b
+				return cmd.Run()
+			})
 
-			if err := cmd.Run(); err != nil {
-				gokeenlog.Info(color.RedString("    ✗ Failed: %v", err))
+			if err != nil {
+				gokeenlog.InfoSubStepf("Error: %v, %v", color.RedString(err.Error()), color.RedString(b.String()))
 				break
-			} else {
-				gokeenlog.Info(color.GreenString("    ✓ Success"))
 			}
 		}
 	}

@@ -43,7 +43,7 @@ func (s *SchedulerTestSuite) TestNewSchedulerCmd() {
 }
 
 func (s *SchedulerTestSuite) TestValidateTask_Valid() {
-	task := &config.ScheduledTask{
+	task := config.ScheduledTask{
 		Name:     "Test task",
 		Commands: []string{"add-routes"},
 		Configs:  []string{"/path/to/config.yaml"},
@@ -55,7 +55,7 @@ func (s *SchedulerTestSuite) TestValidateTask_Valid() {
 }
 
 func (s *SchedulerTestSuite) TestValidateTask_MissingName() {
-	task := &config.ScheduledTask{
+	task := config.ScheduledTask{
 		Name:     "",
 		Commands: []string{"add-routes"},
 		Configs:  []string{"/path/to/config.yaml"},
@@ -68,7 +68,7 @@ func (s *SchedulerTestSuite) TestValidateTask_MissingName() {
 }
 
 func (s *SchedulerTestSuite) TestValidateTask_MissingCommands() {
-	task := &config.ScheduledTask{
+	task := config.ScheduledTask{
 		Name:     "Test task",
 		Commands: []string{},
 		Configs:  []string{"/path/to/config.yaml"},
@@ -81,7 +81,7 @@ func (s *SchedulerTestSuite) TestValidateTask_MissingCommands() {
 }
 
 func (s *SchedulerTestSuite) TestValidateTask_MissingConfigs() {
-	task := &config.ScheduledTask{
+	task := config.ScheduledTask{
 		Name:     "Test task",
 		Commands: []string{"add-routes"},
 		Configs:  []string{},
@@ -94,7 +94,7 @@ func (s *SchedulerTestSuite) TestValidateTask_MissingConfigs() {
 }
 
 func (s *SchedulerTestSuite) TestValidateTask_MissingIntervalAndTimes() {
-	task := &config.ScheduledTask{
+	task := config.ScheduledTask{
 		Name:     "Test task",
 		Commands: []string{"add-routes"},
 		Configs:  []string{"/path/to/config.yaml"},
@@ -106,7 +106,7 @@ func (s *SchedulerTestSuite) TestValidateTask_MissingIntervalAndTimes() {
 }
 
 func (s *SchedulerTestSuite) TestValidateTask_BothIntervalAndTimes() {
-	task := &config.ScheduledTask{
+	task := config.ScheduledTask{
 		Name:     "Test task",
 		Commands: []string{"add-routes"},
 		Configs:  []string{"/path/to/config.yaml"},
@@ -120,7 +120,7 @@ func (s *SchedulerTestSuite) TestValidateTask_BothIntervalAndTimes() {
 }
 
 func (s *SchedulerTestSuite) TestValidateTask_InvalidInterval() {
-	task := &config.ScheduledTask{
+	task := config.ScheduledTask{
 		Name:     "Test task",
 		Commands: []string{"add-routes"},
 		Configs:  []string{"/path/to/config.yaml"},
@@ -133,7 +133,7 @@ func (s *SchedulerTestSuite) TestValidateTask_InvalidInterval() {
 }
 
 func (s *SchedulerTestSuite) TestValidateTask_InvalidTimeFormat() {
-	task := &config.ScheduledTask{
+	task := config.ScheduledTask{
 		Name:     "Test task",
 		Commands: []string{"add-routes"},
 		Configs:  []string{"/path/to/config.yaml"},
@@ -146,7 +146,7 @@ func (s *SchedulerTestSuite) TestValidateTask_InvalidTimeFormat() {
 }
 
 func (s *SchedulerTestSuite) TestValidateTask_ValidTimes() {
-	task := &config.ScheduledTask{
+	task := config.ScheduledTask{
 		Name:     "Test task",
 		Commands: []string{"add-routes"},
 		Configs:  []string{"/path/to/config.yaml"},
@@ -158,7 +158,7 @@ func (s *SchedulerTestSuite) TestValidateTask_ValidTimes() {
 }
 
 func (s *SchedulerTestSuite) TestValidateTask_MultipleCommands() {
-	task := &config.ScheduledTask{
+	task := config.ScheduledTask{
 		Name:     "Test task",
 		Commands: []string{"delete-routes", "add-routes"},
 		Configs:  []string{"/path/to/config.yaml"},
@@ -207,6 +207,16 @@ func (s *SchedulerTestSuite) TestGetNextRunTime_MultipleTimes() {
 	assert.Contains(s.T(), times, nextRunTime, "nextRun should match one of the specified times")
 }
 
+func (s *SchedulerTestSuite) TestGetNextRunTime_AllPastTimes() {
+	// All times in the past - should pick earliest for tomorrow
+	times := []string{"18:00", "06:00", "12:00"}
+
+	nextRun := getNextRunTime(times)
+
+	// Should be 06:00 (earliest time), either today or tomorrow
+	assert.Equal(s.T(), "06:00", nextRun.Format("15:04"), "should pick earliest time")
+}
+
 func (s *SchedulerTestSuite) TestLoadSchedulerConfig_Valid() {
 	configPath := filepath.Join(s.tempDir, "scheduler.yaml")
 	configContent := `tasks:
@@ -222,7 +232,6 @@ func (s *SchedulerTestSuite) TestLoadSchedulerConfig_Valid() {
 
 	cfg, err := config.LoadSchedulerConfig(configPath)
 	assert.NoError(s.T(), err)
-	assert.NotNil(s.T(), cfg)
 	assert.Len(s.T(), cfg.Tasks, 1)
 	assert.Equal(s.T(), "Test task", cfg.Tasks[0].Name)
 	assert.Equal(s.T(), []string{"add-routes"}, cfg.Tasks[0].Commands)
@@ -246,7 +255,6 @@ func (s *SchedulerTestSuite) TestLoadSchedulerConfig_MultipleCommands() {
 
 	cfg, err := config.LoadSchedulerConfig(configPath)
 	assert.NoError(s.T(), err)
-	assert.NotNil(s.T(), cfg)
 	assert.Len(s.T(), cfg.Tasks, 1)
 	assert.Equal(s.T(), []string{"delete-routes", "add-routes"}, cfg.Tasks[0].Commands)
 	assert.Equal(s.T(), []string{"02:00"}, cfg.Tasks[0].Times)
@@ -255,14 +263,14 @@ func (s *SchedulerTestSuite) TestLoadSchedulerConfig_MultipleCommands() {
 func (s *SchedulerTestSuite) TestLoadSchedulerConfig_EmptyPath() {
 	cfg, err := config.LoadSchedulerConfig("")
 	assert.Error(s.T(), err)
-	assert.Nil(s.T(), cfg)
+	assert.Empty(s.T(), cfg.Tasks)
 	assert.Contains(s.T(), err.Error(), "empty")
 }
 
 func (s *SchedulerTestSuite) TestLoadSchedulerConfig_NonExistent() {
 	cfg, err := config.LoadSchedulerConfig("/nonexistent/scheduler.yaml")
 	assert.Error(s.T(), err)
-	assert.Nil(s.T(), cfg)
+	assert.Empty(s.T(), cfg.Tasks)
 }
 
 func (s *SchedulerTestSuite) TestLoadSchedulerConfig_InvalidYAML() {
@@ -272,5 +280,5 @@ func (s *SchedulerTestSuite) TestLoadSchedulerConfig_InvalidYAML() {
 
 	cfg, err := config.LoadSchedulerConfig(configPath)
 	assert.Error(s.T(), err)
-	assert.Nil(s.T(), cfg)
+	assert.Empty(s.T(), cfg.Tasks)
 }

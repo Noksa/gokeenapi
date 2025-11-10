@@ -28,18 +28,18 @@ type ScheduledTask struct {
 }
 
 // LoadSchedulerConfig loads scheduler configuration from YAML file
-func LoadSchedulerConfig(configPath string) (*SchedulerConfig, error) {
+func LoadSchedulerConfig(configPath string) (SchedulerConfig, error) {
 	if configPath == "" {
-		return nil, errors.New("scheduler config path is empty")
+		return SchedulerConfig{}, errors.New("scheduler config path is empty")
 	}
 	b, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, err
+		return SchedulerConfig{}, err
 	}
 	var cfg SchedulerConfig
 	err = yaml.Unmarshal(b, &cfg)
 	if err != nil {
-		return nil, err
+		return SchedulerConfig{}, err
 	}
-	return &cfg, nil
+	return cfg, nil
 }
