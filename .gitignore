@@ -10,3 +10,4 @@ batfiles/file*.bat
 coverage.html
 coverage.out
 .DS_Store
+custom
