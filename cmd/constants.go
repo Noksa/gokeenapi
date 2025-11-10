@@ -11,6 +11,7 @@ const (
 	CmdDeleteDnsRecords = "delete-dns-records"
 	CmdDeleteKnownHosts = "delete-known-hosts"
 	CmdExec             = "exec"
+	CmdScheduler        = "scheduler"
 )
 
 // Built-in commands that should skip initialization
@@ -30,4 +31,5 @@ var (
 	AliasesDeleteDnsRecords = []string{"deletednsrecords", "ddr"}
 	AliasesDeleteKnownHosts = []string{"deleteknownhosts", "dkh"}
 	AliasesExec             = []string{"e"}
+	AliasesScheduler        = []string{"schedule", "sched"}
 )

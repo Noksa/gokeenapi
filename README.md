@@ -255,6 +255,41 @@ Execute custom Keenetic CLI commands directly on your router.
 ./gokeenapi exec --config my_config.yaml show ip route
 ```
 
+#### `scheduler`
+
+*Aliases: `schedule`, `sched`*
+
+Run scheduled tasks based on scheduler configuration file. Executes commands at specified intervals or fixed times.
+
+```shell
+# Run scheduler with config
+./gokeenapi scheduler --config scheduler.yaml
+```
+
+Example scheduler configuration:
+
+```yaml
+tasks:
+  - name: "Update routes every 3 hours"
+    commands:
+      - add-routes
+    configs:
+      - /path/to/router1.yaml
+      - /path/to/router2.yaml
+    interval: "3h"
+  
+  - name: "Refresh routes daily"
+    commands:
+      - delete-routes
+      - add-routes
+    configs:
+      - /path/to/router1.yaml
+    times:
+      - "02:00"
+```
+
+See [scheduler_example.yaml](scheduler_example.yaml) for more examples.
+
 ---
 
 ### 🤝 Contributing

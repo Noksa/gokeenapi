@@ -53,8 +53,8 @@ Contains router connection details and operation settings.
 Can also be set via GOKEENAPI_CONFIG environment variable.`)
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		// completion and help commands should run without any checks and init
-		commandsToSkip := []string{CmdCompletion, CmdHelp}
+		// scheduler, completion and help commands should run without any checks and init
+		commandsToSkip := []string{CmdCompletion, CmdHelp, CmdScheduler}
 		for _, commandToSkip := range commandsToSkip {
 			if strings.Contains(cmd.CommandPath(), commandToSkip) {
 				return nil
@@ -85,6 +85,7 @@ Can also be set via GOKEENAPI_CONFIG environment variable.`)
 		newDeleteDnsRecordsCmd(),
 		newDeleteKnownHostsCmd(),
 		newExecCmd(),
+		newSchedulerCmd(),
 	)
 	return rootCmd
 }

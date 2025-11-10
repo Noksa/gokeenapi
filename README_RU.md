@@ -249,6 +249,41 @@ docker run --rm -ti -v "$(pwd)/config_example.yaml":/gokeenapi/config.yaml \
 ./gokeenapi exec --config my_config.yaml show ip route
 ```
 
+#### `scheduler`
+
+*Псевдонимы: `schedule`, `sched`*
+
+Запускает запланированные задачи на основе конфигурационного файла планировщика. Выполняет команды с заданными интервалами или в фиксированное время.
+
+```shell
+# Запустить планировщик с конфигом
+./gokeenapi scheduler --config scheduler.yaml
+```
+
+Пример конфигурации планировщика:
+
+```yaml
+tasks:
+  - name: "Обновление маршрутов каждые 3 часа"
+    commands:
+      - add-routes
+    configs:
+      - /path/to/router1.yaml
+      - /path/to/router2.yaml
+    interval: "3h"
+  
+  - name: "Обновление маршрутов ежедневно"
+    commands:
+      - delete-routes
+      - add-routes
+    configs:
+      - /path/to/router1.yaml
+    times:
+      - "02:00"
+```
+
+Больше примеров в [scheduler_example.yaml](scheduler_example.yaml).
+
 ---
 
 ### 🤝 Участие в разработке

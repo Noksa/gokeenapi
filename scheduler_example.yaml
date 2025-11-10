@@ -1,0 +1,81 @@
+# =============================================================================
+# Scheduler Configuration
+# =============================================================================
+# This file defines scheduled tasks for automated router management.
+# Each task executes one or more gokeenapi commands sequentially on one or more router configs.
+
+tasks:
+  # Example 1: Run single command periodically (interval-based)
+  - name: "Update routes every 3 hours"
+    commands:
+      - add-routes
+    configs:
+      - /path/to/router1.yaml
+      - /path/to/router2.yaml
+      - /path/to/router3.yaml
+      - /path/to/router4.yaml
+    interval: "3h"  # Supported: "30m", "1h", "2h30m", etc.
+
+  # Example 2: Run single command at specific times (time-based)
+  - name: "Update DNS records at fixed times"
+    commands:
+      - add-dns-records
+    configs:
+      - /path/to/router1.yaml
+    times:
+      - "06:00"  # 6 AM
+      - "12:00"  # 12 PM
+      - "18:00"  # 6 PM
+
+  # Example 3: Run multiple commands sequentially (command chaining)
+  - name: "Refresh routes daily"
+    commands:
+      - delete-routes  # First delete old routes
+      - add-routes     # Then add new routes
+    configs:
+      - /path/to/router1.yaml
+      - /path/to/router2.yaml
+    times:
+      - "02:00"  # 2 AM
+
+  # Example 4: Complex maintenance task
+  - name: "Full router maintenance"
+    commands:
+      - delete-routes
+      - delete-dns-records
+      - add-routes
+      - add-dns-records
+    configs:
+      - /path/to/router1.yaml
+    times:
+      - "03:00"  # 3 AM
+
+# =============================================================================
+# Usage:
+# =============================================================================
+# Run the scheduler:
+#   gokeenapi scheduler --config scheduler.yaml
+#
+# The scheduler will run continuously until stopped (Ctrl+C).
+# All tasks run in parallel according to their schedules.
+# Commands within a task run sequentially for each config.
+#
+# Supported commands:
+#   - add-routes
+#   - delete-routes
+#   - add-dns-records
+#   - delete-dns-records
+#   - add-awg
+#   - update-awg
+#   - delete-known-hosts
+#   - show-interfaces
+#   - exec
+#
+# Notes:
+#   - Use "interval" for periodic execution (e.g., every 3 hours)
+#   - Use "times" for execution at specific times (24-hour format)
+#   - Cannot use both "interval" and "times" in the same task
+#   - Each task can target multiple router configs
+#   - Tasks run independently and in parallel
+#   - Commands within a task execute sequentially
+#   - If a command fails, remaining commands for that config are skipped
