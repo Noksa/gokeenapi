@@ -171,7 +171,9 @@ tasks:
     retryDelay: "30s"  # Ждать 30 секунд между попытками
 ```
 
-Больше примеров в [scheduler_example.yaml](scheduler_example.yaml).
+📖 **[Полная документация Scheduler →](SCHEDULER_RU.md)**
+
+См. также: [scheduler_example.yaml](scheduler_example.yaml)
 
 ---
 
