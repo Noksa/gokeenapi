@@ -25,6 +25,10 @@ type ScheduledTask struct {
 	Interval string `yaml:"interval,omitempty"`
 	// Times specifies fixed execution times in 24h format (e.g., ["06:00", "12:00", "18:00"])
 	Times []string `yaml:"times,omitempty"`
+	// Retry specifies number of retry attempts on failure (default: 0)
+	Retry int `yaml:"retry,omitempty"`
+	// RetryDelay specifies delay between retries (e.g., "30s", "1m", default: "1m")
+	RetryDelay string `yaml:"retryDelay,omitempty"`
 }
 
 // LoadSchedulerConfig loads scheduler configuration from YAML file

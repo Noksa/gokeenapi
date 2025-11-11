@@ -133,13 +133,29 @@ func validateTask(task config.ScheduledTask) error {
 		return fmt.Errorf("interval and times are mutually exclusive")
 	}
 	if task.Interval != "" {
-		if _, err := time.ParseDuration(task.Interval); err != nil {
+		d, err := time.ParseDuration(task.Interval)
+		if err != nil {
 			return fmt.Errorf("invalid interval format: %w", err)
+		}
+		if d < time.Second {
+			return fmt.Errorf("interval must be at least 1 second")
 		}
 	}
 	for _, t := range task.Times {
 		if _, err := time.Parse("15:04", t); err != nil {
 			return fmt.Errorf("invalid time format %q (use HH:MM): %w", t, err)
+		}
+	}
+	if task.Retry < 0 {
+		return fmt.Errorf("retry must be >= 0")
+	}
+	if task.RetryDelay != "" {
+		d, err := time.ParseDuration(task.RetryDelay)
+		if err != nil {
+			return fmt.Errorf("invalid retryDelay format: %w", err)
+		}
+		if d < time.Second {
+			return fmt.Errorf("retryDelay must be at least 1 second")
 		}
 	}
 	return nil
@@ -226,6 +242,13 @@ func getNextRunTime(times []string) time.Time {
 func executeTask(task config.ScheduledTask) {
 	gokeenlog.Infof("▶ Executing task: %v", color.BlueString(task.Name))
 
+	retryDelay := 1 * time.Minute
+	if task.RetryDelay != "" {
+		if d, err := time.ParseDuration(task.RetryDelay); err == nil {
+			retryDelay = d
+		}
+	}
+
 	for _, configPath := range task.Configs {
 		gokeenlog.InfoSubStepf("Config: %s", color.CyanString(configPath))
 
@@ -236,16 +259,41 @@ func executeTask(task config.ScheduledTask) {
 				continue
 			}
 
-			b := &strings.Builder{}
-			err = gokeenspinner.WrapWithSpinner(fmt.Sprintf("Executing %s", color.BlueString(command)), func() error {
-				cmd := exec.Command(executable, command, "--config", configPath)
-				cmd.Stdout = b
-				cmd.Stderr = b
-				return cmd.Run()
-			})
+			// Execute with retry
+			var lastErr error
+			maxAttempts := task.Retry + 1
+			if maxAttempts < 1 {
+				maxAttempts = 1
+			}
 
-			if err != nil {
-				gokeenlog.InfoSubStepf("Error: %v, %v", color.RedString(err.Error()), color.RedString(b.String()))
+			for attempt := 1; attempt <= maxAttempts; attempt++ {
+				attemptMsg := fmt.Sprintf("Executing %s", color.BlueString(command))
+				if attempt > 1 {
+					attemptMsg = fmt.Sprintf("Executing %s (attempt %d/%d)", color.BlueString(command), attempt, maxAttempts)
+				}
+
+				b := &strings.Builder{}
+				lastErr = gokeenspinner.WrapWithSpinner(attemptMsg, func() error {
+					cmd := exec.Command(executable, command, "--config", configPath)
+					cmd.Stdout = b
+					cmd.Stderr = b
+					return cmd.Run()
+				})
+
+				if lastErr == nil {
+					break
+				}
+
+				gokeenlog.InfoSubStepf("Error: %v, %v", color.RedString(lastErr.Error()), color.RedString(b.String()))
+
+				// Wait before retry (except on last attempt)
+				if attempt < maxAttempts {
+					gokeenlog.InfoSubStepf("Retrying in %s...", color.YellowString("%v", retryDelay))
+					time.Sleep(retryDelay)
+				}
+			}
+
+			if lastErr != nil {
 				break
 			}
 		}

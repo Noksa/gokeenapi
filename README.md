@@ -132,6 +132,55 @@ Check out these video demonstrations (in Russian) to see `gokeenapi` in action:
 
 ---
 
+## 🕐 Scheduler - Automated Task Execution
+
+The scheduler allows you to automate router management by running tasks at specified intervals or fixed times. This is perfect for keeping routes and DNS records up-to-date automatically.
+
+### Key Features
+
+- **Interval-based execution**: Run tasks every N hours/minutes (e.g., every 3 hours)
+- **Time-based execution**: Run tasks at specific times (e.g., at 02:00, 06:00, 12:00)
+- **Command chaining**: Execute multiple commands sequentially (e.g., delete-routes → add-routes)
+- **Multi-router support**: Manage multiple routers with a single task
+- **Retry mechanism**: Automatically retry failed tasks with configurable delay
+- **Sequential execution**: Tasks run in a queue to avoid conflicts
+
+### Quick Start
+
+```shell
+# Run scheduler with config
+./gokeenapi scheduler --config scheduler.yaml
+```
+
+### Example Configuration
+
+```yaml
+tasks:
+  - name: "Update routes every 3 hours"
+    commands:
+      - add-routes
+    configs:
+      - /path/to/router1.yaml
+      - /path/to/router2.yaml
+      - /path/to/router3.yaml
+    interval: "3h"
+  
+  - name: "Refresh routes daily with retry"
+    commands:
+      - delete-routes
+      - add-routes
+    configs:
+      - /path/to/router1.yaml
+    times:
+      - "02:00"
+    retry: 3           # Retry up to 3 times on failure
+    retryDelay: "30s"  # Wait 30 seconds between retries
+```
+
+See [scheduler_example.yaml](scheduler_example.yaml) for more examples.
+
+---
+
 ### 📚 Commands
 
 Here are some of the things you can do with `gokeenapi`. For a full list of commands and options, use the `--help` flag.
@@ -254,41 +303,6 @@ Execute custom Keenetic CLI commands directly on your router.
 # Show routing table
 ./gokeenapi exec --config my_config.yaml show ip route
 ```
-
-#### `scheduler`
-
-*Aliases: `schedule`, `sched`*
-
-Run scheduled tasks based on scheduler configuration file. Executes commands at specified intervals or fixed times.
-
-```shell
-# Run scheduler with config
-./gokeenapi scheduler --config scheduler.yaml
-```
-
-Example scheduler configuration:
-
-```yaml
-tasks:
-  - name: "Update routes every 3 hours"
-    commands:
-      - add-routes
-    configs:
-      - /path/to/router1.yaml
-      - /path/to/router2.yaml
-    interval: "3h"
-  
-  - name: "Refresh routes daily"
-    commands:
-      - delete-routes
-      - add-routes
-    configs:
-      - /path/to/router1.yaml
-    times:
-      - "02:00"
-```
-
-See [scheduler_example.yaml](scheduler_example.yaml) for more examples.
 
 ---
 

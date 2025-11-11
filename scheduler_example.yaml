@@ -38,7 +38,17 @@ tasks:
     times:
       - "02:00"  # 2 AM
 
-  # Example 4: Complex maintenance task
+  # Example 4: Task with retry on failure
+  - name: "Update routes with retry"
+    commands:
+      - add-routes
+    configs:
+      - /path/to/router1.yaml
+    interval: "1h"
+    retry: 3           # Retry up to 3 times on failure
+    retryDelay: "30s"  # Wait 30 seconds between retries
+
+  # Example 5: Complex maintenance task
   - name: "Full router maintenance"
     commands:
       - delete-routes
@@ -49,6 +59,8 @@ tasks:
       - /path/to/router1.yaml
     times:
       - "03:00"  # 3 AM
+    retry: 2           # Retry up to 2 times if router is unavailable
+    retryDelay: "1m"   # Wait 1 minute between retries
 
 # =============================================================================
 # Usage:
@@ -57,8 +69,8 @@ tasks:
 #   gokeenapi scheduler --config scheduler.yaml
 #
 # The scheduler will run continuously until stopped (Ctrl+C).
-# Tasks are executed sequentially in a queue - if multiple tasks trigger
-# at the same time, they will run one after another (not in parallel).
+# Tasks are executed sequentially in a FIFO queue - if multiple tasks trigger
+# at the same time, they will run one after another.
 # Commands within a task run sequentially for each config.
 #
 # Supported commands:
@@ -77,6 +89,8 @@ tasks:
 #   - Use "times" for execution at specific times (24-hour format)
 #   - Cannot use both "interval" and "times" in the same task
 #   - Each task can target multiple router configs
-#   - Tasks are queued and executed sequentially
+#   - Tasks execute sequentially in a queue (FIFO)
 #   - Commands within a task execute sequentially
 #   - If a command fails, remaining commands for that config are skipped
+#   - Use "retry" to specify number of retry attempts (default: 0)
+#   - Use "retryDelay" to specify delay between retries (default: "1m")

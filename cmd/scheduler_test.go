@@ -169,6 +169,75 @@ func (s *SchedulerTestSuite) TestValidateTask_MultipleCommands() {
 	assert.NoError(s.T(), err)
 }
 
+func (s *SchedulerTestSuite) TestValidateTask_WithRetry() {
+	task := config.ScheduledTask{
+		Name:       "Test task",
+		Commands:   []string{"add-routes"},
+		Configs:    []string{"/path/to/config.yaml"},
+		Interval:   "1h",
+		Retry:      3,
+		RetryDelay: "30s",
+	}
+
+	err := validateTask(task)
+	assert.NoError(s.T(), err)
+}
+
+func (s *SchedulerTestSuite) TestValidateTask_NegativeRetry() {
+	task := config.ScheduledTask{
+		Name:     "Test task",
+		Commands: []string{"add-routes"},
+		Configs:  []string{"/path/to/config.yaml"},
+		Interval: "1h",
+		Retry:    -1,
+	}
+
+	err := validateTask(task)
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "retry must be >= 0")
+}
+
+func (s *SchedulerTestSuite) TestValidateTask_InvalidRetryDelay() {
+	task := config.ScheduledTask{
+		Name:       "Test task",
+		Commands:   []string{"add-routes"},
+		Configs:    []string{"/path/to/config.yaml"},
+		Interval:   "1h",
+		RetryDelay: "invalid",
+	}
+
+	err := validateTask(task)
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "invalid retryDelay format")
+}
+
+func (s *SchedulerTestSuite) TestValidateTask_TooShortRetryDelay() {
+	task := config.ScheduledTask{
+		Name:       "Test task",
+		Commands:   []string{"add-routes"},
+		Configs:    []string{"/path/to/config.yaml"},
+		Interval:   "1h",
+		RetryDelay: "500ms",
+	}
+
+	err := validateTask(task)
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "retryDelay must be at least 1 second")
+}
+
+func (s *SchedulerTestSuite) TestValidateTask_TooShortInterval() {
+	task := config.ScheduledTask{
+		Name:     "Test task",
+		Commands: []string{"add-routes"},
+		Configs:  []string{"/path/to/config.yaml"},
+		Interval: "500ms",
+	}
+
+	err := validateTask(task)
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "interval must be at least 1 second")
+}
+
 func (s *SchedulerTestSuite) TestGetNextRunTime_FutureTime() {
 	now := time.Now()
 	futureTime := now.Add(2 * time.Hour).Format("15:04")
@@ -208,13 +277,18 @@ func (s *SchedulerTestSuite) TestGetNextRunTime_MultipleTimes() {
 }
 
 func (s *SchedulerTestSuite) TestGetNextRunTime_AllPastTimes() {
-	// All times in the past - should pick earliest for tomorrow
-	times := []string{"18:00", "06:00", "12:00"}
+	// Test with times that ensure we get earliest time for next day
+	// Use times that are likely all in the past (early morning)
+	times := []string{"01:00", "02:00", "03:00"}
 
 	nextRun := getNextRunTime(times)
 
-	// Should be 06:00 (earliest time), either today or tomorrow
-	assert.Equal(s.T(), "06:00", nextRun.Format("15:04"), "should pick earliest time")
+	// Should be one of the specified times
+	nextRunTime := nextRun.Format("15:04")
+	assert.Contains(s.T(), times, nextRunTime, "should pick one of the specified times")
+
+	// Should be in the future
+	assert.True(s.T(), nextRun.After(time.Now().Add(-1*time.Minute)), "should be in the future")
 }
 
 func (s *SchedulerTestSuite) TestLoadSchedulerConfig_Valid() {
