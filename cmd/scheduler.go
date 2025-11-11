@@ -207,27 +207,23 @@ func getNextRunTime(times []string) time.Time {
 	now := time.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
-	var nextRun time.Time
-	var earliestTime time.Time
+	var nextRun, earliestToday time.Time
 
 	for _, t := range times {
 		parsed, _ := time.Parse("15:04", t)
 		runTime := today.Add(time.Hour*time.Duration(parsed.Hour()) + time.Minute*time.Duration(parsed.Minute()))
 
-		// Track earliest time for tomorrow
-		if earliestTime.IsZero() || runTime.Before(earliestTime) {
-			earliestTime = runTime
+		if earliestToday.IsZero() || runTime.Before(earliestToday) {
+			earliestToday = runTime
 		}
 
-		// Find next run today
 		if runTime.After(now) && (nextRun.IsZero() || runTime.Before(nextRun)) {
 			nextRun = runTime
 		}
 	}
 
-	// If no time left today, use earliest time tomorrow
 	if nextRun.IsZero() {
-		nextRun = earliestTime.Add(24 * time.Hour)
+		nextRun = earliestToday.Add(24 * time.Hour)
 	}
 
 	return nextRun
@@ -238,57 +234,55 @@ func executeTask(task config.ScheduledTask) {
 	gokeenlog.HorizontalLine()
 	gokeenlog.Infof("▶ Executing task: %v", color.BlueString(task.Name))
 
+	for _, configPath := range task.Configs {
+		executeCommandsForConfig(task, configPath)
+	}
+}
+
+func executeCommandsForConfig(task config.ScheduledTask, configPath string) {
 	retryDelay := 1 * time.Minute
 	if task.RetryDelay != "" {
 		if d, err := time.ParseDuration(task.RetryDelay); err == nil {
 			retryDelay = d
 		}
 	}
+	for _, command := range task.Commands {
+		executable, err := os.Executable()
+		if err != nil {
+			gokeenlog.InfoSubStepf("%s Failed to get executable path: %v", color.RedString("✗"), err)
+			continue
+		}
 
-	for _, configPath := range task.Configs {
-		for _, command := range task.Commands {
-			executable, err := os.Executable()
-			if err != nil {
-				gokeenlog.InfoSubStepf("%s Failed to get executable path: %v", color.RedString("✗"), err)
-				continue
+		maxAttempts := max(task.Retry+1, 1)
+
+		var lastErr error
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			gokeenlog.HorizontalLine()
+			attemptMsg := fmt.Sprintf("▶ Executing '%s' command for %s", color.BlueString(command), color.CyanString(configPath))
+			if attempt > 1 {
+				attemptMsg = fmt.Sprintf("▶ Executing '%s' command for %s (attempt %v/%v)", color.BlueString(command), color.CyanString(configPath), color.MagentaString("%v", attempt), color.YellowString("%v", maxAttempts))
 			}
 
-			// Execute with retry
-			var lastErr error
-			maxAttempts := task.Retry + 1
-			if maxAttempts < 1 {
-				maxAttempts = 1
-			}
+			gokeenlog.Info(attemptMsg)
+			cmd := exec.Command(executable, command, "--config", configPath)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			lastErr = cmd.Run()
 
-			for attempt := 1; attempt <= maxAttempts; attempt++ {
-				gokeenlog.HorizontalLine()
-				attemptMsg := fmt.Sprintf("▶ Executing '%s' command", color.BlueString(command))
-				if attempt > 1 {
-					attemptMsg = fmt.Sprintf("▶ Executing '%s' command (attempt %v/%v)", color.BlueString(command), color.MagentaString("%v", attempt), color.YellowString("%v", maxAttempts))
-				}
-
-				gokeenlog.Info(attemptMsg)
-				cmd := exec.Command(executable, command, "--config", configPath)
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				lastErr = cmd.Run()
-
-				if lastErr == nil {
-					break
-				}
-
-				gokeenlog.InfoSubStepf("Error: %v", color.RedString(lastErr.Error()))
-
-				// Wait before retry (except on last attempt)
-				if attempt < maxAttempts {
-					gokeenlog.InfoSubStepf("Retrying in %s...", color.YellowString("%v", retryDelay))
-					time.Sleep(retryDelay)
-				}
-			}
-
-			if lastErr != nil {
+			if lastErr == nil {
 				break
 			}
+
+			gokeenlog.InfoSubStepf("Error: %v", color.RedString(lastErr.Error()))
+
+			if attempt < maxAttempts {
+				gokeenlog.InfoSubStepf("Retrying in %s...", color.YellowString("%v", retryDelay))
+				time.Sleep(retryDelay)
+			}
+		}
+
+		if lastErr != nil {
+			break
 		}
 	}
 }

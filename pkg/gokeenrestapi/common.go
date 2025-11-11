@@ -97,7 +97,7 @@ func (c *keeneticCommon) getKeeneticCacheFile() (keeneticCacheFile, error) {
 		}
 		cleanedOldCacheFiles = true
 	}
-	bHash := md5.Sum([]byte(fmt.Sprintf("%v-%v-%v", config.Cfg.Keenetic.URL, config.Cfg.Keenetic.Login, config.Cfg.Keenetic.Password)))
+	bHash := md5.Sum(fmt.Appendf(nil, "%v-%v-%v", config.Cfg.Keenetic.URL, config.Cfg.Keenetic.Login, config.Cfg.Keenetic.Password))
 	hashString := fmt.Sprintf("%x", bHash)
 	keeeticFile := path.Join(gokeenDir, fmt.Sprintf("%v.json", hashString))
 	_, statErr := os.Stat(keeeticFile)

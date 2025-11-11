@@ -69,7 +69,6 @@ func (*keeneticInterface) GetInterfacesViaRciShowInterfaces(useCache bool, inter
 	realInterfaces := map[string]gokeenrestapimodels.RciShowInterface{}
 	for k, interfaceDetails := range interfaces {
 		for _, v := range interfaceTypes {
-			v := v
 			if strings.EqualFold(interfaceDetails.Type, v) {
 				realInterfaces[k] = interfaceDetails
 			}

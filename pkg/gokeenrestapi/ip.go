@@ -18,17 +18,15 @@ import (
 	"go.uber.org/multierr"
 )
 
-const (
-	regex = `(?i)route ADD (\d+.\d+.\d+.\d+) MASK (\d+.\d+.\d+.\d+)`
+var (
+	// routeRegex is precompiled regex pattern for parsing Windows route commands
+	routeRegex = regexp.MustCompile(`(?i)route ADD (\d+\.\d+\.\d+\.\d+) MASK (\d+\.\d+\.\d+\.\d+)`)
+	// Ip provides IP-related functionality including routing, DNS, and host management
+	Ip keeneticIp
 )
 
 type keeneticIp struct {
 }
-
-var (
-	// Ip provides IP-related functionality including routing, DNS, and host management
-	Ip keeneticIp
-)
 
 // GetAllHotspots retrieves all known hosts (devices) from the router's hotspot database
 func (*keeneticIp) GetAllHotspots() (gokeenrestapimodels.RciShowIpHotspot, error) {
@@ -109,7 +107,6 @@ func (*keeneticIp) GetAllUserRoutesRciIpRoute(keeneticInterface string) ([]gokee
 	}
 	var realRoutes []gokeenrestapimodels.RciIpRoute
 	for _, route := range routes {
-		route := route
 		if route.Interface == keeneticInterface {
 			realRoutes = append(realRoutes, route)
 		}
@@ -183,7 +180,6 @@ func (*keeneticIp) AddRoutesFromBatFile(batFile string, interfaceId string) erro
 	if err != nil {
 		return err
 	}
-	matcher := regexp.MustCompile(regex)
 	b, err := os.ReadFile(batFile)
 	if err != nil {
 		return err
@@ -196,10 +192,10 @@ func (*keeneticIp) AddRoutesFromBatFile(batFile string, interfaceId string) erro
 		if line == "" {
 			continue
 		}
-		sl := matcher.FindStringSubmatch(line)
+		sl := routeRegex.FindStringSubmatch(line)
 		if len(sl) != 3 {
 			gokeenlog.InfoSubStepf("Skipping line with invalid format: '%v'", line)
-			gokeenlog.InfoSubStepf("It doesn't satisfy regexp: '%v'", regex)
+			gokeenlog.InfoSubStepf("It doesn't satisfy regexp: '%v'", routeRegex.String())
 			mErr = multierr.Append(mErr, fmt.Errorf("line has invalid format: '%v'", line))
 			continue
 		}
@@ -237,7 +233,6 @@ func (*keeneticIp) AddRoutesFromBatUrl(url string, interfaceId string) error {
 	if err != nil {
 		return err
 	}
-	matcher := regexp.MustCompile(regex)
 	rClient := resty.New()
 	rClient.SetDisableWarn(true)
 	rClient.SetTimeout(time.Second * 5)
@@ -257,10 +252,10 @@ func (*keeneticIp) AddRoutesFromBatUrl(url string, interfaceId string) error {
 		if line == "" {
 			continue
 		}
-		sl := matcher.FindStringSubmatch(line)
+		sl := routeRegex.FindStringSubmatch(line)
 		if len(sl) != 3 {
 			gokeenlog.InfoSubStepf("Skipping line with invalid format: '%v'", line)
-			gokeenlog.InfoSubStepf("It doesn't satisfy regexp: '%v'", regex)
+			gokeenlog.InfoSubStepf("It doesn't satisfy regexp: '%v'", routeRegex.String())
 			mErr = multierr.Append(mErr, fmt.Errorf("line has invalid format: '%v'", line))
 			continue
 		}

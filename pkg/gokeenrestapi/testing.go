@@ -185,7 +185,7 @@ func SetupTestConfig(serverURL string) {
 }
 
 // Helper function to safely encode JSON responses in tests
-func encodeJSON(w http.ResponseWriter, data interface{}) {
+func encodeJSON(w http.ResponseWriter, data any) {
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to encode JSON: %v", err), http.StatusInternalServerError)
 	}

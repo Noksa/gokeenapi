@@ -73,7 +73,7 @@ func (s *IpTestSuite) setupMockServerForIP() *httptest.Server {
 
 	// DNS records endpoint
 	mux.HandleFunc("/rci/show/ip/name-server", func(w http.ResponseWriter, r *http.Request) {
-		dnsRecords := map[string]interface{}{
+		dnsRecords := map[string]any{
 			"static": map[string]string{
 				"example.com": "1.2.3.4",
 				"test.local":  "192.168.1.50",
