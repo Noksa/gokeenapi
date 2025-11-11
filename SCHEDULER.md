@@ -12,8 +12,7 @@ The scheduler is a powerful feature that allows you to automate router managemen
 - [Retry Mechanism](#retry-mechanism)
 - [Task Queue](#task-queue)
 - [Examples](#examples)
-- [Best Practices](#best-practices)
-- [Troubleshooting](#troubleshooting)
+- [Tips](#tips)
 
 ---
 
@@ -124,15 +123,15 @@ tasks:
 
 ### Field Descriptions
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | Yes | Descriptive name for the task |
-| `commands` | array | Yes | List of gokeenapi commands to execute |
-| `configs` | array | Yes | List of router configuration file paths |
-| `interval` | string | No* | Execution interval (e.g., "30m", "1h", "3h") |
-| `times` | array | No* | Execution times in HH:MM format |
-| `retry` | int | No | Number of retry attempts on failure (≥ 0) |
-| `retryDelay` | string | No | Delay between retries (≥ 1s, default: "1m") |
+| Field        | Type   | Required | Description                                         |
+|--------------|--------|----------|-----------------------------------------------------|
+| `name`       | string | Yes      | Descriptive name for the task                       |
+| `commands`   | array  | Yes      | List of gokeenapi commands to execute               |
+| `configs`    | array  | Yes      | List of router configuration file paths             |
+| `interval`   | string | No*      | Execution interval (e.g., "30m", "1h", "3h")        |
+| `times`      | array  | No*      | Execution times in HH:MM format                     |
+| `retry`      | int    | No       | Number of retry attempts on failure (≥ 0)           |
+| `retryDelay` | string | No       | Delay between retries (≥ 1s, default: "1m")         |
 
 *Either `interval` or `times` must be specified, but not both.
 
@@ -233,13 +232,6 @@ The retry mechanism helps handle transient failures like network issues or route
 ✅   Executing add-routes (attempt 2/4) completed after 1.2s
 ```
 
-### Best Practices
-
-- Use retry for network-dependent operations
-- Set `retryDelay` based on expected recovery time
-- Don't set `retry` too high to avoid long delays
-- Monitor logs to identify persistent issues
-
 ---
 
 ## Task Queue
@@ -274,7 +266,7 @@ Execution order: Task 1 → Task 2 → Task 3
 
 ### Example 1: Simple Periodic Update
 
-Update routes every 3 hours on multiple routers:
+Update routes (without deleting old) every 3 hours on multiple routers:
 
 ```yaml
 tasks:
@@ -290,7 +282,7 @@ tasks:
 
 ### Example 2: Daily Maintenance with Retry
 
-Refresh routes daily at 2 AM with retry on failure:
+Delete old and add new routes daily at 2 AM with retry on failure:
 
 ```yaml
 tasks:
@@ -347,28 +339,11 @@ tasks:
       - /path/to/secondary1.yaml
       - /path/to/secondary2.yaml
     interval: "6h"
-
-  # Daily maintenance at night
-  - name: "Nightly maintenance"
-    commands:
-      - delete-routes
-      - delete-dns-records
-      - add-routes
-      - add-dns-records
-    configs:
-      - /path/to/critical1.yaml
-      - /path/to/critical2.yaml
-      - /path/to/secondary1.yaml
-      - /path/to/secondary2.yaml
-    times:
-      - "03:00"
-    retry: 3
-    retryDelay: "2m"
 ```
 
 ---
 
-## Best Practices
+## Tips
 
 ### 1. Choose Appropriate Intervals
 
@@ -387,37 +362,15 @@ tasks:
 ```yaml
 times:
   - "02:00"  # Low traffic time
-  - "03:00"  # Alternative window
 ```
 
-### 4. Group Related Commands
-
-```yaml
-commands:
-  - delete-routes
-  - add-routes  # Ensures clean state
-```
-
-### 5. Monitor Logs
-
-- Check for repeated failures
-- Adjust schedules based on execution times
-- Identify patterns in errors
-
-### 6. Test Configuration First
+### 4. Test Configuration First
 
 ```bash
 # Test individual commands before scheduling
 ./gokeenapi add-routes --config router.yaml
 
 # Then add to scheduler
-```
-
-### 7. Use Descriptive Names
-
-```yaml
-name: "Update routes every 3 hours"  # Good
-name: "Task 1"                        # Bad
 ```
 
 ---
