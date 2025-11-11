@@ -5,7 +5,6 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/noksa/gokeenapi/internal/gokeenlog"
-	"github.com/noksa/gokeenapi/internal/gokeenversion"
 	"github.com/noksa/gokeenapi/pkg/config"
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapi"
 	"github.com/spf13/cobra"
@@ -53,8 +52,8 @@ Contains router connection details and operation settings.
 Can also be set via GOKEENAPI_CONFIG environment variable.`)
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		// scheduler, completion and help commands should run without any checks and init
-		commandsToSkip := []string{CmdCompletion, CmdHelp, CmdScheduler}
+		// scheduler, completion, help and version commands should run without any checks and init
+		commandsToSkip := []string{CmdCompletion, CmdHelp, CmdScheduler, CmdVersion}
 		for _, commandToSkip := range commandsToSkip {
 			if strings.Contains(cmd.CommandPath(), commandToSkip) {
 				return nil
@@ -68,10 +67,10 @@ Can also be set via GOKEENAPI_CONFIG environment variable.`)
 		if err != nil {
 			return err
 		}
-		gokeenlog.Infof("🚀  %v: %v, %v: %v", color.BlueString("Version"), color.CyanString(gokeenversion.Version()), color.BlueString("Build date"), color.CyanString(gokeenversion.BuildDate()))
 		gokeenlog.Info("🏗️  Configuration loaded:")
 		gokeenlog.InfoSubStepf("%v: %v", color.BlueString("Keenetic URL"), config.Cfg.Keenetic.URL)
 		gokeenlog.InfoSubStepf("%v: %v", color.BlueString("Config"), color.CyanString(configFile))
+		gokeenlog.HorizontalLine()
 		return gokeenrestapi.Common.Auth()
 	}
 
@@ -86,6 +85,7 @@ Can also be set via GOKEENAPI_CONFIG environment variable.`)
 		newDeleteKnownHostsCmd(),
 		newExecCmd(),
 		newSchedulerCmd(),
+		newVersionCmd(),
 	)
 	return rootCmd
 }

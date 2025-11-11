@@ -95,7 +95,7 @@ tasks:
 
 The scheduler will display:
 - Task schedules on startup
-- Execution progress with spinners
+- Execution progress
 - Success/failure status
 - Retry attempts (if configured)
 

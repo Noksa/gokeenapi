@@ -12,6 +12,7 @@ const (
 	CmdDeleteKnownHosts = "delete-known-hosts"
 	CmdExec             = "exec"
 	CmdScheduler        = "scheduler"
+	CmdVersion          = "version"
 )
 
 // Built-in commands that should skip initialization

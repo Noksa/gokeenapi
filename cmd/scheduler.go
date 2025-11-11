@@ -5,13 +5,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/enriquebris/goconcurrentqueue"
 	"github.com/fatih/color"
 	"github.com/noksa/gokeenapi/internal/gokeenlog"
-	"github.com/noksa/gokeenapi/internal/gokeenspinner"
 	"github.com/noksa/gokeenapi/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -72,7 +70,8 @@ Cannot use both in the same task.`,
 			}
 
 			gokeenlog.Info(color.GreenString("🕐 Scheduler started"))
-			gokeenlog.InfoSubStepf("Tasks: %v", color.CyanString("%v", len(schedulerCfg.Tasks)))
+			gokeenlog.HorizontalLine()
+			gokeenlog.Infof("Total tasks: %v", color.CyanString("%v", len(schedulerCfg.Tasks)))
 
 			ctx := cmd.Context()
 
@@ -103,6 +102,7 @@ Cannot use both in the same task.`,
 			}
 
 			<-ctx.Done()
+			gokeenlog.HorizontalLine()
 			gokeenlog.Info(color.YellowString("🛑 Scheduler stopped"))
 			return nil
 		},
@@ -235,6 +235,7 @@ func getNextRunTime(times []string) time.Time {
 
 // executeTask executes a single task
 func executeTask(task config.ScheduledTask) {
+	gokeenlog.HorizontalLine()
 	gokeenlog.Infof("▶ Executing task: %v", color.BlueString(task.Name))
 
 	retryDelay := 1 * time.Minute
@@ -245,8 +246,6 @@ func executeTask(task config.ScheduledTask) {
 	}
 
 	for _, configPath := range task.Configs {
-		gokeenlog.InfoSubStepf("Config: %s", color.CyanString(configPath))
-
 		for _, command := range task.Commands {
 			executable, err := os.Executable()
 			if err != nil {
@@ -262,24 +261,23 @@ func executeTask(task config.ScheduledTask) {
 			}
 
 			for attempt := 1; attempt <= maxAttempts; attempt++ {
-				attemptMsg := fmt.Sprintf("Executing %s", color.BlueString(command))
+				gokeenlog.HorizontalLine()
+				attemptMsg := fmt.Sprintf("▶ Executing '%s' command", color.BlueString(command))
 				if attempt > 1 {
-					attemptMsg = fmt.Sprintf("Executing %s (attempt %d/%d)", color.BlueString(command), attempt, maxAttempts)
+					attemptMsg = fmt.Sprintf("▶ Executing '%s' command (attempt %v/%v)", color.BlueString(command), color.MagentaString("%v", attempt), color.YellowString("%v", maxAttempts))
 				}
 
-				b := &strings.Builder{}
-				lastErr = gokeenspinner.WrapWithSpinner(attemptMsg, func() error {
-					cmd := exec.Command(executable, command, "--config", configPath)
-					cmd.Stdout = b
-					cmd.Stderr = b
-					return cmd.Run()
-				})
+				gokeenlog.Info(attemptMsg)
+				cmd := exec.Command(executable, command, "--config", configPath)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				lastErr = cmd.Run()
 
 				if lastErr == nil {
 					break
 				}
 
-				gokeenlog.InfoSubStepf("Error: %v, %v", color.RedString(lastErr.Error()), color.RedString(b.String()))
+				gokeenlog.InfoSubStepf("Error: %v", color.RedString(lastErr.Error()))
 
 				// Wait before retry (except on last attempt)
 				if attempt < maxAttempts {

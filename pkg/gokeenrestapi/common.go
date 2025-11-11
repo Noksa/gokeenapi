@@ -226,6 +226,7 @@ func (c *keeneticCommon) Auth() error {
 	}
 	gokeenlog.InfoSubStepf("%v: %v", color.BlueString("Router"), color.CyanString(version.Model))
 	gokeenlog.InfoSubStepf("%v: %v", color.BlueString("OS version"), color.CyanString(version.Title))
+	gokeenlog.HorizontalLine()
 	gokeencache.UpdateRuntimeConfig(func(runtime *config.Runtime) {
 		runtime.RouterInfo.Version = version
 	})

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
+	"github.com/noksa/gokeenapi/internal/gokeenlog"
 	"golang.org/x/term"
 )
 
@@ -23,6 +24,7 @@ func WrapWithSpinner(spinnerText string, f func() error) error {
 		} else {
 			fmt.Printf("✅   %v completed after %v\n", spinnerText, duration)
 		}
+		gokeenlog.HorizontalLine()
 		return err
 	}
 
@@ -41,6 +43,7 @@ func WrapWithSpinner(spinnerText string, f func() error) error {
 		s.FinalMSG = fmt.Sprintf("✅   %v completed after %v\n", spinnerText, getPrettyFormatedDuration(time.Since(startTime).Round(time.Millisecond)))
 	}
 	s.Stop()
+	gokeenlog.HorizontalLine()
 	return err
 }
 
