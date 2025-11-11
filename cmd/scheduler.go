@@ -59,60 +59,55 @@ Supported time format: "HH:MM" (24-hour format)
 
 Note: Use "interval" for periodic execution or "times" for fixed times.
 Cannot use both in the same task.`,
-		RunE: runScheduler,
-	}
-	return cmd
-}
+		RunE: func(cmd *cobra.Command, args []string) error {
+			configPath, _ := cmd.Flags().GetString("config")
 
-// runScheduler executes the scheduler command
-func runScheduler(cmd *cobra.Command, args []string) error {
-	configPath, _ := cmd.Flags().GetString("config")
+			schedulerCfg, err := config.LoadSchedulerConfig(configPath)
+			if err != nil {
+				return fmt.Errorf("failed to load scheduler config: %w", err)
+			}
 
-	schedulerCfg, err := config.LoadSchedulerConfig(configPath)
-	if err != nil {
-		return fmt.Errorf("failed to load scheduler config: %w", err)
-	}
+			if len(schedulerCfg.Tasks) == 0 {
+				return fmt.Errorf("no tasks defined in scheduler config")
+			}
 
-	if len(schedulerCfg.Tasks) == 0 {
-		return fmt.Errorf("no tasks defined in scheduler config")
-	}
+			gokeenlog.Info(color.GreenString("🕐 Scheduler started"))
+			gokeenlog.InfoSubStepf("Tasks: %v", color.CyanString("%v", len(schedulerCfg.Tasks)))
 
-	gokeenlog.Info(color.GreenString("🕐 Scheduler started"))
-	gokeenlog.InfoSubStepf("Tasks: %v", color.CyanString("%v", len(schedulerCfg.Tasks)))
+			ctx := cmd.Context()
 
-	ctx := cmd.Context()
+			queue := goconcurrentqueue.NewFIFO()
 
-	// Create FIFO queue for sequential task execution
-	queue := goconcurrentqueue.NewFIFO()
-
-	// Start task executor (single worker for sequential execution)
-	go func() {
-		time.Sleep(time.Second)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				item, err := queue.DequeueOrWaitForNextElement()
-				if err == nil {
-					if task, ok := item.(config.ScheduledTask); ok {
-						executeTask(task)
+			go func() {
+				time.Sleep(time.Second)
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+						item, err := queue.DequeueOrWaitForNextElement()
+						if err == nil {
+							if task, ok := item.(config.ScheduledTask); ok {
+								executeTask(task)
+							}
+						}
 					}
 				}
+			}()
+
+			for _, task := range schedulerCfg.Tasks {
+				if err := validateTask(task); err != nil {
+					return fmt.Errorf("task %q validation failed: %w", task.Name, err)
+				}
+				go runTask(ctx, task, queue)
 			}
-		}
-	}()
 
-	for _, task := range schedulerCfg.Tasks {
-		if err := validateTask(task); err != nil {
-			return fmt.Errorf("task %q validation failed: %w", task.Name, err)
-		}
-		go runTask(ctx, task, queue)
+			<-ctx.Done()
+			gokeenlog.Info(color.YellowString("🛑 Scheduler stopped"))
+			return nil
+		},
 	}
-
-	<-ctx.Done()
-	gokeenlog.Info(color.YellowString("🛑 Scheduler stopped"))
-	return nil
+	return cmd
 }
 
 // validateTask validates task configuration
