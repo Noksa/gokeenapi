@@ -21,6 +21,12 @@ const (
 	CmdHelp       = "help"
 )
 
+// Scheduler execution strategies
+const (
+	StrategySequential = "sequential"
+	StrategyParallel   = "parallel"
+)
+
 // Command aliases
 var (
 	AliasesAddRoutes        = []string{"addroutes", "ar"}

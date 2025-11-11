@@ -238,6 +238,61 @@ func (s *SchedulerTestSuite) TestValidateTask_TooShortInterval() {
 	assert.Contains(s.T(), err.Error(), "interval must be at least 1 second")
 }
 
+func (s *SchedulerTestSuite) TestValidateTask_ValidStrategySequential() {
+	task := config.ScheduledTask{
+		Name:     "Test task",
+		Commands: []string{"add-routes"},
+		Configs:  []string{"/path/to/config.yaml"},
+		Interval: "1h",
+		Strategy: "sequential",
+	}
+
+	err := validateTask(task)
+	assert.NoError(s.T(), err)
+}
+
+func (s *SchedulerTestSuite) TestValidateTask_ValidStrategyParallel() {
+	task := config.ScheduledTask{
+		Name:     "Test task",
+		Commands: []string{"add-routes"},
+		Configs:  []string{"/path/to/config.yaml"},
+		Interval: "1h",
+		Strategy: "parallel",
+	}
+
+	err := validateTask(task)
+	assert.NoError(s.T(), err)
+}
+
+func (s *SchedulerTestSuite) TestValidateTask_EmptyStrategy() {
+	task := config.ScheduledTask{
+		Name:     "Test task",
+		Commands: []string{"add-routes"},
+		Configs:  []string{"/path/to/config.yaml"},
+		Interval: "1h",
+		Strategy: "",
+	}
+
+	err := validateTask(task)
+	assert.NoError(s.T(), err)
+}
+
+func (s *SchedulerTestSuite) TestValidateTask_InvalidStrategy() {
+	task := config.ScheduledTask{
+		Name:     "Test task",
+		Commands: []string{"add-routes"},
+		Configs:  []string{"/path/to/config.yaml"},
+		Interval: "1h",
+		Strategy: "invalid",
+	}
+
+	err := validateTask(task)
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "invalid strategy")
+	assert.Contains(s.T(), err.Error(), "sequential")
+	assert.Contains(s.T(), err.Error(), "parallel")
+}
+
 func (s *SchedulerTestSuite) TestGetNextRunTime_FutureTime() {
 	now := time.Now()
 	futureTime := now.Add(2 * time.Hour).Format("15:04")

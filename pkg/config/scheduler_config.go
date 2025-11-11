@@ -29,6 +29,8 @@ type ScheduledTask struct {
 	Retry int `yaml:"retry,omitempty"`
 	// RetryDelay specifies delay between retries (e.g., "30s", "1m", default: "1m")
 	RetryDelay string `yaml:"retryDelay,omitempty"`
+	// Strategy defines execution strategy: "parallel" for concurrent execution across all configs, default is sequential
+	Strategy string `yaml:"strategy,omitempty"`
 }
 
 // LoadSchedulerConfig loads scheduler configuration from YAML file

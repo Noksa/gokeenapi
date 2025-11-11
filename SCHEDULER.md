@@ -119,6 +119,7 @@ tasks:
       - "12:00"
     retry: 3                        # Optional: Number of retry attempts (default: 0)
     retryDelay: "30s"               # Optional: Delay between retries (default: "1m")
+    strategy: "parallel"            # Optional: Execution strategy (default: "sequential")
 ```
 
 ### Field Descriptions
@@ -132,6 +133,7 @@ tasks:
 | `times`      | array  | No*      | Execution times in HH:MM format                     |
 | `retry`      | int    | No       | Number of retry attempts on failure (≥ 0)           |
 | `retryDelay` | string | No       | Delay between retries (≥ 1s, default: "1m")         |
+| `strategy`   | string | No       | Execution strategy: "sequential" or "parallel"      |
 
 *Either `interval` or `times` must be specified, but not both.
 
@@ -141,11 +143,70 @@ tasks:
 - `times` must be in 24-hour format (HH:MM)
 - `retry` must be ≥ 0
 - `retryDelay` must be ≥ 1 second
+- `strategy` must be "sequential" or "parallel" (default: "sequential")
 - Cannot use both `interval` and `times` in the same task
 
 ---
 
 ## Execution Modes
+
+### Execution Strategy
+
+Control how commands are executed across multiple router configs:
+
+#### Sequential (Default)
+
+Commands execute one config after another:
+
+```yaml
+- name: "Sequential execution"
+  commands:
+    - add-routes
+  configs:
+    - /path/to/router1.yaml
+    - /path/to/router2.yaml
+    - /path/to/router3.yaml
+  interval: "3h"
+  strategy: "sequential"  # or omit (default)
+```
+
+**Execution flow:**
+```
+router1.yaml → router2.yaml → router3.yaml
+```
+
+**Use when:**
+- Routers share resources
+- Order matters
+- Conservative approach preferred
+
+#### Parallel
+
+Commands execute simultaneously for all configs:
+
+```yaml
+- name: "Parallel execution"
+  commands:
+    - add-routes
+  configs:
+    - /path/to/router1.yaml
+    - /path/to/router2.yaml
+    - /path/to/router3.yaml
+  interval: "3h"
+  strategy: "parallel"
+```
+
+**Execution flow:**
+```
+router1.yaml ┐
+router2.yaml ├─ All execute simultaneously
+router3.yaml ┘
+```
+
+**Use when:**
+- Routers are independent
+- Faster execution needed
+- Network bandwidth allows
 
 ### Interval-Based Execution
 
@@ -316,7 +377,27 @@ tasks:
       - "23:00"
 ```
 
-### Example 4: Complex Multi-Router Setup
+### Example 4: Parallel Execution for Multiple Routers
+
+Execute commands simultaneously on all routers for faster completion:
+
+```yaml
+tasks:
+  - name: "Update all routers in parallel"
+    commands:
+      - add-routes
+    configs:
+      - /path/to/router1.yaml
+      - /path/to/router2.yaml
+      - /path/to/router3.yaml
+      - /path/to/router4.yaml
+    interval: "3h"
+    strategy: "parallel"
+    retry: 2
+    retryDelay: "30s"
+```
+
+### Example 5: Complex Multi-Router Setup
 
 ```yaml
 tasks:

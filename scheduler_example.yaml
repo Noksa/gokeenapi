@@ -48,7 +48,18 @@ tasks:
     retry: 3           # Retry up to 3 times on failure
     retryDelay: "30s"  # Wait 30 seconds between retries
 
-  # Example 5: Complex maintenance task
+  # Example 5: Parallel execution across multiple routers
+  - name: "Update routes in parallel"
+    commands:
+      - add-routes
+    configs:
+      - /path/to/router1.yaml
+      - /path/to/router2.yaml
+      - /path/to/router3.yaml
+    interval: "3h"
+    strategy: "parallel"  # Execute for all configs simultaneously
+
+  # Example 6: Complex maintenance task
   - name: "Full router maintenance"
     commands:
       - delete-routes
@@ -94,3 +105,5 @@ tasks:
 #   - If a command fails, remaining commands for that config are skipped
 #   - Use "retry" to specify number of retry attempts (default: 0)
 #   - Use "retryDelay" to specify delay between retries (default: "1m")
+#   - Use "strategy: parallel" to execute commands for all configs simultaneously
+#   - Default strategy is "sequential" (one config after another)

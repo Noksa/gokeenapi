@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sync"
 	"time"
 
 	"github.com/enriquebris/goconcurrentqueue"
@@ -153,6 +154,9 @@ func validateTask(task config.ScheduledTask) error {
 			return fmt.Errorf("retryDelay must be at least 1 second")
 		}
 	}
+	if task.Strategy != "" && task.Strategy != StrategySequential && task.Strategy != StrategyParallel {
+		return fmt.Errorf("invalid strategy %q (must be %q or %q)", task.Strategy, StrategySequential, StrategyParallel)
+	}
 	return nil
 }
 
@@ -234,8 +238,20 @@ func executeTask(task config.ScheduledTask) {
 	gokeenlog.HorizontalLine()
 	gokeenlog.Infof("▶ Executing task: %v", color.BlueString(task.Name))
 
-	for _, configPath := range task.Configs {
-		executeCommandsForConfig(task, configPath)
+	if task.Strategy == StrategyParallel {
+		var wg sync.WaitGroup
+		for _, configPath := range task.Configs {
+			wg.Add(1)
+			go func(cfg string) {
+				defer wg.Done()
+				executeCommandsForConfig(task, cfg)
+			}(configPath)
+		}
+		wg.Wait()
+	} else {
+		for _, configPath := range task.Configs {
+			executeCommandsForConfig(task, configPath)
+		}
 	}
 }
 
