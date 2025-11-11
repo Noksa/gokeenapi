@@ -4,7 +4,6 @@ go 1.24.0
 
 require (
 	github.com/briandowns/spinner v1.23.2
-	github.com/enriquebris/goconcurrentqueue v0.7.0
 	github.com/fatih/color v1.18.0
 	github.com/go-resty/resty/v2 v2.16.5
 	github.com/patrickmn/go-cache v2.1.0+incompatible

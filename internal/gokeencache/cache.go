@@ -45,6 +45,7 @@ func GetRciShowIpRoute() []gokeenrestapimodels.RciShowIpRoute {
 func SetRciShowInterfaces(m map[string]gokeenrestapimodels.RciShowInterface) {
 	c.Set(rciShowInterfaces, m, cache.NoExpiration)
 }
+
 func GetRciShowInterfaces() map[string]gokeenrestapimodels.RciShowInterface {
 	v, ok := c.Get(rciShowInterfaces)
 	if !ok {

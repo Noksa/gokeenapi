@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sync"
 	"time"
 
-	"github.com/enriquebris/goconcurrentqueue"
 	"github.com/fatih/color"
 	"github.com/noksa/gokeenapi/internal/gokeenlog"
 	"github.com/noksa/gokeenapi/pkg/config"
@@ -70,35 +70,49 @@ Cannot use both in the same task.`,
 				return fmt.Errorf("no tasks defined in scheduler config")
 			}
 
+			var validatedConfigs []string
+			for _, task := range schedulerCfg.Tasks {
+				for _, cfg := range task.Configs {
+					if !slices.Contains(validatedConfigs, cfg) {
+						if _, err := os.Stat(cfg); err != nil {
+							return fmt.Errorf("config file %q not found: %w", cfg, err)
+						}
+						validatedConfigs = append(validatedConfigs, cfg)
+					}
+				}
+			}
+
+			for i, task := range schedulerCfg.Tasks {
+				if err := validateTask(task); err != nil {
+					return fmt.Errorf("task %d %q validation failed: %w", i+1, task.Name, err)
+				}
+			}
+
 			gokeenlog.Info(color.GreenString("🕐 Scheduler started"))
 			gokeenlog.HorizontalLine()
 			gokeenlog.Infof("Total tasks: %v", color.CyanString("%v", len(schedulerCfg.Tasks)))
 
 			ctx := cmd.Context()
 
-			queue := goconcurrentqueue.NewFIFO()
+			// 100 is more than enough
+			queue := make(chan config.ScheduledTask, 100)
 
 			go func() {
-				time.Sleep(time.Second)
 				for {
 					select {
 					case <-ctx.Done():
 						return
-					default:
-						item, err := queue.DequeueOrWaitForNextElement()
-						if err == nil {
-							if task, ok := item.(config.ScheduledTask); ok {
-								executeTask(task)
-							}
+					case task := <-queue:
+						executeTask(task)
+						if len(queue) == 0 {
+							gokeenlog.HorizontalLine()
+							gokeenlog.Info("Waiting for next task")
 						}
 					}
 				}
 			}()
 
 			for _, task := range schedulerCfg.Tasks {
-				if err := validateTask(task); err != nil {
-					return fmt.Errorf("task %q validation failed: %w", task.Name, err)
-				}
 				go runTask(ctx, task, queue)
 			}
 
@@ -161,7 +175,7 @@ func validateTask(task config.ScheduledTask) error {
 }
 
 // runTask runs a scheduled task
-func runTask(ctx context.Context, task config.ScheduledTask, queue goconcurrentqueue.Queue) {
+func runTask(ctx context.Context, task config.ScheduledTask, queue chan<- config.ScheduledTask) {
 	if task.Interval != "" {
 		runIntervalTask(ctx, task, queue)
 	} else {
@@ -170,27 +184,27 @@ func runTask(ctx context.Context, task config.ScheduledTask, queue goconcurrentq
 }
 
 // runIntervalTask runs task at specified intervals
-func runIntervalTask(ctx context.Context, task config.ScheduledTask, queue goconcurrentqueue.Queue) {
+func runIntervalTask(ctx context.Context, task config.ScheduledTask, queue chan<- config.ScheduledTask) {
 	interval, _ := time.ParseDuration(task.Interval)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	gokeenlog.InfoSubStepf("Task '%v': running every %s", color.CyanString(task.Name), color.BlueString("%v", interval))
 
-	_ = queue.Enqueue(task)
+	queue <- task
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_ = queue.Enqueue(task)
+			queue <- task
 		}
 	}
 }
 
 // runTimedTask runs task at specified times
-func runTimedTask(ctx context.Context, task config.ScheduledTask, queue goconcurrentqueue.Queue) {
+func runTimedTask(ctx context.Context, task config.ScheduledTask, queue chan<- config.ScheduledTask) {
 	gokeenlog.InfoSubStepf("Task '%v': running at %v", color.CyanString(task.Name), color.BlueString("%v", task.Times))
 
 	for {
@@ -201,7 +215,7 @@ func runTimedTask(ctx context.Context, task config.ScheduledTask, queue goconcur
 		case <-ctx.Done():
 			return
 		case <-time.After(waitDuration):
-			_ = queue.Enqueue(task)
+			queue <- task
 		}
 	}
 }
