@@ -18,7 +18,7 @@ func newDeleteDnsRecordsCmd() *cobra.Command {
 		Use:     CmdDeleteDnsRecords,
 		Aliases: AliasesDeleteDnsRecords,
 		Short:   "Remove custom DNS entries from your router",
-		Long: `Delete static DNS records from your Keenetic router's local DNS resolver.
+		Long: `Delete static DNS records from your Keenetic (Netcraze) router's local DNS resolver.
 
 This command removes DNS records that match the entries defined in your configuration
 file's 'dns.records' section. Only records that currently exist in the router 

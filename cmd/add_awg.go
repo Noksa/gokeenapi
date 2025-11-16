@@ -15,7 +15,7 @@ func newAddAwgCmd() *cobra.Command {
 		Use:     CmdAddAwg,
 		Aliases: AliasesAddAwg,
 		Short:   "Set up a new WireGuard VPN connection",
-		Long: `Add a new WireGuard (AWG) VPN connection to your Keenetic router from a .conf file.
+		Long: `Add a new WireGuard (AWG) VPN connection to your Keenetic (Netcraze) router from a .conf file.
 
 This command creates and configures a new WireGuard interface using a standard 
 WireGuard configuration file. The interface is automatically configured, enabled,
@@ -53,7 +53,7 @@ Must contain valid [Interface] and [Peer] sections.
 This flag is required.`)
 	cmd.Flags().StringVar(&name, "name", "",
 		`Custom name for the new WireGuard interface.
-If not specified, Keenetic will auto-generate a name (e.g., Wireguard0).
+If not specified, Keenetic (Netcraze) will auto-generate a name (e.g., Wireguard0).
 The name will be used as the interface ID for other commands.`)
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -70,7 +70,7 @@ The name will be used as the interface ID for other commands.`)
 			return err
 		}
 		if installed == "" {
-			return fmt.Errorf("wireguard component is not installed. Please install 'WireGuard VPN' component in your Keenetic router first")
+			return fmt.Errorf("wireguard component is not installed. Please install 'WireGuard VPN' component in your Keenetic (Netcraze) router first")
 		}
 		err = gokeenrestapi.Checks.CheckAWGInterfaceExistsFromConfFile(confPath)
 		if err != nil {

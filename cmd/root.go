@@ -16,10 +16,10 @@ func NewRootCmd() *cobra.Command {
 	var configFile string
 	rootCmd.Use = "gokeenapi"
 	rootCmd.SilenceErrors = true
-	rootCmd.Short = "Automate your Keenetic router management with simple commands"
-	rootCmd.Long = `gokeenapi - Automate your Keenetic router management with ease
+	rootCmd.Short = "Automate your Keenetic (Netcraze) router management with simple commands"
+	rootCmd.Long = `gokeenapi - Automate your Keenetic (Netcraze) router management with ease
 
-A powerful command-line utility for managing Keenetic routers via REST API.
+A powerful command-line utility for managing Keenetic (Netcraze) routers via REST API.
 Supports route management, DNS configuration, WireGuard setup, and more.
 
 Key features:

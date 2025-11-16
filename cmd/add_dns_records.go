@@ -17,7 +17,7 @@ func newAddDnsRecordsCmd() *cobra.Command {
 		Use:     CmdAddDnsRecords,
 		Aliases: AliasesAddDnsRecords,
 		Short:   "Create custom DNS entries for local domains",
-		Long: `Add static DNS records to your Keenetic router's local DNS resolver.
+		Long: `Add static DNS records to your Keenetic (Netcraze) router's local DNS resolver.
 
 This command creates custom DNS entries that resolve domain names to specific IP addresses
 within your local network. Records are defined in the 'dns.records' section of your 

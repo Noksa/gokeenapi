@@ -15,7 +15,7 @@ func newDeleteKnownHostsCmd() *cobra.Command {
 		Use:     CmdDeleteKnownHosts,
 		Aliases: AliasesDeleteKnownHosts,
 		Short:   "Clean up device list using name or MAC patterns",
-		Long: `Delete known hosts from your Keenetic router using regex pattern matching.
+		Long: `Delete known hosts from your Keenetic (Netcraze) router using regex pattern matching.
 
 This command removes devices from the router's known hosts list (hotspot database)
 based on either hostname or MAC address patterns. Use regex patterns to match

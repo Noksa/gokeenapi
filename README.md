@@ -2,7 +2,7 @@
 
 # 🚀 gokeenapi
 
-**Automate your Keenetic router management with ease**
+**Automate your Keenetic (Netcraze) router management with ease**
 
 <p align="center">
   <video src="https://github.com/user-attachments/assets/404e89cc-4675-42c4-ae93-4a0955b06348" width="100%"></video>
@@ -12,7 +12,7 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/noksa/gokeenapi)](https://hub.docker.com/r/noksa/gokeenapi)
 [![GitHub release](https://img.shields.io/github/release/Noksa/gokeenapi.svg)](https://github.com/Noksa/gokeenapi/releases)
 
-*Tired of clicking through Keenetic web interface? Automate your Keenetic router management with simple CLI commands.*
+*Tired of clicking through Keenetic (Netcraze) web interface? Automate your Keenetic (Netcraze) router management with simple CLI commands.*
 
 <div align="center">
 
@@ -114,13 +114,13 @@ For security, you can store sensitive credentials as environment variables inste
 
 ## 🔧 Supported Routers
 
-`gokeenapi` has been tested with the following Keenetic router models:
+`gokeenapi` has been tested with the following Keenetic (Netcraze) router models:
 
-- **Keenetic Start**
-- **Keenetic Viva** 
-- **Keenetic Giga**
+- **Keenetic (Netcraze) Start**
+- **Keenetic (Netcraze) Viva** 
+- **Keenetic (Netcraze) Giga**
 
-Since the utility works with Keenetic Start (the most affordable model in the lineup), it should be compatible with all Keenetic router models.
+Since the utility works with Keenetic (Netcraze) Start (the most affordable model in the lineup), it should be compatible with all Keenetic (Netcraze) router models.
 
 ---
 
@@ -195,7 +195,7 @@ Here are some of the things you can do with `gokeenapi`. For a full list of comm
 
 *Aliases: `showinterfaces`, `showifaces`, `si`*
 
-Displays all available interfaces on your Keenetic router.
+Displays all available interfaces on your Keenetic (Netcraze) router.
 
 ```shell
 # Show all interfaces
@@ -293,7 +293,7 @@ Deletes known hosts by name or MAC using regex pattern.
 
 *Aliases: `e`*
 
-Execute custom Keenetic CLI commands directly on your router.
+Execute custom Keenetic (Netcraze) CLI commands directly on your router.
 
 ```shell
 # Show system information

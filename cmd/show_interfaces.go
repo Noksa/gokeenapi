@@ -10,7 +10,7 @@ func newShowInterfacesCmd() *cobra.Command {
 		Use:     CmdShowInterfaces,
 		Aliases: AliasesShowInterfaces,
 		Short:   "List available network interfaces on your router",
-		Long: `Display detailed information about network interfaces available on your Keenetic router.
+		Long: `Display detailed information about network interfaces available on your Keenetic (Netcraze) router.
 
 This command helps you discover interface IDs that can be used with other commands like add-routes 
 and delete-routes. It shows interface names, types, status, and other relevant details.

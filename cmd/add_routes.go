@@ -13,7 +13,7 @@ func newAddRoutesCmd() *cobra.Command {
 		Use:     CmdAddRoutes,
 		Aliases: AliasesAddRoutes,
 		Short:   "Add routing rules from .bat files and URLs",
-		Long: `Add static routes to your Keenetic router from .bat files and remote URLs.
+		Long: `Add static routes to your Keenetic (Netcraze) router from .bat files and remote URLs.
 
 This command processes route definitions from local .bat files and remote URLs specified 
 in your configuration file. Routes are added to the interfaces defined in the 'routes' 

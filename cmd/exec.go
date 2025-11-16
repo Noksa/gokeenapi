@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// execCommand executes a command on the Keenetic router and returns the results
+// execCommand executes a command on the Keenetic (Netcraze) router and returns the results
 func execCommand(args []string) ([]gokeenrestapimodels.ParseResponse, error) {
 	cmdToExecute := strings.Join(args, " ")
 	parseC := gokeenrestapimodels.ParseRequest{Parse: cmdToExecute}
@@ -34,13 +34,13 @@ func newExecCmd() *cobra.Command {
 		Use:     CmdExec,
 		Aliases: AliasesExec,
 		Short:   "Run custom router commands directly",
-		Long: `Execute custom Keenetic CLI commands directly on your router via REST API.
+		Long: `Execute custom Keenetic (Netcraze) CLI commands directly on your router via REST API.
 
-This command provides direct access to the Keenetic router's command-line interface,
+This command provides direct access to the Keenetic (Netcraze) router's command-line interface,
 allowing you to run any supported CLI command. It's useful for advanced configuration
 tasks not covered by other gokeenapi commands.
 
-The command accepts Keenetic CLI syntax and returns the router's response.
+The command accepts Keenetic (Netcraze) CLI syntax and returns the router's response.
 Multiple words are automatically joined with spaces to form the complete command.
 
 Examples:
@@ -61,7 +61,7 @@ Examples:
 
 Warning: This command provides direct router access. Incorrect commands may
 affect router functionality. Use with caution and ensure you understand
-the Keenetic CLI syntax before executing commands.`,
+the Keenetic (Netcraze) CLI syntax before executing commands.`,
 	}
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {

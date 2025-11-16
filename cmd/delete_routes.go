@@ -16,7 +16,7 @@ func newDeleteRoutesCmd() *cobra.Command {
 		Use:     CmdDeleteRoutes,
 		Aliases: AliasesDeleteRoutes,
 		Short:   "Remove routing rules from specified interfaces",
-		Long: `Delete static routes from your Keenetic router interfaces.
+		Long: `Delete static routes from your Keenetic (Netcraze) router interfaces.
 
 This command removes user-defined static routes from specified interfaces. By default,
 it processes all interfaces defined in your configuration file. You can target a 
@@ -43,7 +43,7 @@ Safety: Only user-defined static routes are deleted. System routes remain untouc
 	var interfaceId string
 	var force bool
 	cmd.Flags().StringVar(&interfaceId, "interface-id", "",
-		`Target a specific Keenetic interface ID for route deletion.
+		`Target a specific Keenetic (Netcraze) interface ID for route deletion.
 If not specified, processes all interfaces from the config file.
 Use 'show-interfaces' to list available interface IDs.`)
 	cmd.Flags().BoolVar(&force, "force", false,
