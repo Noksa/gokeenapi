@@ -41,6 +41,6 @@ type Wireguard struct {
 }
 type RciShowScInterface struct {
 	Description string    `json:"description,omitempty"`
-	IP          IP        `json:"ip,omitempty"`
-	Wireguard   Wireguard `json:"wireguard,omitempty"`
+	IP          IP        `json:"ip"`
+	Wireguard   Wireguard `json:"wireguard"`
 }

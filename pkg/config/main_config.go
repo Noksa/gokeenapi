@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"os"
+	"path/filepath"
 
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
 	"gopkg.in/yaml.v3"
@@ -43,12 +44,21 @@ type Keenetic struct {
 	Password string `yaml:"password"`
 }
 
+// BatFileList represents the structure of a YAML file containing bat-file paths
+type BatFileList struct {
+	// BatFile contains list of paths to .bat files or .yaml/.yml files
+	// When a .yaml/.yml file is specified, it's loaded and expanded to its contained bat-file paths
+	// This allows sharing common bat-file lists across multiple configurations
+	// Example YAML structure: bat-file: ["/path/to/file1.bat", "/path/to/file2.bat"]
+	BatFile []string `yaml:"bat-file"`
+}
+
 // Route defines routing configuration for a specific interface
 type Route struct {
 	// InterfaceID specifies the target interface (e.g., Wireguard0)
 	InterfaceID string `yaml:"interfaceId"`
-	// BatFile contains paths to local .bat files with route definitions
-	BatFile []string `yaml:"bat-file"`
+	// BatFileList is embedded to reuse the BatFile field definition
+	BatFileList `yaml:",inline"`
 	// BatURL contains URLs to remote .bat files with route definitions
 	BatURL []string `yaml:"bat-url"`
 }
@@ -103,5 +113,59 @@ func LoadConfig(configPath string) error {
 	if ok {
 		Cfg.DataDir = "/etc/gokeenapi"
 	}
+
+	// Expand YAML files in bat-file lists
+	err = expandBatFileLists(configPath)
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// expandBatFileLists expands .yaml files in bat-file arrays to their contained bat file lists
+func expandBatFileLists(configPath string) error {
+	for i := range Cfg.Routes {
+		expandedBatFiles := []string{}
+
+		for _, batFile := range Cfg.Routes[i].BatFile {
+			// Check if this is a YAML file
+			if filepath.Ext(batFile) == ".yaml" || filepath.Ext(batFile) == ".yml" {
+				// Load bat files from YAML
+				batFiles, err := loadBatFileListFromYAML(batFile, configPath)
+				if err != nil {
+					return err
+				}
+				expandedBatFiles = append(expandedBatFiles, batFiles...)
+			} else {
+				// Regular .bat file, keep as is
+				expandedBatFiles = append(expandedBatFiles, batFile)
+			}
+		}
+
+		Cfg.Routes[i].BatFile = expandedBatFiles
+	}
+	return nil
+}
+
+// loadBatFileListFromYAML loads bat file paths from a YAML file
+func loadBatFileListFromYAML(listPath, configPath string) ([]string, error) {
+	// If listPath is relative, resolve it relative to the config file directory
+	if !filepath.IsAbs(listPath) {
+		configDir := filepath.Dir(configPath)
+		listPath = filepath.Join(configDir, listPath)
+	}
+
+	b, err := os.ReadFile(listPath)
+	if err != nil {
+		return nil, errors.New("failed to read bat-file-list from " + listPath + ": " + err.Error())
+	}
+
+	var batFileList BatFileList
+	err = yaml.Unmarshal(b, &batFileList)
+	if err != nil {
+		return nil, errors.New("failed to parse bat-file-list from " + listPath + ": " + err.Error())
+	}
+
+	return batFileList.BatFile, nil
 }

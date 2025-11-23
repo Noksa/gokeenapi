@@ -5,10 +5,10 @@ type Version struct {
 	Sandbox      string `json:"sandbox,omitempty"`
 	Title        string `json:"title,omitempty"`
 	Arch         string `json:"arch,omitempty"`
-	Ndm          Ndm    `json:"ndm,omitempty"`
-	Bsp          Bsp    `json:"bsp,omitempty"`
-	Ndw          Ndw    `json:"ndw,omitempty"`
-	Ndw4         Ndw4   `json:"ndw4,omitempty"`
+	Ndm          Ndm    `json:"ndm"`
+	Bsp          Bsp    `json:"bsp"`
+	Ndw          Ndw    `json:"ndw"`
+	Ndw4         Ndw4   `json:"ndw4"`
 	Manufacturer string `json:"manufacturer,omitempty"`
 	Vendor       string `json:"vendor,omitempty"`
 	Series       string `json:"series,omitempty"`

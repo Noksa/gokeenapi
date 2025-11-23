@@ -12,3 +12,4 @@ coverage.out
 .DS_Store
 custom
 q.log
+**/testdata/rapid/**/*.fail

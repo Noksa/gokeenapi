@@ -30,8 +30,10 @@ func (s *AddRoutesTestSuite) TestAddRoutesCmd_Execute() {
 	config.Cfg.Routes = []config.Route{
 		{
 			InterfaceID: "Wireguard0",
-			BatFile:     []string{},
-			BatURL:      []string{},
+			BatFileList: config.BatFileList{
+				BatFile: []string{},
+			},
+			BatURL: []string{},
 		},
 	}
 

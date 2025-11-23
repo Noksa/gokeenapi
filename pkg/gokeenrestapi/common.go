@@ -42,7 +42,7 @@ type keeneticCommon struct {
 }
 
 type keeneticCacheFile struct {
-	Cookie keeneticCacheCookie `json:"cookie,omitempty"`
+	Cookie keeneticCacheCookie `json:"cookie"`
 	path   string
 }
 type keeneticCacheCookie struct {

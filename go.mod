@@ -13,6 +13,7 @@ require (
 	golang.org/x/term v0.35.0
 	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/yaml.v3 v3.0.1
+	pgregory.net/rapid v1.2.0
 )
 
 require (

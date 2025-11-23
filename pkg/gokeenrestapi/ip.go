@@ -20,7 +20,8 @@ import (
 
 var (
 	// routeRegex is precompiled regex pattern for parsing Windows route commands
-	routeRegex = regexp.MustCompile(`(?i)route ADD (\d+\.\d+\.\d+\.\d+) MASK (\d+\.\d+\.\d+\.\d+)`)
+	// Updated to handle varying whitespace (\s+) and validate IP octet ranges (0-255)
+	routeRegex = regexp.MustCompile(`(?i)route\s+ADD\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+MASK\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})`)
 	// Ip provides IP-related functionality including routing, DNS, and host management
 	Ip keeneticIp
 )
@@ -201,6 +202,12 @@ func (*keeneticIp) AddRoutesFromBatFile(batFile string, interfaceId string) erro
 		}
 		ip := sl[1]
 		mask := sl[2]
+		// Validate IP addresses are in valid range
+		if !validateIPAddress(ip) || !validateIPAddress(mask) {
+			gokeenlog.InfoSubStepf("Skipping line with invalid IP address: '%v'", line)
+			mErr = multierr.Append(mErr, fmt.Errorf("line has invalid IP address: '%v'", line))
+			continue
+		}
 		contains, err := checkInterfaceContainsRoute(ip, mask, interfaceId, routes)
 		if err != nil {
 			return err
@@ -261,6 +268,12 @@ func (*keeneticIp) AddRoutesFromBatUrl(url string, interfaceId string) error {
 		}
 		ip := sl[1]
 		mask := sl[2]
+		// Validate IP addresses are in valid range
+		if !validateIPAddress(ip) || !validateIPAddress(mask) {
+			gokeenlog.InfoSubStepf("Skipping line with invalid IP address: '%v'", line)
+			mErr = multierr.Append(mErr, fmt.Errorf("line has invalid IP address: '%v'", line))
+			continue
+		}
 		contains, err := checkInterfaceContainsRoute(ip, mask, interfaceId, routes)
 		if err != nil {
 			return err
@@ -296,6 +309,16 @@ func maskToCIDR(mask string) (int, error) {
 	ipv4Mask := net.IPMask(ip.To4())
 	ones, _ := ipv4Mask.Size()
 	return ones, nil
+}
+
+// validateIPAddress checks if a string is a valid IPv4 address
+func validateIPAddress(ip string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	// Ensure it's IPv4 (not IPv6)
+	return parsed.To4() != nil
 }
 
 func checkInterfaceContainsRoute(routeIp, mask, interfaceId string, existingRoutes []gokeenrestapimodels.RciShowIpRoute) (bool, error) {

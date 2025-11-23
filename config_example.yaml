@@ -33,6 +33,7 @@ routes:
     
     # Local .bat files containing Windows-style route commands
     # Format: route add <network> mask <netmask> <gateway>
+    # You can also specify .yaml files that contain lists of bat-file paths
     bat-file:
       - /path/to/batfile.bat
       - /path/to/batfile2.bat
@@ -44,11 +45,22 @@ routes:
       - https://iplist.opencck.org/?format=bat&data=cidr4&site=youtube.com
       - https://iplist.opencck.org/?format=bat&data=cidr4&site=facebook.com
   
-  # Additional interface example
+  # Additional interface example using YAML file with bat-file list
+  # This allows you to maintain a shared list of bat files across multiple configs
   - interfaceId: Wireguard1
     bat-file:
-      - /path/to/batfile-second-interface.bat
-    bat-url: []
+      # When a .yaml/.yml file is specified, it's loaded and expanded to bat-file paths
+      # The YAML file should have structure: bat-file: [list of paths]
+      # Relative paths in the YAML file are resolved relative to this config file's directory
+      - batfiles/common-routes.yaml
+    
+  # You can also mix .yaml lists with regular .bat files
+  - interfaceId: Wireguard2
+    bat-file:
+      - batfiles/common-routes.yaml
+      - /path/to/additional-batfile.bat
+    bat-url:
+      - https://example.com/routes.bat
 
 # =============================================================================
 # DNS Records Configuration

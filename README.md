@@ -103,6 +103,29 @@ Download the latest release for your platform:
 
 To use your configuration file, pass the `--config <path>` flag with your command.
 
+### Reusable Bat-File Lists
+
+When managing multiple routers with the same routing configuration, you can create a YAML file containing a list of bat-file paths and reference it across multiple configs:
+
+**batfiles/common-routes.yaml:**
+```yaml
+bat-file:
+  - /path/to/discord.bat
+  - /path/to/youtube.bat
+  - /path/to/instagram.bat
+```
+
+**Router config:**
+```yaml
+routes:
+  - interfaceId: Wireguard0
+    bat-file:
+      - batfiles/common-routes.yaml  # Automatically expanded
+      - /path/to/router-specific.bat # Can mix with regular files
+```
+
+The tool automatically detects `.yaml`/`.yml` files in the `bat-file` array and expands them to their contained bat-file paths. Relative paths in YAML list files are resolved relative to the main config file's directory.
+
 ### Environment Variables
 
 For security, you can store sensitive credentials as environment variables instead of in the config file:
