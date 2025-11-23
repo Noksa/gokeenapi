@@ -46,7 +46,7 @@ When starting work on this project:
 
 - **Scheduler**: Automated task execution at intervals or specific times (`cmd/scheduler.go`)
 - **Bat-file expansion**: YAML files can reference other YAML files containing bat-file lists
-- **Multi-router support is not implemented**: Single config CAN'T manage multiple routers
+- **Multi-router support**: Single config CAN'T manage multiple routers - to do that use multiple configuration files (one per router)
 - **Environment variables**: Credentials can be stored as `GOKEENAPI_KEENETIC_LOGIN` and `GOKEENAPI_KEENETIC_PASSWORD`
 
 ## Testing Philosophy
