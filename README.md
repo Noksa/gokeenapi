@@ -126,6 +126,42 @@ routes:
 
 The tool automatically detects `.yaml`/`.yml` files in the `bat-file` array and expands them to their contained bat-file paths. Relative paths in YAML list files are resolved relative to the main config file's directory.
 
+### Reusable Bat-URL Lists
+
+Similar to bat-file lists, you can create reusable YAML files containing bat-url paths:
+
+**batfiles/common-urls.yaml:**
+```yaml
+bat-url:
+  - https://example.com/discord.bat
+  - https://example.com/youtube.bat
+  - https://example.com/instagram.bat
+```
+
+**Router config:**
+```yaml
+routes:
+  - interfaceId: Wireguard0
+    bat-url:
+      - batfiles/common-urls.yaml    # Automatically expanded
+      - https://example.com/extra.bat # Can mix with regular URLs
+```
+
+The tool automatically detects `.yaml`/`.yml` files in the `bat-url` array and expands them to their contained bat-url paths. Relative paths in YAML list files are resolved relative to the main config file's directory.
+
+**Note:** You can combine both `bat-file` and `bat-url` in the same YAML file. When a YAML file is referenced in `bat-file`, only its `bat-file` list is expanded. When referenced in `bat-url`, only its `bat-url` list is expanded:
+
+```yaml
+bat-file:
+  - /path/to/file1.bat
+  - /path/to/file2.bat
+bat-url:
+  - https://example.com/url1.bat
+  - https://example.com/url2.bat
+```
+
+This allows you to maintain both local files and remote URLs in a single reusable YAML file, referencing it appropriately in your config.
+
 ### Environment Variables
 
 For security, you can store sensitive credentials as environment variables instead of in the config file:

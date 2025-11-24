@@ -33,7 +33,9 @@ func (s *AddRoutesTestSuite) TestAddRoutesCmd_Execute() {
 			BatFileList: config.BatFileList{
 				BatFile: []string{},
 			},
-			BatURL: []string{},
+			BatURLList: config.BatURLList{
+				BatURL: []string{},
+			},
 		},
 	}
 
