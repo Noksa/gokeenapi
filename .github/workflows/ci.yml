@@ -7,10 +7,9 @@ on:
     branches: [ main, master, develop ]
 
 jobs:
-  build-and-test:
-    name: Build, Lint, and Test
+  build:
+    name: Build
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -24,11 +23,38 @@ jobs:
       - name: Build project
         run: go build -v ./...
 
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.6
-          args: --timeout 15m --color always
+          install-mode: goinstall
+          args: --timeout 15m
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
 
       - name: Run tests
         run: make test
