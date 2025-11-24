@@ -43,32 +43,6 @@ func genIPv4Network() *rapid.Generator[string] {
 	})
 }
 
-// genRouteCommand generates valid Windows route commands
-func genRouteCommand() *rapid.Generator[string] {
-	return rapid.Custom(func(t *rapid.T) string {
-		ip := genIPv4Address().Draw(t, "ip")
-		mask := genSubnetMask().Draw(t, "mask")
-		// Generate with varying case for "route"
-		routeKeyword := rapid.SampledFrom([]string{"route", "ROUTE", "Route"}).Draw(t, "routeKeyword")
-		return fmt.Sprintf("%s ADD %s MASK %s", routeKeyword, ip, mask)
-	})
-}
-
-// genRouteCommandWithWhitespace generates route commands with varying whitespace
-func genRouteCommandWithWhitespace() *rapid.Generator[string] {
-	return rapid.Custom(func(t *rapid.T) string {
-		ip := genIPv4Address().Draw(t, "ip")
-		mask := genSubnetMask().Draw(t, "mask")
-
-		// Generate varying amounts of whitespace
-		ws1 := rapid.SampledFrom([]string{" ", "  ", "\t", "   "}).Draw(t, "ws1")
-		ws2 := rapid.SampledFrom([]string{" ", "  ", "\t", "   "}).Draw(t, "ws2")
-		ws3 := rapid.SampledFrom([]string{" ", "  ", "\t", "   "}).Draw(t, "ws3")
-
-		return fmt.Sprintf("route%sADD%s%s%sMASK%s%s", ws1, ws2, ip, ws3, ws3, mask)
-	})
-}
-
 // genInvalidRouteCommand generates malformed route commands for negative testing
 func genInvalidRouteCommand() *rapid.Generator[string] {
 	return rapid.SampledFrom([]string{
@@ -94,28 +68,6 @@ func isValidIPv4(ip string) bool {
 	}
 	// Ensure it's IPv4 (not IPv6)
 	return parsed.To4() != nil
-}
-
-// isValidSubnetMask checks if a string is a valid subnet mask
-func isValidSubnetMask(mask string) bool {
-	ip := net.ParseIP(mask)
-	if ip == nil {
-		return false
-	}
-
-	ipv4Mask := net.IPMask(ip.To4())
-	if ipv4Mask == nil {
-		return false
-	}
-
-	// Check if it's a valid contiguous mask
-	ones, bits := ipv4Mask.Size()
-	return bits == 32 && ones >= 0 && ones <= 32
-}
-
-// isValidCIDR checks if an integer is a valid CIDR prefix length
-func isValidCIDR(cidr int) bool {
-	return cidr >= 0 && cidr <= 32
 }
 
 // cidrToMask converts a CIDR prefix length to a dotted-decimal subnet mask
@@ -144,14 +96,6 @@ func maskToCIDRSafe(mask string) (int, error) {
 	return ones, nil
 }
 
-// networksEqual checks if two networks are equal
-func networksEqual(net1, net2 *net.IPNet) bool {
-	if net1 == nil || net2 == nil {
-		return net1 == net2
-	}
-	return net1.IP.Equal(net2.IP) && net1.Mask.String() == net2.Mask.String()
-}
-
 // networkContains checks if network1 contains network2
 func networkContains(network1, network2 *net.IPNet) bool {
 	if network1 == nil || network2 == nil {
@@ -168,12 +112,6 @@ func networkContains(network1, network2 *net.IPNet) bool {
 	ones2, _ := network2.Mask.Size()
 
 	return ones1 <= ones2
-}
-
-// parseNetwork parses a CIDR notation string into a *net.IPNet
-func parseNetwork(cidr string) (*net.IPNet, error) {
-	_, network, err := net.ParseCIDR(cidr)
-	return network, err
 }
 
 // Route deduplication test generators

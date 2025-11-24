@@ -84,6 +84,22 @@ func (s *ApiTestSuite) TestExecutePostParse() {
 func (s *ApiTestSuite) TestShowRunningConfig() {
 	config, err := Common.ShowRunningConfig()
 	s.NoError(err)
+	s.NotEmpty(config.Message)
+
+	// Verify config contains expected system mode
+	s.Contains(config.Message, "system mode router")
+}
+
+func (s *ApiTestSuite) TestShowRunningConfigWithStaticConfig() {
+	// Create a separate server for this specific test case
+	server := SetupMockRouterForTest(WithStaticRunningConfig([]string{
+		"test running config line 1",
+		"test running config line 2",
+	}))
+	defer server.Close()
+
+	config, err := Common.ShowRunningConfig()
+	s.NoError(err)
 	s.Len(config.Message, 2)
 	s.Equal("test running config line 1", config.Message[0])
 }
@@ -99,4 +115,22 @@ func (s *ApiTestSuite) TestSetGlobalIpInInterface() {
 
 	err = Interface.SetGlobalIpInInterface("Wireguard0", false)
 	s.NoError(err)
+}
+
+func (s *ApiTestSuite) TestGetAllHotspots() {
+	hotspot, err := Ip.GetAllHotspots()
+	s.NoError(err)
+	s.Len(hotspot.Host, 2)
+
+	// Verify default hotspot devices from unified mock
+	expectedHosts := map[string]string{
+		"test-device-1": "aa:bb:cc:dd:ee:ff",
+		"test-device-2": "11:22:33:44:55:66",
+	}
+
+	for _, host := range hotspot.Host {
+		expectedMac, exists := expectedHosts[host.Name]
+		s.True(exists, "Unexpected host: %s", host.Name)
+		s.Equal(expectedMac, host.Mac, "Host %s MAC mismatch", host.Name)
+	}
 }

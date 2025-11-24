@@ -1,11 +1,8 @@
 package gokeenrestapi
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -18,18 +15,14 @@ func TestCheckRouterModeTestSuite(t *testing.T) {
 }
 
 func (s *CheckRouterModeTestSuite) TestCheckRouterMode_RouterMode() {
-	// Create separate server for extender mode test
-	mux := http.NewServeMux()
-	mux.HandleFunc("/rci/show/system/mode", func(w http.ResponseWriter, r *http.Request) {
-		mode := gokeenrestapimodels.SystemMode{
+	server := SetupMockRouterForTest(
+		WithSystemMode(MockSystemMode{
 			Active:   "router",
 			Selected: "router",
-		}
-		encodeJSON(w, mode)
-	})
-	server := httptest.NewServer(mux)
+		}),
+	)
 	defer server.Close()
-	SetupTestConfig(server.URL)
+
 	active, selected, err := Common.CheckRouterMode()
 	s.NoError(err)
 	s.Equal("router", active)
@@ -37,19 +30,13 @@ func (s *CheckRouterModeTestSuite) TestCheckRouterMode_RouterMode() {
 }
 
 func (s *CheckRouterModeTestSuite) TestCheckRouterMode_ExtenderMode() {
-	// Create separate server for extender mode test
-	mux := http.NewServeMux()
-	mux.HandleFunc("/rci/show/system/mode", func(w http.ResponseWriter, r *http.Request) {
-		mode := gokeenrestapimodels.SystemMode{
+	server := SetupMockRouterForTest(
+		WithSystemMode(MockSystemMode{
 			Active:   "extender",
 			Selected: "extender",
-		}
-		encodeJSON(w, mode)
-	})
-	server := httptest.NewServer(mux)
+		}),
+	)
 	defer server.Close()
-
-	SetupTestConfig(server.URL)
 
 	active, selected, err := Common.CheckRouterMode()
 	s.Error(err)
@@ -59,19 +46,13 @@ func (s *CheckRouterModeTestSuite) TestCheckRouterMode_ExtenderMode() {
 }
 
 func (s *CheckRouterModeTestSuite) TestCheckRouterMode_MixedMode() {
-	// Create separate server for mixed mode test
-	mux := http.NewServeMux()
-	mux.HandleFunc("/rci/show/system/mode", func(w http.ResponseWriter, r *http.Request) {
-		mode := gokeenrestapimodels.SystemMode{
+	server := SetupMockRouterForTest(
+		WithSystemMode(MockSystemMode{
 			Active:   "router",
 			Selected: "extender",
-		}
-		encodeJSON(w, mode)
-	})
-	server := httptest.NewServer(mux)
+		}),
+	)
 	defer server.Close()
-
-	SetupTestConfig(server.URL)
 
 	active, selected, err := Common.CheckRouterMode()
 	s.Error(err)
