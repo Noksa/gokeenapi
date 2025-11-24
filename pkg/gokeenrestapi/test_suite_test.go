@@ -12,14 +12,13 @@ type GokeenrestapiTestSuite struct {
 	server *httptest.Server
 }
 
-// SetupSuite runs once before all tests in the suite
-func (s *GokeenrestapiTestSuite) SetupSuite() {
-	s.server = SetupMockServer()
-	SetupTestConfig(s.server.URL)
+// SetupTest runs before each test to ensure test isolation
+func (s *GokeenrestapiTestSuite) SetupTest() {
+	s.server = SetupMockRouterForTest()
 }
 
-// TearDownSuite runs once after all tests in the suite
-func (s *GokeenrestapiTestSuite) TearDownSuite() {
+// TearDownTest runs after each test to clean up
+func (s *GokeenrestapiTestSuite) TearDownTest() {
 	if s.server != nil {
 		s.server.Close()
 	}

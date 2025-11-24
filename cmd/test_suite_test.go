@@ -16,17 +16,16 @@ type CmdTestSuite struct {
 	server *httptest.Server
 }
 
-// SetupSuite runs once before all tests in the suite
-func (s *CmdTestSuite) SetupSuite() {
-	s.server = gokeenrestapi.SetupMockServer()
-	gokeenrestapi.SetupTestConfig(s.server.URL)
+// SetupTest runs before each test to ensure test isolation
+func (s *CmdTestSuite) SetupTest() {
+	s.server = gokeenrestapi.SetupMockRouterForTest()
 
 	err := gokeenrestapi.Common.Auth()
 	s.Require().NoError(err)
 }
 
-// TearDownSuite runs once after all tests in the suite
-func (s *CmdTestSuite) TearDownSuite() {
+// TearDownTest runs after each test to clean up
+func (s *CmdTestSuite) TearDownTest() {
 	if s.server != nil {
 		s.server.Close()
 	}

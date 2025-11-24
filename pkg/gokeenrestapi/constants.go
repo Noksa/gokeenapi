@@ -8,8 +8,10 @@ const (
 
 // Connection states
 const (
-	StateUp        = "up"
-	StateConnected = "yes"
+	StateUp           = "up"
+	StateDown         = "down"
+	StateConnected    = "yes"
+	StateDisconnected = "no"
 )
 
 // Parse status

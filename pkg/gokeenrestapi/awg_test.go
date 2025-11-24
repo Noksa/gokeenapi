@@ -1,14 +1,11 @@
 package gokeenrestapi
 
 import (
-	"encoding/json"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -17,44 +14,18 @@ type AwgTestSuite struct {
 	server *httptest.Server
 }
 
-func (s *AwgTestSuite) SetupSuite() {
-	s.server = s.setupMockServerForAWG()
-	SetupTestConfig(s.server.URL)
-}
-
-func (s *AwgTestSuite) TearDownSuite() {
-	if s.server != nil {
-		s.server.Close()
-	}
-}
-
-func (s *AwgTestSuite) setupMockServerForAWG() *httptest.Server {
-	mux := http.NewServeMux()
-
-	// Add interface endpoints that CheckInterfaceExists needs
-	mux.HandleFunc("/rci/show/interface", func(w http.ResponseWriter, r *http.Request) {
-		interfaces := map[string]gokeenrestapimodels.RciShowInterface{
+func (s *AwgTestSuite) SetupTest() {
+	// Use unified mock with custom SC interface configuration
+	// Set Jc to 40 (different from config file's 50) to trigger update
+	s.server = SetupMockRouterForTest(
+		WithScInterfaces(map[string]MockScInterface{
 			"Wireguard0": {
-				Id:          "Wireguard0",
-				Type:        InterfaceTypeWireguard,
 				Description: "Test WireGuard interface",
-				Address:     "10.0.0.1/24",
-				Connected:   StateConnected,
-				Link:        StateUp,
-				State:       StateUp,
-			},
-		}
-		encodeJSON(w, interfaces)
-	})
-
-	// Add single SC interface endpoint
-	mux.HandleFunc("/rci/show/sc/interface/", func(w http.ResponseWriter, r *http.Request) {
-		interfaceId := r.URL.Path[len("/rci/show/sc/interface/"):]
-		if interfaceId == "Wireguard0" {
-			iface := gokeenrestapimodels.RciShowScInterface{
-				Description: "Test WireGuard interface",
-				Wireguard: gokeenrestapimodels.Wireguard{
-					Asc: gokeenrestapimodels.Asc{
+				IP: MockIP{
+					Address: "10.0.0.1/24",
+				},
+				Wireguard: MockWireguard{
+					Asc: MockAsc{
 						Jc:   "40", // Different from config to trigger update
 						Jmin: "5",
 						Jmax: "95",
@@ -65,45 +36,17 @@ func (s *AwgTestSuite) setupMockServerForAWG() *httptest.Server {
 						H3:   "3",
 						H4:   "4",
 					},
+					Peer: []MockPeer{},
 				},
-			}
-			encodeJSON(w, iface)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	})
+			},
+		}),
+	)
+}
 
-	// Parse endpoint for AWG operations
-	mux.HandleFunc("/rci/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		var requests []gokeenrestapimodels.ParseRequest
-		if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		responses := make([]gokeenrestapimodels.ParseResponse, len(requests))
-		for i := range requests {
-			responses[i] = gokeenrestapimodels.ParseResponse{
-				Parse: gokeenrestapimodels.Parse{
-					Status: []gokeenrestapimodels.Status{
-						{
-							Status:  StatusOK,
-							Code:    "0",
-							Message: "AWG configuration applied successfully",
-						},
-					},
-				},
-			}
-		}
-		encodeJSON(w, responses)
-	})
-
-	return httptest.NewServer(mux)
+func (s *AwgTestSuite) TearDownTest() {
+	if s.server != nil {
+		s.server.Close()
+	}
 }
 
 func (s *AwgTestSuite) createTestWireGuardConfig() string {

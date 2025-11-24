@@ -1,0 +1,275 @@
+# Implementation Plan
+
+- [x] 1. Create core mock router structure and state management
+  - [x] 1.1 Define internal mock data structures (MockInterface, MockRoute, MockHost, etc.)
+    - Create types that mirror gokeenrestapimodels but simplified for internal state
+    - Include all fields needed for state management
+    - _Requirements: 1.3, 3.1-3.4_
+  - [x] 1.2 Implement MockRouter struct with thread-safe state
+    - Add sync.RWMutex for thread safety
+    - Add maps/slices for interfaces, routes, DNS records, hotspot devices
+    - Add auth state fields (realm, challenge, session)
+    - _Requirements: 1.2, 2.5_
+  - [x] 1.3 Implement functional options pattern
+    - Create MockRouterOption type
+    - Implement WithInterfaces, WithRoutes, WithDNSRecords, WithHotspotDevices, WithSystemMode
+    - _Requirements: 3.1-3.4_
+  - [x] 1.4 Implement NewMockRouter constructor with default state initialization
+    - Initialize default interfaces (Wireguard0, ISP)
+    - Initialize default routes, DNS records, hotspot devices
+    - Apply functional options to override defaults
+    - _Requirements: 1.3, 3.5_
+  - [ ]* 1.5 Write property test for mock instance isolation
+    - **Property 3: Mock instance isolation**
+    - **Validates: Requirements 1.4**
+
+- [x] 2. Implement HTTP server setup and endpoint registration
+  - [x] 2.1 Implement NewMockRouterServer function
+    - Create http.ServeMux
+    - Register all endpoint handlers
+    - Return httptest.Server
+    - _Requirements: 1.1, 1.2_
+  - [x] 2.2 Implement SetupMockRouterForTest convenience function
+    - Wrapper around NewMockRouterServer
+    - Maintains backward compatibility
+    - _Requirements: 14.2, 14.4_
+  - [x] 2.3 Implement GetState and ResetState methods
+    - GetState returns deep copy of current state
+    - ResetState restores initial state
+    - _Requirements: 1.4_
+  - [ ]* 2.4 Write property test for default state initialization
+    - **Property 2: Default state initialization**
+    - **Validates: Requirements 1.3, 3.5**
+  - [ ]* 2.5 Write property test for all endpoints accessible
+    - **Property 1: All endpoints are accessible**
+    - **Validates: Requirements 1.1**
+  - [ ]* 2.6 Write property test for HTTP method support
+    - **Property 4: HTTP method support**
+    - **Validates: Requirements 1.5**
+
+- [x] 3. Implement authentication endpoints
+  - [x] 3.1 Implement handleAuth for GET requests
+    - Return 401 with x-ndm-realm, x-ndm-challenge headers
+    - Set session cookie
+    - _Requirements: 9.1_
+  - [x] 3.2 Implement handleAuth for POST requests
+    - Validate credentials (accept any for mock)
+    - Return 200 on success, 401 on failure
+    - _Requirements: 9.2, 9.3_
+  - [ ]* 3.3 Write property test for invalid auth returns 401
+    - **Property 10: Invalid auth returns 401**
+    - **Validates: Requirements 4.2, 9.3**
+  - [ ]* 3.4 Write property test for authenticated requests succeed
+    - **Property 28: Authenticated requests succeed**
+    - **Validates: Requirements 9.4**
+
+- [x] 4. Implement interface endpoints
+  - [x] 4.1 Implement handleInterfaces (GET /rci/show/interface)
+    - Return all interfaces from state
+    - Support optional type filtering
+    - Convert MockInterface to RciShowInterface
+    - _Requirements: 5.1_
+  - [x] 4.2 Implement handleInterface (GET /rci/show/interface/{id})
+    - Return single interface by ID
+    - Return 404 if not found
+    - _Requirements: 4.1_
+  - [x] 4.3 Implement handleScInterfaces (GET /rci/show/sc/interface)
+    - Return all SC interfaces with AWG parameters
+    - Convert to RciShowScInterface format
+    - _Requirements: 5.2_
+  - [x] 4.4 Implement handleScInterface (GET /rci/show/sc/interface/{id})
+    - Return single SC interface by ID
+    - Return 404 if not found
+    - _Requirements: 5.2_
+  - [ ]* 4.5 Write property test for invalid interface returns 404
+    - **Property 9: Invalid interface returns 404**
+    - **Validates: Requirements 4.1**
+  - [ ]* 4.6 Write property test for WireGuard interface response completeness
+    - **Property 13: WireGuard interface response completeness**
+    - **Validates: Requirements 5.1**
+  - [ ]* 4.7 Write property test for SC interface AWG parameters completeness
+    - **Property 14: SC interface AWG parameters completeness**
+    - **Validates: Requirements 5.2**
+
+- [x] 5. Implement route endpoints
+  - [x] 5.1 Implement handleRoutes (GET /rci/ip/route)
+    - Return routes filtered by interface if specified
+    - Convert MockRoute to RciIpRoute
+    - _Requirements: 6.1, 6.5_
+  - [ ]* 5.2 Write property test for route filtering by interface
+    - **Property 18: Route filtering by interface**
+    - **Validates: Requirements 6.1**
+  - [ ]* 5.3 Write property test for route response field completeness
+    - **Property 21: Route response field completeness**
+    - **Validates: Requirements 6.5**
+
+- [x] 6. Implement DNS endpoints
+  - [x] 6.1 Implement handleDnsRecords (GET /rci/show/ip/name-server)
+    - Return DNS records in expected format (map with "static" key)
+    - _Requirements: 7.1, 7.5_
+  - [ ]* 6.2 Write property test for DNS query returns all records
+    - **Property 22: DNS query returns all records**
+    - **Validates: Requirements 7.1**
+  - [ ]* 6.3 Write property test for DNS response format correctness
+    - **Property 24: DNS response format correctness**
+    - **Validates: Requirements 7.5**
+
+- [x] 7. Implement hotspot endpoints
+  - [x] 7.1 Implement handleHotspot (GET /rci/show/ip/hotspot)
+    - Return all hotspot devices
+    - Convert to RciShowIpHotspot format
+    - _Requirements: 8.1, 8.3_
+  - [ ]* 7.2 Write property test for hotspot query returns all devices
+    - **Property 25: Hotspot query returns all devices**
+    - **Validates: Requirements 8.1, 8.4**
+  - [ ]* 7.3 Write property test for hotspot response format correctness
+    - **Property 26: Hotspot response format correctness**
+    - **Validates: Requirements 8.3**
+
+- [x] 8. Implement parse endpoint command parser
+  - [x] 8.1 Implement handleParse (POST /rci/)
+    - Accept array of ParseRequest
+    - Return array of ParseResponse with matching length
+    - Validate JSON format
+    - _Requirements: 12.1, 12.2_
+  - [x] 8.2 Implement parse command router
+    - Parse command string to identify operation type
+    - Route to appropriate handler function
+    - Return error for invalid commands
+    - _Requirements: 12.4_
+  - [ ]* 8.3 Write property test for parse request/response length matching
+    - **Property 27: Parse request/response length matching**
+    - **Validates: Requirements 12.2**
+  - [ ]* 8.4 Write property test for malformed parse command returns error
+    - **Property 11: Malformed parse command returns error**
+    - **Validates: Requirements 4.3, 12.4**
+  - [ ]* 8.5 Write property test for wrong HTTP method returns 405
+    - **Property 12: Wrong HTTP method returns 405**
+    - **Validates: Requirements 4.4**
+
+- [x] 9. Implement parse command handlers for routes
+  - [x] 9.1 Implement parseAddRoute command handler
+    - Parse "ip route <network>/<mask> <gateway> <interface>" command
+    - Validate interface exists
+    - Add route to state
+    - _Requirements: 2.1, 6.2_
+  - [x] 9.2 Implement parseDeleteRoute command handler
+    - Parse "no ip route <network>/<mask> <interface>" command
+    - Remove route from state
+    - _Requirements: 6.3_
+  - [ ]* 9.3 Write property test for route addition round-trip
+    - **Property 5: Route addition round-trip**
+    - **Validates: Requirements 2.1**
+  - [ ]* 9.4 Write property test for route addition validates interface existence
+    - **Property 19: Route addition validates interface existence**
+    - **Validates: Requirements 6.2**
+  - [ ]* 9.5 Write property test for route deletion removes from list
+    - **Property 20: Route deletion removes from list**
+    - **Validates: Requirements 6.3**
+
+- [x] 10. Implement parse command handlers for DNS
+  - [x] 10.1 Implement parseAddDnsRecord command handler
+    - Parse "ip name-server <domain> <ip>" command
+    - Add DNS record to state
+    - _Requirements: 2.2, 7.2_
+  - [x] 10.2 Implement parseDeleteDnsRecord command handler
+    - Parse "no ip name-server <domain>" command
+    - Remove DNS record from state
+    - _Requirements: 7.3_
+  - [ ]* 10.3 Write property test for DNS record addition round-trip
+    - **Property 6: DNS record addition round-trip**
+    - **Validates: Requirements 2.2, 7.2**
+  - [ ]* 10.4 Write property test for DNS deletion removes from list
+    - **Property 23: DNS deletion removes from list**
+    - **Validates: Requirements 7.3**
+
+- [x] 11. Implement parse command handlers for interfaces
+  - [x] 11.1 Implement parseInterfaceState command handler
+    - Parse "interface <id> up|down" command
+    - Update interface state fields (connected, link, state)
+    - _Requirements: 2.3, 5.5_
+  - [x] 11.2 Implement parseAwgConfig command handler
+    - Parse "interface <id> wireguard asc jc <value> ..." command
+    - Update AWG parameters in SC interface state
+    - _Requirements: 5.3_
+  - [x] 11.3 Implement parseCreateInterface command handler
+    - Parse interface creation commands
+    - Add interface to both interfaces and SC interfaces state
+    - _Requirements: 5.4_
+  - [ ]* 11.4 Write property test for interface modification round-trip
+    - **Property 7: Interface modification round-trip**
+    - **Validates: Requirements 2.3**
+  - [ ]* 11.5 Write property test for AWG parameter update round-trip
+    - **Property 15: AWG parameter update round-trip**
+    - **Validates: Requirements 5.3**
+  - [ ]* 11.6 Write property test for interface creation appears in both listings
+    - **Property 16: Interface creation appears in both listings**
+    - **Validates: Requirements 5.4**
+  - [ ]* 11.7 Write property test for interface state change propagation
+    - **Property 17: Interface state change propagation**
+    - **Validates: Requirements 5.5**
+
+- [x] 12. Implement parse command handlers for hotspot
+  - [x] 12.1 Implement parseDeleteKnownHost command handler
+    - Parse host deletion commands
+    - Remove host from hotspot state
+    - _Requirements: 2.4, 8.2_
+  - [ ]* 12.2 Write property test for host deletion removes from hotspot
+    - **Property 8: Host deletion removes from hotspot**
+    - **Validates: Requirements 2.4, 8.2**
+
+- [x] 13. Implement remaining endpoints
+  - [x] 13.1 Implement handleVersion (GET /rci/show/version)
+    - Return static version information
+    - _Requirements: 1.1_
+  - [x] 13.2 Implement handleRunningConfig (GET /rci/show/running-config)
+    - Generate config lines from current state
+    - _Requirements: 13.1_
+  - [x] 13.3 Implement handleSystemMode (GET /rci/show/system/mode)
+    - Return system mode from state
+    - _Requirements: 13.2_
+
+- [x] 14. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 15. Create migration documentation
+  - [x] 15.1 Document all existing mock implementations to be replaced
+    - List SetupMockServer, setupMockServerForAWG, setupMockServerForIP
+    - Document what each mock provides
+    - _Requirements: 10.1_
+  - [x] 15.2 Create migration guide with before/after examples
+    - Show migration for each test file
+    - Include code examples for common patterns
+    - Document API differences
+    - _Requirements: 10.2, 10.3, 10.5_
+  - [x] 15.3 Create migration checklist
+    - Step-by-step verification process
+    - _Requirements: 10.4_
+
+- [x] 16. Migrate existing tests to unified mock
+  - [x] 16.1 Migrate pkg/gokeenrestapi/api_test.go
+    - Replace SetupMockServer with SetupMockRouterForTest
+    - Verify all tests pass
+    - _Requirements: 14.1, 14.2, 14.4_
+  - [x] 16.2 Migrate pkg/gokeenrestapi/awg_test.go
+    - Replace setupMockServerForAWG with SetupMockRouterForTest
+    - Use WithInterfaces option for custom state
+    - Verify all tests pass
+    - _Requirements: 14.1, 14.2, 14.4_
+  - [x] 16.3 Migrate pkg/gokeenrestapi/ip_test.go
+    - Replace setupMockServerForIP with SetupMockRouterForTest
+    - Use functional options for custom state
+    - Verify all tests pass
+    - _Requirements: 14.1, 14.2, 14.4_
+  - [x] 16.4 Update cmd/test_suite_test.go
+    - Ensure cmd tests work with unified mock
+    - Verify all tests pass
+    - _Requirements: 14.1, 14.2, 14.4_
+  - [x] 16.5 Remove old mock implementations
+    - Remove setupMockServerForAWG from awg_test.go
+    - Remove setupMockServerForIP from ip_test.go
+    - Keep SetupMockServer as alias in testing.go for backward compatibility
+    - _Requirements: 10.1_
+
+- [ ] 17. Final checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
