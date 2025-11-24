@@ -25,10 +25,10 @@ jobs:
         run: go build -v ./...
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
-          args: --timeout 15m
+          version: v2.6
+          args: --timeout 15m --color always
 
       - name: Run tests
         run: make test
