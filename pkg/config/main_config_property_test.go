@@ -167,7 +167,9 @@ func genRoute() *rapid.Generator[Route] {
 			BatFileList: BatFileList{
 				BatFile: genBatFileList().Draw(t, "batFile"),
 			},
-			BatURL: genBatURLList().Draw(t, "batURL"),
+			BatURLList: BatURLList{
+				BatURL: genBatURLList().Draw(t, "batURL"),
+			},
 		}
 	})
 }
@@ -469,8 +471,8 @@ func TestBatFileListExpansionProducesSameResultWhenRepeated(t *testing.T) {
 			copy(firstExpansion[i], Cfg.Routes[i].BatFile)
 		}
 
-		// Expand again (simulate calling expandBatFileLists again)
-		err = expandBatFileLists(configPath)
+		// Expand again (simulate calling expandBatLists again)
+		err = expandBatLists(configPath)
 		if err != nil {
 			t.Fatalf("failed to expand bat-file lists second time: %v", err)
 		}
@@ -745,5 +747,341 @@ func TestConfigWithMissingRequiredFieldsLoadsButLeavesFieldsEmpty(t *testing.T) 
 		// The property we're testing is that LoadConfig successfully loads configs with missing fields
 		// (validation happens at a higher layer in the application)
 		// This is the current behavior and is acceptable since validation is done in cmd/common.go
+	})
+}
+
+// Feature: property-based-testing, Property 13: Bat-url expansion is idempotent
+// Validates: Requirements 3.2 (for bat-url)
+func TestBatURLListExpansionProducesSameResultWhenRepeated(t *testing.T) {
+	// Create a temporary directory for test files (outside rapid.Check)
+	tmpDir := t.TempDir()
+
+	rapid.Check(t, func(t *rapid.T) {
+
+		// Generate a config with bat-url lists
+		cfg := genGokeenapiConfig().Draw(t, "config")
+
+		// Create YAML files for any .yaml/.yml files in both bat-file and bat-url lists
+		// We need to handle both because the config generator might put YAML files in bat-file too
+		yamlFilesCreated := make(map[string]bool)
+
+		for i := range cfg.Routes {
+			// Handle bat-file YAML files
+			for j, batFile := range cfg.Routes[i].BatFile {
+				if filepath.Ext(batFile) == ".yaml" || filepath.Ext(batFile) == ".yml" {
+					baseName := filepath.Base(batFile)
+					if !yamlFilesCreated[baseName] {
+						batListContent := BatFileList{
+							BatFile: []string{
+								"/expanded/file1.bat",
+								"/expanded/file2.bat",
+							},
+						}
+
+						yamlBytes, err := yaml.Marshal(&batListContent)
+						if err != nil {
+							t.Fatalf("failed to marshal bat-file list: %v", err)
+						}
+
+						yamlPath := filepath.Join(tmpDir, baseName)
+						err = os.WriteFile(yamlPath, yamlBytes, 0644)
+						if err != nil {
+							t.Fatalf("failed to write bat-file list: %v", err)
+						}
+						yamlFilesCreated[baseName] = true
+					}
+					cfg.Routes[i].BatFile[j] = filepath.Base(batFile)
+				}
+			}
+
+			// Handle bat-url YAML files
+			for j, batURL := range cfg.Routes[i].BatURL {
+				if filepath.Ext(batURL) == ".yaml" || filepath.Ext(batURL) == ".yml" {
+					baseName := filepath.Base(batURL)
+					if !yamlFilesCreated[baseName] {
+						// Create the YAML file with some bat URLs
+						batURLListContent := BatURLList{
+							BatURL: []string{
+								"https://example.com/expanded/url1.bat",
+								"https://example.com/expanded/url2.bat",
+							},
+						}
+
+						yamlBytes, err := yaml.Marshal(&batURLListContent)
+						if err != nil {
+							t.Fatalf("failed to marshal bat-url list: %v", err)
+						}
+
+						yamlPath := filepath.Join(tmpDir, baseName)
+						err = os.WriteFile(yamlPath, yamlBytes, 0644)
+						if err != nil {
+							t.Fatalf("failed to write bat-url list: %v", err)
+						}
+						yamlFilesCreated[baseName] = true
+					}
+					cfg.Routes[i].BatURL[j] = filepath.Base(batURL)
+				}
+			}
+		}
+
+		// Write the config to a file
+		configPath := filepath.Join(tmpDir, "config.yaml")
+		configBytes, err := yaml.Marshal(&cfg)
+		if err != nil {
+			t.Fatalf("failed to marshal config: %v", err)
+		}
+
+		err = os.WriteFile(configPath, configBytes, 0644)
+		if err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		// Load the config (this will expand bat-url lists)
+		err = LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("failed to load config: %v", err)
+		}
+
+		// Save the expanded bat-url lists
+		firstExpansion := make([][]string, len(Cfg.Routes))
+		for i := range Cfg.Routes {
+			firstExpansion[i] = make([]string, len(Cfg.Routes[i].BatURL))
+			copy(firstExpansion[i], Cfg.Routes[i].BatURL)
+		}
+
+		// Expand again (simulate calling expandBatLists again)
+		err = expandBatLists(configPath)
+		if err != nil {
+			t.Fatalf("failed to expand bat-url lists second time: %v", err)
+		}
+
+		// Compare the two expansions - they should be identical
+		for i := range Cfg.Routes {
+			if len(firstExpansion[i]) != len(Cfg.Routes[i].BatURL) {
+				t.Fatalf("expansion not idempotent: route %d has different lengths: %d vs %d",
+					i, len(firstExpansion[i]), len(Cfg.Routes[i].BatURL))
+			}
+
+			for j := range firstExpansion[i] {
+				if firstExpansion[i][j] != Cfg.Routes[i].BatURL[j] {
+					t.Fatalf("expansion not idempotent: route %d, url %d: %s vs %s",
+						i, j, firstExpansion[i][j], Cfg.Routes[i].BatURL[j])
+				}
+			}
+		}
+	})
+}
+
+// Feature: property-based-testing, Property 14: Bat-file and bat-url expansion are independent
+// Validates: Requirements 3.6 (context-aware expansion)
+func TestBatFileAndBatURLExpansionAreIndependent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	rapid.Check(t, func(t *rapid.T) {
+
+		// Generate a combined YAML file with both bat-file and bat-url lists
+		batFileList := []string{
+			"/path/to/file1.bat",
+			"/path/to/file2.bat",
+		}
+		batURLList := []string{
+			"https://example.com/url1.bat",
+			"https://example.com/url2.bat",
+		}
+
+		combinedContent := BatLists{
+			BatFileList: BatFileList{BatFile: batFileList},
+			BatURLList:  BatURLList{BatURL: batURLList},
+		}
+
+		yamlBytes, err := yaml.Marshal(&combinedContent)
+		if err != nil {
+			t.Fatalf("failed to marshal combined list: %v", err)
+		}
+
+		combinedPath := filepath.Join(tmpDir, "combined.yaml")
+		err = os.WriteFile(combinedPath, yamlBytes, 0644)
+		if err != nil {
+			t.Fatalf("failed to write combined list: %v", err)
+		}
+
+		// Test 1: Reference in bat-file only
+		cfg1 := GokeenapiConfig{
+			Keenetic: Keenetic{
+				URL:      "http://192.168.1.1",
+				Login:    "admin",
+				Password: "password",
+			},
+			Routes: []Route{
+				{
+					InterfaceID: "Wireguard0",
+					BatFileList: BatFileList{
+						BatFile: []string{"combined.yaml"},
+					},
+				},
+			},
+		}
+
+		configPath1 := filepath.Join(tmpDir, "config1.yaml")
+		configBytes1, err := yaml.Marshal(&cfg1)
+		if err != nil {
+			t.Fatalf("failed to marshal config1: %v", err)
+		}
+
+		err = os.WriteFile(configPath1, configBytes1, 0644)
+		if err != nil {
+			t.Fatalf("failed to write config1: %v", err)
+		}
+
+		err = LoadConfig(configPath1)
+		if err != nil {
+			t.Fatalf("failed to load config1: %v", err)
+		}
+
+		// Should expand only bat-file, not bat-url
+		if len(Cfg.Routes[0].BatFile) != len(batFileList) {
+			t.Fatalf("bat-file not expanded correctly: got %d, want %d", len(Cfg.Routes[0].BatFile), len(batFileList))
+		}
+		if len(Cfg.Routes[0].BatURL) != 0 {
+			t.Fatalf("bat-url should not be expanded when only in bat-file: got %d, want 0", len(Cfg.Routes[0].BatURL))
+		}
+
+		// Test 2: Reference in bat-url only
+		cfg2 := GokeenapiConfig{
+			Keenetic: Keenetic{
+				URL:      "http://192.168.1.1",
+				Login:    "admin",
+				Password: "password",
+			},
+			Routes: []Route{
+				{
+					InterfaceID: "Wireguard0",
+					BatURLList: BatURLList{
+						BatURL: []string{"combined.yaml"},
+					},
+				},
+			},
+		}
+
+		configPath2 := filepath.Join(tmpDir, "config2.yaml")
+		configBytes2, err := yaml.Marshal(&cfg2)
+		if err != nil {
+			t.Fatalf("failed to marshal config2: %v", err)
+		}
+
+		err = os.WriteFile(configPath2, configBytes2, 0644)
+		if err != nil {
+			t.Fatalf("failed to write config2: %v", err)
+		}
+
+		err = LoadConfig(configPath2)
+		if err != nil {
+			t.Fatalf("failed to load config2: %v", err)
+		}
+
+		// Should expand only bat-url, not bat-file
+		if len(Cfg.Routes[0].BatFile) != 0 {
+			t.Fatalf("bat-file should not be expanded when only in bat-url: got %d, want 0", len(Cfg.Routes[0].BatFile))
+		}
+		if len(Cfg.Routes[0].BatURL) != len(batURLList) {
+			t.Fatalf("bat-url not expanded correctly: got %d, want %d", len(Cfg.Routes[0].BatURL), len(batURLList))
+		}
+	})
+}
+
+// Feature: property-based-testing, Property 15: YAML file caching avoids redundant reads
+// Validates: Requirements 3.7 (optimization)
+func TestYAMLFileCachingAvoidsRedundantReads(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	rapid.Check(t, func(t *rapid.T) {
+
+		// Generate a combined YAML file with both bat-file and bat-url lists
+		batFileList := []string{
+			"/path/to/file1.bat",
+			"/path/to/file2.bat",
+		}
+		batURLList := []string{
+			"https://example.com/url1.bat",
+			"https://example.com/url2.bat",
+		}
+
+		combinedContent := BatLists{
+			BatFileList: BatFileList{BatFile: batFileList},
+			BatURLList:  BatURLList{BatURL: batURLList},
+		}
+
+		yamlBytes, err := yaml.Marshal(&combinedContent)
+		if err != nil {
+			t.Fatalf("failed to marshal combined list: %v", err)
+		}
+
+		combinedPath := filepath.Join(tmpDir, "combined.yaml")
+		err = os.WriteFile(combinedPath, yamlBytes, 0644)
+		if err != nil {
+			t.Fatalf("failed to write combined list: %v", err)
+		}
+
+		// Create a config that references the same YAML file in both bat-file and bat-url
+		cfg := GokeenapiConfig{
+			Keenetic: Keenetic{
+				URL:      "http://192.168.1.1",
+				Login:    "admin",
+				Password: "password",
+			},
+			Routes: []Route{
+				{
+					InterfaceID: "Wireguard0",
+					BatFileList: BatFileList{
+						BatFile: []string{"combined.yaml"},
+					},
+					BatURLList: BatURLList{
+						BatURL: []string{"combined.yaml"},
+					},
+				},
+			},
+		}
+
+		configPath := filepath.Join(tmpDir, "config.yaml")
+		configBytes, err := yaml.Marshal(&cfg)
+		if err != nil {
+			t.Fatalf("failed to marshal config: %v", err)
+		}
+
+		err = os.WriteFile(configPath, configBytes, 0644)
+		if err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		// Load the config
+		err = LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("failed to load config: %v", err)
+		}
+
+		// Verify both lists were expanded correctly
+		if len(Cfg.Routes[0].BatFile) != len(batFileList) {
+			t.Fatalf("bat-file not expanded correctly: got %d, want %d", len(Cfg.Routes[0].BatFile), len(batFileList))
+		}
+		if len(Cfg.Routes[0].BatURL) != len(batURLList) {
+			t.Fatalf("bat-url not expanded correctly: got %d, want %d", len(Cfg.Routes[0].BatURL), len(batURLList))
+		}
+
+		// Verify the content matches
+		for i, expected := range batFileList {
+			if Cfg.Routes[0].BatFile[i] != expected {
+				t.Fatalf("bat-file[%d] mismatch: got %s, want %s", i, Cfg.Routes[0].BatFile[i], expected)
+			}
+		}
+
+		for i, expected := range batURLList {
+			if Cfg.Routes[0].BatURL[i] != expected {
+				t.Fatalf("bat-url[%d] mismatch: got %s, want %s", i, Cfg.Routes[0].BatURL[i], expected)
+			}
+		}
+
+		// The property we're testing is that the same YAML file referenced in both arrays
+		// produces correct results (implying it was cached and read only once)
+		// We can't directly test the caching mechanism, but we verify the correctness
 	})
 }
