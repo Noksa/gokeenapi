@@ -19,10 +19,13 @@ import (
 	"github.com/noksa/gokeenapi/pkg/config"
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
 	"go.uber.org/multierr"
+	"golang.org/x/net/idna"
 )
 
 const (
 	minDnsRoutingVersion = "5.0.1"
+	// maxDomainsPerGroup is the router's limit for domains in a single DNS-routing object-group
+	maxDomainsPerGroup = 300
 )
 
 var (
@@ -130,6 +133,77 @@ func (*keeneticDnsRouting) GetExistingDnsProxyRoutes() (map[string]string, error
 	return routes, err
 }
 
+// validateDomainWithIDNA validates a domain name using IDNA (Internationalized Domain Names in Applications)
+// This handles both ASCII and internationalized domain names correctly
+// Returns true if valid, false otherwise. If debug logging is enabled, logs the reason for rejection.
+func validateDomainWithIDNA(domain string) (bool, string) {
+	// Skip empty domains
+	if domain == "" {
+		return false, "empty domain"
+	}
+
+	// Domain must contain at least one dot (have a TLD)
+	// This rejects bare names like "youtube", "instagram"
+	if !strings.Contains(domain, ".") {
+		return false, "missing TLD (no dot)"
+	}
+
+	// Try to convert to ASCII using IDNA
+	// This validates the domain structure and handles internationalized domains
+	_, err := idna.Lookup.ToASCII(domain)
+	if err != nil {
+		return false, fmt.Sprintf("IDNA validation failed: %v", err)
+	}
+
+	return true, ""
+}
+
+// parseDomainLines parses lines of text and extracts valid domain names
+// Returns the list of valid domains and count of skipped lines
+func parseDomainLines(lines []string, source string) ([]string, int) {
+	var domains []string
+	var skipped int
+
+	for _, line := range lines {
+		// Trim whitespace
+		originalLine := strings.TrimSpace(line)
+
+		// Skip empty lines and comments
+		if originalLine == "" || strings.HasPrefix(originalLine, "#") {
+			continue
+		}
+
+		processedLine := originalLine
+
+		// Handle lines with attributes (e.g., "domain.com @cn" or "domain.com attribute")
+		// Take only the first field (the domain part)
+		if strings.Contains(processedLine, " ") || strings.Contains(processedLine, "\t") {
+			fields := strings.Fields(processedLine)
+			if len(fields) > 0 {
+				processedLine = fields[0]
+			}
+		}
+
+		// Validate domain name using IDNA
+		// This automatically rejects invalid formats including:
+		// - v2fly directives (include:, full:, regexp:, keyword:, domain:)
+		// - Bare names without TLD (youtube, instagram)
+		// - Lines starting with @ or other invalid characters
+		valid, reason := validateDomainWithIDNA(processedLine)
+		if !valid {
+			skipped++
+			if config.Cfg.Logs.Debug {
+				gokeenlog.InfoSubStepf("Skipped invalid domain from %s: %s (%s)", source, originalLine, reason)
+			}
+			continue
+		}
+
+		domains = append(domains, processedLine)
+	}
+
+	return domains, skipped
+}
+
 // LoadDomainsFromFile reads domains from a .txt file (one domain per line)
 // Supports comments (lines starting with #) and empty lines
 func (*keeneticDnsRouting) LoadDomainsFromFile(filePath string) ([]string, error) {
@@ -138,18 +212,13 @@ func (*keeneticDnsRouting) LoadDomainsFromFile(filePath string) ([]string, error
 		return nil, fmt.Errorf("failed to read domain file '%s': %w", filePath, err)
 	}
 
-	var domains []string
-	lines := strings.SplitSeq(string(b), "\n")
-	for line := range lines {
-		// Trim whitespace
-		line = strings.TrimSpace(line)
+	lines := strings.Split(string(b), "\n")
+	domains, skipped := parseDomainLines(lines, fmt.Sprintf("file %s", filepath.Base(filePath)))
 
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		domains = append(domains, line)
+	if skipped > 0 {
+		gokeenlog.InfoSubStepf("Skipped %v invalid domain(s) from file: %v",
+			color.YellowString("%d", skipped),
+			color.CyanString(filepath.Base(filePath)))
 	}
 
 	return domains, nil
@@ -180,37 +249,13 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 		return nil, fmt.Errorf("failed to fetch domain URL '%s': status code %d", url, response.StatusCode())
 	}
 
-	var domains []string
-	lines := strings.SplitSeq(string(response.Body()), "\n")
-	for line := range lines {
-		// Trim whitespace
-		line = strings.TrimSpace(line)
+	lines := strings.Split(string(response.Body()), "\n")
+	domains, skipped := parseDomainLines(lines, "URL")
 
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Skip v2fly special directives (include:, full:, regexp:, keyword:, domain:)
-		if strings.HasPrefix(line, "include:") ||
-			strings.HasPrefix(line, "full:") ||
-			strings.HasPrefix(line, "regexp:") ||
-			strings.HasPrefix(line, "keyword:") ||
-			strings.HasPrefix(line, "domain:") {
-			continue
-		}
-
-		// Skip lines with @ suffix (v2fly attributes like @cn, @ads)
-		if strings.Contains(line, "@") {
-			// Extract domain before @ if it exists
-			parts := strings.Fields(line)
-			if len(parts) > 0 && !strings.HasPrefix(parts[0], "@") {
-				domains = append(domains, parts[0])
-			}
-			continue
-		}
-
-		domains = append(domains, line)
+	if skipped > 0 {
+		gokeenlog.InfoSubStepf("Skipped %v invalid domain(s) from URL: %v",
+			color.YellowString("%d", skipped),
+			color.CyanString(url))
 	}
 
 	return domains, nil
@@ -234,13 +279,20 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 		return err
 	}
 
+	// Fetch interfaces once for all validations
+	interfaces, err := Interface.GetInterfacesViaRciShowInterfaces(false)
+	if err != nil {
+		return fmt.Errorf("failed to fetch interfaces: %w", err)
+	}
+
 	// Validate all interfaces exist before generating commands
 	for _, group := range groups {
 		if err := Checks.CheckInterfaceId(group.InterfaceID); err != nil {
 			return fmt.Errorf("group '%s': %w", group.Name, err)
 		}
-		if err := Checks.CheckInterfaceExists(group.InterfaceID); err != nil {
-			return fmt.Errorf("group '%s': %w", group.Name, err)
+		// Check if interface exists in the fetched list
+		if _, exists := interfaces[group.InterfaceID]; !exists {
+			return fmt.Errorf("group '%s': interface '%s' not found", group.Name, group.InterfaceID)
 		}
 	}
 
@@ -274,12 +326,21 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 				mErr = multierr.Append(mErr, fmt.Errorf("group '%s': %w", group.Name, err))
 				continue
 			}
-			gokeenlog.InfoSubStepf("Loaded %v domains from URL: %v", len(domains), url)
+			gokeenlog.InfoSubStepf("Loaded %v domains from URL: %v",
+				color.GreenString("%d", len(domains)),
+				color.CyanString(url))
 			allDomains = append(allDomains, domains...)
+			gokeenlog.HorizontalLine()
 		}
 
 		if len(allDomains) == 0 {
 			gokeenlog.InfoSubStepf("Skipping group '%s': no domains loaded", group.Name)
+			continue
+		}
+
+		// Check router limit: maximum domains per group
+		if len(allDomains) > maxDomainsPerGroup {
+			mErr = multierr.Append(mErr, fmt.Errorf("group '%s': exceeds router limit of %d domains (has %d domains)", group.Name, maxDomainsPerGroup, len(allDomains)))
 			continue
 		}
 
@@ -386,6 +447,7 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 		gokeenlog.InfoSubStepf("Changes: %v domains to add, %v domains to remove",
 			color.GreenString("%d", domainsToAdd),
 			color.RedString("%d", domainsToRemove))
+		gokeenlog.HorizontalLine()
 	}
 
 	// Ensure save config is at the end

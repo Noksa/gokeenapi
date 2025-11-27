@@ -63,6 +63,13 @@ Can also be set via GOKEENAPI_CONFIG environment variable.`)
 		if err != nil {
 			return err
 		}
+
+		// Apply debug flag from command line (overrides config file)
+		debugFlag, _ := cmd.Flags().GetBool("debug")
+		if debugFlag {
+			config.Cfg.Logs.Debug = true
+		}
+
 		err = checkRequiredFields()
 		if err != nil {
 			return err
