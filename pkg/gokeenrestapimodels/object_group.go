@@ -14,6 +14,7 @@ type ObjectGroupFqdn struct {
 // ObjectGroupFqdnEntry represents a single entry in an object-group
 type ObjectGroupFqdnEntry struct {
 	Fqdn string `json:"fqdn"`
+	Type string `json:"type"` // "config" for user-configured, "runtime" for auto-discovered subdomains
 }
 
 // DnsProxyRouteResponse represents the response from /rci/dns-proxy/route

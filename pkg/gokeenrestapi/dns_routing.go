@@ -83,7 +83,11 @@ func (*keeneticDnsRouting) GetExistingDnsRoutingGroups() (map[string][]string, e
 			for _, group := range objectGroupResponse.Group {
 				domains := make([]string, 0, len(group.Entry))
 				for _, entry := range group.Entry {
-					domains = append(domains, entry.Fqdn)
+					// Only include user-configured domains, skip runtime auto-discovered subdomains
+					// Runtime entries are automatically managed by the router
+					if entry.Type == "config" || entry.Type == "" {
+						domains = append(domains, entry.Fqdn)
+					}
 				}
 				groups[group.GroupName] = domains
 			}
@@ -187,6 +191,25 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 			continue
 		}
 
+		// Skip v2fly special directives (include:, full:, regexp:, keyword:, domain:)
+		if strings.HasPrefix(line, "include:") ||
+			strings.HasPrefix(line, "full:") ||
+			strings.HasPrefix(line, "regexp:") ||
+			strings.HasPrefix(line, "keyword:") ||
+			strings.HasPrefix(line, "domain:") {
+			continue
+		}
+
+		// Skip lines with @ suffix (v2fly attributes like @cn, @ads)
+		if strings.Contains(line, "@") {
+			// Extract domain before @ if it exists
+			parts := strings.Fields(line)
+			if len(parts) > 0 && !strings.HasPrefix(parts[0], "@") {
+				domains = append(domains, parts[0])
+			}
+			continue
+		}
+
 		domains = append(domains, line)
 	}
 
@@ -251,6 +274,7 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 				mErr = multierr.Append(mErr, fmt.Errorf("group '%s': %w", group.Name, err))
 				continue
 			}
+			gokeenlog.InfoSubStepf("Loaded %v domains from URL: %v", len(domains), url)
 			allDomains = append(allDomains, domains...)
 		}
 
@@ -287,6 +311,10 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 
 	var parseSlice []gokeenrestapimodels.ParseRequest
 
+	// Track changes for summary
+	domainsToRemove := 0
+	domainsToAdd := 0
+
 	// Generate commands for each group
 	// Order: object-group creation, domain cleanup (remove unwanted), domain adds, then dns-proxy routes
 	for _, group := range groups {
@@ -306,6 +334,7 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 				shouldKeep := slices.Contains(domains, existingDomain)
 				// Remove domain if it's not in the config
 				if !shouldKeep {
+					domainsToRemove++
 					gokeenlog.InfoSubStepf("Removing domain %v from group %v",
 						color.RedString(existingDomain),
 						color.YellowString(group.Name))
@@ -326,6 +355,7 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 			}
 
 			if !domainExists {
+				domainsToAdd++
 				parseSlice = append(parseSlice, gokeenrestapimodels.ParseRequest{
 					Parse: fmt.Sprintf("object-group fqdn %s include %s", group.Name, domain),
 				})
@@ -347,8 +377,15 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 
 	// If no commands to execute, we're done
 	if len(parseSlice) == 0 {
-		gokeenlog.Info("All DNS-routing groups and domains already exist")
+		gokeenlog.Info("All DNS-routing groups and domains are up to date")
 		return nil
+	}
+
+	// Log summary of changes
+	if domainsToRemove > 0 || domainsToAdd > 0 {
+		gokeenlog.InfoSubStepf("Changes: %v domains to add, %v domains to remove",
+			color.GreenString("%d", domainsToAdd),
+			color.RedString("%d", domainsToRemove))
 	}
 
 	// Ensure save config is at the end
