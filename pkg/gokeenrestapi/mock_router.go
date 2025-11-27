@@ -97,14 +97,29 @@ type MockScInterface struct {
 	Wireguard   MockWireguard
 }
 
+// MockDnsRoutingGroup represents a DNS-routing object-group in the mock router
+type MockDnsRoutingGroup struct {
+	Name    string
+	Domains []string
+}
+
+// MockDnsProxyRoute represents a dns-proxy route in the mock router
+type MockDnsProxyRoute struct {
+	GroupName   string
+	InterfaceID string
+	Mode        string // typically "auto"
+}
+
 // MockRouterState represents a snapshot of the mock router's state
 type MockRouterState struct {
-	Interfaces     map[string]*MockInterface
-	ScInterfaces   map[string]*MockScInterface
-	Routes         []MockRoute
-	DNSRecords     map[string]string
-	HotspotDevices []MockHost
-	SystemMode     MockSystemMode
+	Interfaces       map[string]*MockInterface
+	ScInterfaces     map[string]*MockScInterface
+	Routes           []MockRoute
+	DNSRecords       map[string]string
+	HotspotDevices   []MockHost
+	SystemMode       MockSystemMode
+	DnsRoutingGroups []MockDnsRoutingGroup
+	DnsProxyRoutes   []MockDnsProxyRoute
 }
 
 // MockRouter is a comprehensive mock implementation of the Keenetic router API
@@ -120,8 +135,11 @@ type MockRouter struct {
 	authChallenge       string
 	sessionCookie       string
 	systemMode          MockSystemMode
+	dnsRoutingGroups    []MockDnsRoutingGroup
+	dnsProxyRoutes      []MockDnsProxyRoute
 	initialState        MockRouterState // Store initial state for reset functionality
 	staticRunningConfig []string        // Optional static running config (overrides generated config)
+	version             string          // Router firmware version (default: "4.3.6.3")
 }
 
 // MockRouterOption is a functional option for configuring the mock router
@@ -188,17 +206,37 @@ func WithStaticRunningConfig(lines []string) MockRouterOption {
 	}
 }
 
+// WithDnsRoutingGroups sets custom initial DNS-routing groups for the mock router
+func WithDnsRoutingGroups(groups []MockDnsRoutingGroup, routes []MockDnsProxyRoute) MockRouterOption {
+	return func(m *MockRouter) {
+		m.dnsRoutingGroups = make([]MockDnsRoutingGroup, len(groups))
+		copy(m.dnsRoutingGroups, groups)
+		m.dnsProxyRoutes = make([]MockDnsProxyRoute, len(routes))
+		copy(m.dnsProxyRoutes, routes)
+	}
+}
+
+// WithVersion sets custom firmware version for the mock router
+func WithVersion(version string) MockRouterOption {
+	return func(m *MockRouter) {
+		m.version = version
+	}
+}
+
 // NewMockRouter creates a new mock router with default state and optional configuration
 func NewMockRouter(opts ...MockRouterOption) *MockRouter {
 	m := &MockRouter{
-		interfaces:     make(map[string]*MockInterface),
-		scInterfaces:   make(map[string]*MockScInterface),
-		routes:         []MockRoute{},
-		dnsRecords:     make(map[string]string),
-		hotspotDevices: []MockHost{},
-		authRealm:      "test-realm",
-		authChallenge:  "test-challenge",
-		sessionCookie:  "session=test-session",
+		interfaces:       make(map[string]*MockInterface),
+		scInterfaces:     make(map[string]*MockScInterface),
+		routes:           []MockRoute{},
+		dnsRecords:       make(map[string]string),
+		hotspotDevices:   []MockHost{},
+		dnsRoutingGroups: []MockDnsRoutingGroup{},
+		dnsProxyRoutes:   []MockDnsProxyRoute{},
+		authRealm:        "test-realm",
+		authChallenge:    "test-challenge",
+		sessionCookie:    "session=test-session",
+		version:          "4.3.6.3", // Default version
 		systemMode: MockSystemMode{
 			Active:   "router",
 			Selected: "router",
@@ -298,12 +336,14 @@ func NewMockRouter(opts ...MockRouterOption) *MockRouter {
 // captureState creates a deep copy of the current state
 func (m *MockRouter) captureState() MockRouterState {
 	state := MockRouterState{
-		Interfaces:     make(map[string]*MockInterface),
-		ScInterfaces:   make(map[string]*MockScInterface),
-		Routes:         make([]MockRoute, len(m.routes)),
-		DNSRecords:     make(map[string]string),
-		HotspotDevices: make([]MockHost, len(m.hotspotDevices)),
-		SystemMode:     m.systemMode,
+		Interfaces:       make(map[string]*MockInterface),
+		ScInterfaces:     make(map[string]*MockScInterface),
+		Routes:           make([]MockRoute, len(m.routes)),
+		DNSRecords:       make(map[string]string),
+		HotspotDevices:   make([]MockHost, len(m.hotspotDevices)),
+		SystemMode:       m.systemMode,
+		DnsRoutingGroups: make([]MockDnsRoutingGroup, len(m.dnsRoutingGroups)),
+		DnsProxyRoutes:   make([]MockDnsProxyRoute, len(m.dnsProxyRoutes)),
 	}
 
 	// Deep copy interfaces
@@ -326,6 +366,12 @@ func (m *MockRouter) captureState() MockRouterState {
 
 	// Copy hotspot devices
 	copy(state.HotspotDevices, m.hotspotDevices)
+
+	// Copy DNS-routing groups
+	copy(state.DnsRoutingGroups, m.dnsRoutingGroups)
+
+	// Copy DNS proxy routes
+	copy(state.DnsProxyRoutes, m.dnsProxyRoutes)
 
 	return state
 }
@@ -370,6 +416,14 @@ func (m *MockRouter) ResetState() {
 
 	// Restore system mode
 	m.systemMode = m.initialState.SystemMode
+
+	// Restore DNS-routing groups
+	m.dnsRoutingGroups = make([]MockDnsRoutingGroup, len(m.initialState.DnsRoutingGroups))
+	copy(m.dnsRoutingGroups, m.initialState.DnsRoutingGroups)
+
+	// Restore DNS proxy routes
+	m.dnsProxyRoutes = make([]MockDnsProxyRoute, len(m.initialState.DnsProxyRoutes))
+	copy(m.dnsProxyRoutes, m.initialState.DnsProxyRoutes)
 }
 
 // NewMockRouterServer creates an httptest.Server with the mock router
@@ -397,6 +451,10 @@ func NewMockRouterServer(opts ...MockRouterOption) *httptest.Server {
 
 	// DNS endpoints
 	mux.HandleFunc("/rci/show/ip/name-server", m.handleDnsRecords)
+
+	// DNS-routing endpoints
+	mux.HandleFunc("/rci/show/object-group/fqdn", m.handleObjectGroupFqdn)
+	mux.HandleFunc("/rci/dns-proxy/route", m.handleDnsProxyRoute)
 
 	// Hotspot endpoint
 	mux.HandleFunc("/rci/show/ip/hotspot", m.handleHotspot)
@@ -480,10 +538,14 @@ func (m *MockRouter) handleVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return static version information for the mock router
+	m.mu.RLock()
+	versionStr := m.version
+	m.mu.RUnlock()
+
+	// Return version information for the mock router
 	version := gokeenrestapimodels.Version{
-		Release:      "3.7",
-		Title:        "KeeneticOS 3.7.5",
+		Release:      versionStr,
+		Title:        versionStr, // Just the version number (e.g., "5.0.1")
 		Arch:         "mips",
 		Manufacturer: "Keenetic",
 		Vendor:       "Keenetic Ltd.",
@@ -493,11 +555,11 @@ func (m *MockRouter) handleVersion(w http.ResponseWriter, r *http.Request) {
 		Device:       "Keenetic",
 		Description:  "Mock Keenetic Router",
 		Ndm: gokeenrestapimodels.Ndm{
-			Exact: "3.7.5",
+			Exact: versionStr,
 			Cdate: "2024-01-01",
 		},
 		Bsp: gokeenrestapimodels.Bsp{
-			Exact: "3.7.5",
+			Exact: versionStr,
 			Cdate: "2024-01-01",
 		},
 		Ndw: gokeenrestapimodels.Ndw{
@@ -744,6 +806,48 @@ func (m *MockRouter) handleDnsRecords(w http.ResponseWriter, r *http.Request) {
 	m.encodeJSON(w, response)
 }
 
+func (m *MockRouter) handleObjectGroupFqdn(w http.ResponseWriter, r *http.Request) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// Convert internal DNS-routing groups to API response format
+	groups := make([]gokeenrestapimodels.ObjectGroupFqdn, 0, len(m.dnsRoutingGroups))
+	for _, group := range m.dnsRoutingGroups {
+		entries := make([]gokeenrestapimodels.ObjectGroupFqdnEntry, 0, len(group.Domains))
+		for _, domain := range group.Domains {
+			entries = append(entries, gokeenrestapimodels.ObjectGroupFqdnEntry{
+				Fqdn: domain,
+			})
+		}
+
+		groups = append(groups, gokeenrestapimodels.ObjectGroupFqdn{
+			GroupName: group.Name,
+			Entry:     entries,
+		})
+	}
+
+	response := gokeenrestapimodels.ObjectGroupFqdnResponse{
+		Group: groups,
+	}
+	m.encodeJSON(w, response)
+}
+
+func (m *MockRouter) handleDnsProxyRoute(w http.ResponseWriter, r *http.Request) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// Convert internal dns-proxy routes to API response format
+	routes := make(gokeenrestapimodels.DnsProxyRouteResponse, 0, len(m.dnsProxyRoutes))
+	for _, route := range m.dnsProxyRoutes {
+		routes = append(routes, gokeenrestapimodels.DnsProxyRoute{
+			Group:     route.GroupName,
+			Interface: route.InterfaceID,
+		})
+	}
+
+	m.encodeJSON(w, routes)
+}
+
 func (m *MockRouter) handleHotspot(w http.ResponseWriter, r *http.Request) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -857,8 +961,56 @@ func (m *MockRouter) routeParseCommand(command string) gokeenrestapimodels.Parse
 			return m.errorResponse(fmt.Sprintf("Unknown ip subcommand: %s", tokens[1]))
 		}
 
+	case tokens[0] == "object-group" && len(tokens) >= 3:
+		// object-group fqdn <group-name> [include <domain>]
+		if tokens[1] == "fqdn" {
+			groupName := tokens[2]
+			if len(tokens) >= 5 && tokens[3] == "include" {
+				// object-group fqdn <group-name> include <domain>
+				domain := tokens[4]
+				return m.parseAddDomainToGroup(groupName, domain)
+			}
+			// object-group fqdn <group-name>
+			return m.parseCreateObjectGroup(groupName)
+		}
+		return m.errorResponse(fmt.Sprintf("Unknown object-group type: %s", tokens[1]))
+
+	case tokens[0] == "dns-proxy" && len(tokens) >= 5:
+		// dns-proxy route object-group <group-name> <interface-id> auto
+		if tokens[1] == "route" && tokens[2] == "object-group" {
+			groupName := tokens[3]
+			interfaceID := tokens[4]
+			mode := "auto"
+			if len(tokens) >= 6 {
+				mode = tokens[5]
+			}
+			return m.parseCreateDnsProxyRoute(groupName, interfaceID, mode)
+		}
+		return m.errorResponse("Invalid dns-proxy command: expected 'dns-proxy route object-group <group-name> <interface-id> auto'")
+
 	case tokens[0] == "no" && len(tokens) >= 2:
 		switch tokens[1] {
+		case "object-group":
+			// no object-group fqdn <group-name> [include <domain>]
+			if len(tokens) >= 4 && tokens[2] == "fqdn" {
+				groupName := tokens[3]
+				// Check if this is removing a domain from the group
+				if len(tokens) >= 6 && tokens[4] == "include" {
+					domain := tokens[5]
+					return m.parseRemoveDomainFromGroup(groupName, domain)
+				}
+				// Otherwise, delete the entire group
+				return m.parseDeleteObjectGroup(groupName)
+			}
+			return m.errorResponse("Invalid object-group deletion: expected 'no object-group fqdn <group-name> [include <domain>]'")
+		case "dns-proxy":
+			// no dns-proxy route object-group <group-name> <interface-id>
+			if len(tokens) >= 6 && tokens[2] == "route" && tokens[3] == "object-group" {
+				groupName := tokens[4]
+				interfaceID := tokens[5]
+				return m.parseDeleteDnsProxyRoute(groupName, interfaceID)
+			}
+			return m.errorResponse("Invalid dns-proxy deletion: expected 'no dns-proxy route object-group <group-name> <interface-id>'")
 		case "ip":
 			if len(tokens) >= 3 {
 				switch tokens[2] {
@@ -966,6 +1118,19 @@ func (m *MockRouter) handleRunningConfig(w http.ResponseWriter, r *http.Request)
 		// Add DNS record configurations
 		for domain, ip := range m.dnsRecords {
 			configLines = append(configLines, fmt.Sprintf("ip host %s %s", domain, ip))
+		}
+
+		// Add DNS-routing object-group configurations
+		for _, group := range m.dnsRoutingGroups {
+			configLines = append(configLines, fmt.Sprintf("object-group fqdn %s", group.Name))
+			for _, domain := range group.Domains {
+				configLines = append(configLines, fmt.Sprintf("  include %s", domain))
+			}
+		}
+
+		// Add dns-proxy route configurations
+		for _, route := range m.dnsProxyRoutes {
+			configLines = append(configLines, fmt.Sprintf("dns-proxy route object-group %s %s %s", route.GroupName, route.InterfaceID, route.Mode))
 		}
 	}
 
@@ -1320,6 +1485,210 @@ func (m *MockRouter) parseDeleteKnownHost(tokens []string) gokeenrestapimodels.P
 		return m.successResponse(fmt.Sprintf("Known host with MAC '%s' removed", mac))
 	}
 	return m.successResponse(fmt.Sprintf("Known host with MAC '%s' (not found, but command accepted)", mac))
+}
+
+// parseCreateObjectGroup handles the "object-group fqdn <group-name>" command
+// It creates a new DNS-routing object-group in the mock state
+func (m *MockRouter) parseCreateObjectGroup(groupName string) gokeenrestapimodels.ParseResponse {
+	if groupName == "" {
+		return m.errorResponse("Invalid object-group command: group name cannot be empty")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Check if group already exists
+	for _, group := range m.dnsRoutingGroups {
+		if group.Name == groupName {
+			// Group already exists - just return success (idempotent)
+			return m.successResponse(fmt.Sprintf("Object-group '%s' already exists", groupName))
+		}
+	}
+
+	// Create new group
+	newGroup := MockDnsRoutingGroup{
+		Name:    groupName,
+		Domains: []string{},
+	}
+	m.dnsRoutingGroups = append(m.dnsRoutingGroups, newGroup)
+
+	return m.successResponse(fmt.Sprintf("Object-group '%s' created", groupName))
+}
+
+// parseAddDomainToGroup handles the "object-group fqdn <group-name> include <domain>" command
+// It adds a domain to an existing object-group
+func (m *MockRouter) parseAddDomainToGroup(groupName, domain string) gokeenrestapimodels.ParseResponse {
+	if groupName == "" {
+		return m.errorResponse("Invalid object-group command: group name cannot be empty")
+	}
+	if domain == "" {
+		return m.errorResponse("Invalid object-group command: domain cannot be empty")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Find the group
+	for i := range m.dnsRoutingGroups {
+		if m.dnsRoutingGroups[i].Name == groupName {
+			// Add domain to group (allow duplicates for simplicity)
+			m.dnsRoutingGroups[i].Domains = append(m.dnsRoutingGroups[i].Domains, domain)
+			return m.successResponse(fmt.Sprintf("Domain '%s' added to object-group '%s'", domain, groupName))
+		}
+	}
+
+	return m.errorResponse(fmt.Sprintf("Object-group '%s' does not exist", groupName))
+}
+
+// parseCreateDnsProxyRoute handles the "dns-proxy route object-group <group-name> <interface-id> auto" command
+// It creates a dns-proxy route linking a group to an interface
+func (m *MockRouter) parseCreateDnsProxyRoute(groupName, interfaceID, mode string) gokeenrestapimodels.ParseResponse {
+	if groupName == "" {
+		return m.errorResponse("Invalid dns-proxy route command: group name cannot be empty")
+	}
+	if interfaceID == "" {
+		return m.errorResponse("Invalid dns-proxy route command: interface ID cannot be empty")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Validate interface exists
+	if _, exists := m.interfaces[interfaceID]; !exists {
+		return m.errorResponse(fmt.Sprintf("Interface '%s' does not exist", interfaceID))
+	}
+
+	// Validate group exists
+	groupExists := false
+	for _, group := range m.dnsRoutingGroups {
+		if group.Name == groupName {
+			groupExists = true
+			break
+		}
+	}
+	if !groupExists {
+		return m.errorResponse(fmt.Sprintf("Object-group '%s' does not exist", groupName))
+	}
+
+	// Check if route already exists
+	for _, route := range m.dnsProxyRoutes {
+		if route.GroupName == groupName && route.InterfaceID == interfaceID {
+			// Route already exists - just return success (idempotent)
+			return m.successResponse(fmt.Sprintf("Dns-proxy route for group '%s' to interface '%s' already exists", groupName, interfaceID))
+		}
+	}
+
+	// Create new dns-proxy route
+	newRoute := MockDnsProxyRoute{
+		GroupName:   groupName,
+		InterfaceID: interfaceID,
+		Mode:        mode,
+	}
+	m.dnsProxyRoutes = append(m.dnsProxyRoutes, newRoute)
+
+	return m.successResponse(fmt.Sprintf("Dns-proxy route created for group '%s' to interface '%s'", groupName, interfaceID))
+}
+
+// parseDeleteDnsProxyRoute handles the "no dns-proxy route object-group <group-name> <interface-id>" command
+// It removes a dns-proxy route from the mock state
+func (m *MockRouter) parseDeleteDnsProxyRoute(groupName, interfaceID string) gokeenrestapimodels.ParseResponse {
+	if groupName == "" {
+		return m.errorResponse("Invalid dns-proxy route deletion: group name cannot be empty")
+	}
+	if interfaceID == "" {
+		return m.errorResponse("Invalid dns-proxy route deletion: interface ID cannot be empty")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Find and remove the matching route
+	found := false
+	newRoutes := make([]MockDnsProxyRoute, 0, len(m.dnsProxyRoutes))
+	for _, route := range m.dnsProxyRoutes {
+		if route.GroupName == groupName && route.InterfaceID == interfaceID {
+			found = true
+			// Skip this route (don't add to newRoutes)
+			continue
+		}
+		newRoutes = append(newRoutes, route)
+	}
+
+	m.dnsProxyRoutes = newRoutes
+
+	if found {
+		return m.successResponse(fmt.Sprintf("Dns-proxy route for group '%s' to interface '%s' removed", groupName, interfaceID))
+	}
+	return m.successResponse(fmt.Sprintf("Dns-proxy route for group '%s' to interface '%s' (not found, but command accepted)", groupName, interfaceID))
+}
+
+// parseRemoveDomainFromGroup handles the "no object-group fqdn <group-name> include <domain>" command
+// It removes a specific domain from an object-group
+func (m *MockRouter) parseRemoveDomainFromGroup(groupName, domain string) gokeenrestapimodels.ParseResponse {
+	if groupName == "" {
+		return m.errorResponse("Invalid domain removal: group name cannot be empty")
+	}
+	if domain == "" {
+		return m.errorResponse("Invalid domain removal: domain cannot be empty")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Find the group and remove the domain
+	for i := range m.dnsRoutingGroups {
+		if m.dnsRoutingGroups[i].Name == groupName {
+			// Find and remove the domain
+			newDomains := make([]string, 0, len(m.dnsRoutingGroups[i].Domains))
+			found := false
+			for _, existingDomain := range m.dnsRoutingGroups[i].Domains {
+				if existingDomain == domain {
+					found = true
+					// Skip this domain (don't add to newDomains)
+					continue
+				}
+				newDomains = append(newDomains, existingDomain)
+			}
+			m.dnsRoutingGroups[i].Domains = newDomains
+
+			if found {
+				return m.successResponse(fmt.Sprintf("Domain '%s' removed from object-group '%s'", domain, groupName))
+			}
+			return m.successResponse(fmt.Sprintf("Domain '%s' not found in object-group '%s' (command accepted)", domain, groupName))
+		}
+	}
+
+	return m.errorResponse(fmt.Sprintf("Object-group '%s' does not exist", groupName))
+}
+
+// parseDeleteObjectGroup handles the "no object-group fqdn <group-name>" command
+// It removes an object-group from the mock state
+func (m *MockRouter) parseDeleteObjectGroup(groupName string) gokeenrestapimodels.ParseResponse {
+	if groupName == "" {
+		return m.errorResponse("Invalid object-group deletion: group name cannot be empty")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Find and remove the matching group
+	found := false
+	newGroups := make([]MockDnsRoutingGroup, 0, len(m.dnsRoutingGroups))
+	for _, group := range m.dnsRoutingGroups {
+		if group.Name == groupName {
+			found = true
+			// Skip this group (don't add to newGroups)
+			continue
+		}
+		newGroups = append(newGroups, group)
+	}
+
+	m.dnsRoutingGroups = newGroups
+
+	if found {
+		return m.successResponse(fmt.Sprintf("Object-group '%s' removed", groupName))
+	}
+	return m.successResponse(fmt.Sprintf("Object-group '%s' (not found, but command accepted)", groupName))
 }
 
 // encodeJSON is a helper function to safely encode JSON responses

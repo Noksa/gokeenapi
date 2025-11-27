@@ -80,6 +80,52 @@ dns:
     - domain: example.local
       ip:
         - 10.0.0.1
+  
+  # =============================================================================
+  # DNS-Routing Configuration (Policy-Based Routing by Domain)
+  # Used by: add-dns-routing, delete-dns-routing commands
+  # =============================================================================
+  
+  routes:
+    groups:
+      # Domain groups for routing specific domains through designated interfaces
+      # Each group creates an object-group and dns-proxy route on the router
+      
+      - name: social-media
+        # Local .txt files containing domains (one per line)
+        # You can also specify .yaml files that contain lists of domain-file paths
+        domain-file:
+          - domains/social-media.txt
+          - domains/additional-social.txt
+          - domains/common-domains.yaml  # YAML file with domain-file list
+        
+        # Remote URLs serving .txt files with domain lists
+        # Downloaded and processed by add-dns-routing command
+        domain-url:
+          - https://example.com/social-media-domains.txt
+        
+        # Target interface for routing traffic to these domains
+        # Use 'show-interfaces' command to list available interface IDs
+        interfaceId: Wireguard0
+      
+      - name: streaming
+        domain-file:
+          - domains/streaming.txt
+        domain-url:
+          - https://example.com/streaming-services.txt
+        interfaceId: Wireguard1
+      
+      # Example: Using only local files
+      - name: local-only
+        domain-file:
+          - domains/local-domains.txt
+        interfaceId: Wireguard2
+      
+      # Example: Using only remote URLs
+      - name: remote-only
+        domain-url:
+          - https://example.com/blocked-domains.txt
+        interfaceId: ISP
 
 # =============================================================================
 # Logging Configuration

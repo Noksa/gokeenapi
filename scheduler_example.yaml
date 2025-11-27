@@ -59,13 +59,22 @@ tasks:
     interval: "3h"
     strategy: "parallel"  # Execute for all configs simultaneously
 
-  # Example 6: Complex maintenance task
+  # Example 6: Update DNS-routing rules periodically
+  - name: "Refresh DNS-routing rules"
+    commands:
+      - add-dns-routing  # Updates domain-based routing policies
+    configs:
+      - /path/to/router1.yaml
+    interval: "6h"  # Every 6 hours (useful when using domain-url with dynamic lists)
+
+  # Example 7: Complex maintenance task
   - name: "Full router maintenance"
     commands:
       - delete-routes
       - delete-dns-records
       - add-routes
       - add-dns-records
+      - add-dns-routing
     configs:
       - /path/to/router1.yaml
     times:
@@ -89,6 +98,8 @@ tasks:
 #   - delete-routes
 #   - add-dns-records
 #   - delete-dns-records
+#   - add-dns-routing
+#   - delete-dns-routing
 #   - add-awg
 #   - update-awg
 #   - delete-known-hosts

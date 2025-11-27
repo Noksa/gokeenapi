@@ -82,6 +82,8 @@ Can also be set via GOKEENAPI_CONFIG environment variable.`)
 		newAddAwgCmd(),
 		newAddDnsRecordsCmd(),
 		newDeleteDnsRecordsCmd(),
+		newAddDnsRoutingCmd(),
+		newDeleteDnsRoutingCmd(),
 		newDeleteKnownHostsCmd(),
 		newExecCmd(),
 		newSchedulerCmd(),

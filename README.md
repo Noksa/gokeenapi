@@ -33,7 +33,7 @@
 <td width="50%">
 
 ### 💻 **Automate Everything**
-Manage routes, DNS records, WireGuard connections, and known hosts with simple commands
+Manage routes, DNS records, DNS-routing, WireGuard connections, and known hosts with simple commands
 
 ### ⚙️ **Zero Router Setup**
 No complex configuration needed on your router - just provide the address
@@ -124,7 +124,7 @@ routes:
       - /path/to/router-specific.bat # Can mix with regular files
 ```
 
-The tool automatically detects `.yaml`/`.yml` files in the `bat-file` array and expands them to their contained bat-file paths. Relative paths in YAML list files are resolved relative to the main config file's directory.
+The tool automatically detects `.yaml`/`.yml` files in the `bat-file` array and expands them to their contained bat-file paths. Relative paths in YAML list files are resolved relative to the YAML file's directory.
 
 ### Reusable Bat-URL Lists
 
@@ -147,7 +147,7 @@ routes:
       - https://example.com/extra.bat # Can mix with regular URLs
 ```
 
-The tool automatically detects `.yaml`/`.yml` files in the `bat-url` array and expands them to their contained bat-url paths. Relative paths in YAML list files are resolved relative to the main config file's directory.
+The tool automatically detects `.yaml`/`.yml` files in the `bat-url` array and expands them to their contained bat-url paths. Relative paths in YAML list files are resolved relative to the YAML file's directory.
 
 **Note:** You can combine both `bat-file` and `bat-url` in the same YAML file. When a YAML file is referenced in `bat-file`, only its `bat-file` list is expanded. When referenced in `bat-url`, only its `bat-url` list is expanded:
 
@@ -310,6 +310,57 @@ Deletes static DNS records based on your configuration file.
 ```shell
 ./gokeenapi delete-dns-records --config my_config.yaml
 ```
+
+#### `add-dns-routing`
+
+*Aliases: `adddnsrouting`, `adnsr`*
+
+Adds DNS-routing rules (policy-based routing by domain) to your router. This feature allows you to route traffic for specific domains through designated network interfaces.
+
+**Requirements:** Keenetic firmware version 5.0.1 or higher
+
+```shell
+./gokeenapi add-dns-routing --config my_config.yaml
+```
+
+**How it works:**
+- Loads domains from local .txt files and remote URLs
+- Creates domain groups (object-groups) containing your specified domains and IP addresses
+- Associates each group with a network interface via dns-proxy routes
+- Traffic for domains in a group is automatically routed through the specified interface
+
+**Domain sources:**
+- Local .txt files with one domain per line (supports comments with #)
+- Remote URLs serving domain lists
+- YAML files containing lists of domain-file or domain-url paths (for organization)
+
+**YAML expansion:** The tool automatically detects `.yaml`/`.yml` files in the `domain-file` and `domain-url` arrays and expands them to their contained paths. Relative paths in YAML list files are resolved relative to the YAML file's directory.
+
+**Example use cases:**
+- Route social media traffic through a VPN (Wireguard0)
+- Route streaming services through a different connection
+- Split traffic by domain for load balancing or privacy
+- Use community-maintained domain lists from URLs
+
+#### `delete-dns-routing`
+
+*Aliases: `deletednsrouting`, `ddnsr`*
+
+Deletes DNS-routing rules that match your configuration file.
+
+```shell
+# Delete DNS-routing rules with confirmation prompt
+./gokeenapi delete-dns-routing --config my_config.yaml
+
+# Delete DNS-routing rules without confirmation prompt
+./gokeenapi delete-dns-routing --config my_config.yaml --force
+```
+
+The command will:
+1. Identify dns-proxy routes and object-groups matching your configuration
+2. Display the rules to be deleted
+3. Request confirmation (unless `--force` flag is used)
+4. Remove dns-proxy routes first, then object-groups
 
 #### `add-awg`
 

@@ -409,11 +409,11 @@ routes:
 	err = LoadConfig(configPath)
 	assert.NoError(t, err)
 
-	// Should have 3 items: /main/file1.bat, nested.yaml (not expanded), /main/file2.bat
-	// This is current behavior - nested YAML is NOT recursively expanded
+	// Should have 3 items: /main/file1.bat, nested.yaml (resolved to absolute path), /main/file2.bat
+	// Nested YAML is NOT recursively expanded, but relative paths are resolved
 	assert.Len(t, Cfg.Routes[0].BatFile, 3)
 	assert.Equal(t, "/main/file1.bat", Cfg.Routes[0].BatFile[0])
-	assert.Equal(t, "nested.yaml", Cfg.Routes[0].BatFile[1])
+	assert.Equal(t, nestedPath, Cfg.Routes[0].BatFile[1]) // Now resolved to absolute path
 	assert.Equal(t, "/main/file2.bat", Cfg.Routes[0].BatFile[2])
 }
 

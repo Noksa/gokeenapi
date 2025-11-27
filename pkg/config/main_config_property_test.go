@@ -226,6 +226,57 @@ func genDNS() *rapid.Generator[DNS] {
 	})
 }
 
+// genDnsRoutingGroup generates a valid DNS routing group
+func genDnsRoutingGroup() *rapid.Generator[DnsRoutingGroup] {
+	return rapid.Custom(func(t *rapid.T) DnsRoutingGroup {
+		// Generate non-empty group name
+		name := rapid.StringMatching(`[a-z][a-z0-9-]{2,20}`).Draw(t, "name")
+
+		// Generate 1-3 domain files (simplified for testing)
+		fileCount := rapid.IntRange(1, 3).Draw(t, "fileCount")
+		domainFiles := make([]string, fileCount)
+		for i := range fileCount {
+			domainFiles[i] = rapid.StringMatching(`[a-z0-9-]{5,15}\.txt`).Draw(t, fmt.Sprintf("file%d", i))
+		}
+
+		return DnsRoutingGroup{
+			Name:        name,
+			DomainFile:  domainFiles,
+			InterfaceID: genInterfaceID().Draw(t, "interfaceID"),
+		}
+	})
+}
+
+// genWhitespaceString generates strings that are empty or contain only whitespace
+func genWhitespaceString() *rapid.Generator[string] {
+	return rapid.Custom(func(t *rapid.T) string {
+		// Generate different types of whitespace strings
+		choice := rapid.IntRange(0, 5).Draw(t, "choice")
+		switch choice {
+		case 0:
+			return "" // empty string
+		case 1:
+			return " " // single space
+		case 2:
+			return "  " // multiple spaces
+		case 3:
+			return "\t" // tab
+		case 4:
+			return "\n" // newline
+		case 5:
+			// Mix of whitespace characters
+			length := rapid.IntRange(1, 10).Draw(t, "length")
+			chars := make([]rune, length)
+			for i := range length {
+				chars[i] = rapid.SampledFrom([]rune{' ', '\t', '\n', '\r'}).Draw(t, fmt.Sprintf("char%d", i))
+			}
+			return string(chars)
+		default:
+			return ""
+		}
+	})
+}
+
 // genLogs generates a valid Logs configuration
 func genLogs() *rapid.Generator[Logs] {
 	return rapid.Custom(func(t *rapid.T) Logs {
@@ -1083,5 +1134,173 @@ func TestYAMLFileCachingAvoidsRedundantReads(t *testing.T) {
 		// The property we're testing is that the same YAML file referenced in both arrays
 		// produces correct results (implying it was cached and read only once)
 		// We can't directly test the caching mechanism, but we verify the correctness
+	})
+}
+
+// Feature: dns-routing, Property 6: Empty or whitespace-only group names are rejected
+// Validates: Requirements 1.5, 7.1
+func TestProperty6_EmptyOrWhitespaceGroupNamesAreRejected(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		// Generate a whitespace-only or empty group name
+		invalidName := genWhitespaceString().Draw(t, "invalidName")
+
+		// Generate a valid DNS routing group but with invalid name
+		validGroup := genDnsRoutingGroup().Draw(t, "validGroup")
+		invalidGroup := DnsRoutingGroup{
+			Name:        invalidName,
+			DomainFile:  validGroup.DomainFile,
+			InterfaceID: validGroup.InterfaceID,
+		}
+
+		// Validate the group - should fail
+		err := ValidateDnsRoutingGroups([]DnsRoutingGroup{invalidGroup})
+
+		// The property: validation must reject empty or whitespace-only names
+		if err == nil {
+			t.Fatalf("validation should reject empty or whitespace-only group name %q, but it passed", invalidName)
+		}
+
+		// Verify the error message is descriptive
+		errMsg := err.Error()
+		if errMsg == "" {
+			t.Fatalf("validation error should have a descriptive message")
+		}
+	})
+}
+
+// Feature: dns-routing, Property 7: Empty domain lists are rejected
+// Validates: Requirements 7.2
+func TestProperty7_EmptyDomainListsAreRejected(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		// Generate a valid DNS routing group but with empty domain-file and domain-url
+		validGroup := genDnsRoutingGroup().Draw(t, "validGroup")
+		invalidGroup := DnsRoutingGroup{
+			Name:        validGroup.Name,
+			DomainFile:  []string{}, // Empty domain-file list
+			DomainURL:   []string{}, // Empty domain-url list
+			InterfaceID: validGroup.InterfaceID,
+		}
+
+		// Validate the group - should fail
+		err := ValidateDnsRoutingGroups([]DnsRoutingGroup{invalidGroup})
+
+		// The property: validation must reject empty domain sources
+		if err == nil {
+			t.Fatalf("validation should reject DNS routing group %q with no domain sources, but it passed", invalidGroup.Name)
+		}
+
+		// Verify the error message is descriptive
+		errMsg := err.Error()
+		if errMsg == "" {
+			t.Fatalf("validation error should have a descriptive message")
+		}
+	})
+}
+
+// genMalformedDomain generates malformed domain names
+func genMalformedDomain() *rapid.Generator[string] {
+	return rapid.Custom(func(t *rapid.T) string {
+		choice := rapid.IntRange(0, 8).Draw(t, "choice")
+		switch choice {
+		case 0:
+			// Domain starting with hyphen
+			return rapid.StringMatching(`-[a-z0-9-]{2,10}\.[a-z]{2,5}`).Draw(t, "domain")
+		case 1:
+			// Domain ending with hyphen before TLD
+			return rapid.StringMatching(`[a-z][a-z0-9-]{2,10}-\.[a-z]{2,5}`).Draw(t, "domain")
+		case 2:
+			// Domain with consecutive dots
+			return rapid.StringMatching(`[a-z][a-z0-9]{1,5}\.\.[a-z]{2,5}`).Draw(t, "domain")
+		case 3:
+			// Domain starting with dot
+			return rapid.StringMatching(`\.[a-z][a-z0-9]{2,10}\.[a-z]{2,5}`).Draw(t, "domain")
+		case 4:
+			// Domain with invalid characters
+			return rapid.StringMatching(`[a-z][a-z0-9]{1,5}[@#$%][a-z0-9]{1,5}\.[a-z]{2,5}`).Draw(t, "domain")
+		case 5:
+			// Domain with spaces
+			return rapid.StringMatching(`[a-z][a-z0-9]{1,5} [a-z0-9]{1,5}\.[a-z]{2,5}`).Draw(t, "domain")
+		case 6:
+			// Domain without TLD
+			return rapid.StringMatching(`[a-z][a-z0-9-]{5,15}`).Draw(t, "domain")
+		case 7:
+			// Domain with numeric TLD only
+			return rapid.StringMatching(`[a-z][a-z0-9]{2,10}\.123`).Draw(t, "domain")
+		case 8:
+			// Domain label too long (>63 characters)
+			longLabel := rapid.StringMatching(`[a-z][a-z0-9]{64,80}`).Draw(t, "longLabel")
+			return longLabel + ".com"
+		default:
+			return "invalid..domain"
+		}
+	})
+}
+
+// genMalformedIP generates malformed IP addresses
+func genMalformedIP() *rapid.Generator[string] {
+	return rapid.Custom(func(t *rapid.T) string {
+		choice := rapid.IntRange(0, 8).Draw(t, "choice")
+		switch choice {
+		case 0:
+			// Octet > 255
+			octet1 := rapid.IntRange(256, 999).Draw(t, "octet1")
+			return fmt.Sprintf("%d.1.1.1", octet1)
+		case 1:
+			// Negative octet
+			return "-1.1.1.1"
+		case 2:
+			// Too few octets
+			return rapid.StringMatching(`[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}`).Draw(t, "ip")
+		case 3:
+			// Too many octets
+			return rapid.StringMatching(`[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}`).Draw(t, "ip")
+		case 4:
+			// Leading zeros
+			return "01.02.03.04"
+		case 5:
+			// Non-numeric characters
+			return rapid.StringMatching(`[a-z]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}`).Draw(t, "ip")
+		case 6:
+			// Empty octets
+			return "192..1.1"
+		case 7:
+			// Spaces in IP
+			return "192.168. 1.1"
+		case 8:
+			// Special characters
+			return "192.168.1.1!"
+		default:
+			return "999.999.999.999"
+		}
+	})
+}
+
+// Feature: dns-routing, Property 9: Malformed domains and IP addresses are rejected
+// Validates: Requirements 7.4
+func TestProperty9_MalformedDomainsAndIPsAreRejected(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		// Choose whether to test malformed domain or IP
+		testDomain := rapid.Bool().Draw(t, "testDomain")
+
+		var invalidDomain string
+		if testDomain {
+			invalidDomain = genMalformedDomain().Draw(t, "malformedDomain")
+		} else {
+			invalidDomain = genMalformedIP().Draw(t, "malformedIP")
+		}
+
+		// Validate the domain directly using ValidateDomainList
+		err := ValidateDomainList([]string{invalidDomain}, "test-group")
+
+		// The property: validation must reject malformed domains and IPs
+		if err == nil {
+			t.Fatalf("validation should reject malformed domain/IP %q, but it passed", invalidDomain)
+		}
+
+		// Verify the error message is descriptive
+		errMsg := err.Error()
+		if errMsg == "" {
+			t.Fatalf("validation error should have a descriptive message")
+		}
 	})
 }
