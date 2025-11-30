@@ -236,6 +236,9 @@ func isValidIP(ip string) bool {
 
 // ValidateDnsRoutingGroups validates DNS routing group configurations
 func ValidateDnsRoutingGroups(groups []DnsRoutingGroup) error {
+	// Track group names to check for duplicates
+	seenNames := make(map[string]int)
+
 	for i, group := range groups {
 		// Check for empty or whitespace-only group names
 		if len(group.Name) == 0 {
@@ -252,6 +255,12 @@ func ValidateDnsRoutingGroups(groups []DnsRoutingGroup) error {
 		if len(trimmed) == 0 {
 			return errors.New("DNS routing group name cannot contain only whitespace")
 		}
+
+		// Check for duplicate group names
+		if firstIndex, exists := seenNames[group.Name]; exists {
+			return errors.New("duplicate DNS routing group name '" + group.Name + "' found at positions " + string(rune(firstIndex)) + " and " + string(rune(i)))
+		}
+		seenNames[group.Name] = i
 
 		// Check for empty domain sources (must have at least one domain-file or domain-url)
 		if len(group.DomainFile) == 0 && len(group.DomainURL) == 0 {
@@ -479,8 +488,13 @@ func expandDomainLists(configPath string) error {
 					expandedDomainFiles = append(expandedDomainFiles, domainLists.DomainFile...)
 				}
 			} else {
-				// Regular .txt file, keep as is
-				expandedDomainFiles = append(expandedDomainFiles, domainFile)
+				// Regular .txt file - resolve relative paths relative to config file
+				resolvedPath := domainFile
+				if !filepath.IsAbs(resolvedPath) {
+					configDir := filepath.Dir(configPath)
+					resolvedPath = filepath.Join(configDir, resolvedPath)
+				}
+				expandedDomainFiles = append(expandedDomainFiles, resolvedPath)
 			}
 		}
 

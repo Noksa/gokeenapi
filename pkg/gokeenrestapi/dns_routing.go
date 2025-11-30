@@ -184,11 +184,22 @@ func parseDomainLines(lines []string, source string) ([]string, int) {
 			}
 		}
 
+		// Strip v2fly domain-list-community prefixes (full:, regexp:, domain:, keyword:, include:)
+		// These are routing rule modifiers that aren't valid domain names
+		// Example: "full:d1unuk07s6td74.cloudfront.net" -> "d1unuk07s6td74.cloudfront.net"
+		if idx := strings.Index(processedLine, ":"); idx > 0 {
+			prefix := processedLine[:idx]
+			// Check if it's a known v2fly prefix
+			if prefix == "full" || prefix == "regexp" || prefix == "domain" || prefix == "keyword" || prefix == "include" {
+				processedLine = processedLine[idx+1:]
+			}
+		}
+
 		// Validate domain name using IDNA
 		// This automatically rejects invalid formats including:
-		// - v2fly directives (include:, full:, regexp:, keyword:, domain:)
 		// - Bare names without TLD (youtube, instagram)
 		// - Lines starting with @ or other invalid characters
+		// - regexp patterns (after prefix removal, these will fail IDNA validation)
 		valid, reason := validateDomainWithIDNA(processedLine)
 		if !valid {
 			skipped++
@@ -303,15 +314,10 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 	for _, group := range groups {
 		var allDomains []string
 
-		// Load domains from local files (YAML expansion already done at config load time)
+		// Load domains from local files
+		// Paths are already resolved (absolute) during config loading
 		for _, file := range group.DomainFile {
-			absFilePath, err := filepath.Abs(file)
-			if err != nil {
-				mErr = multierr.Append(mErr, fmt.Errorf("group '%s': failed to resolve file path '%s': %w", group.Name, file, err))
-				continue
-			}
-
-			domains, err := DnsRouting.LoadDomainsFromFile(absFilePath)
+			domains, err := DnsRouting.LoadDomainsFromFile(file)
 			if err != nil {
 				mErr = multierr.Append(mErr, fmt.Errorf("group '%s': %w", group.Name, err))
 				continue
@@ -336,6 +342,17 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 		if len(allDomains) == 0 {
 			gokeenlog.InfoSubStepf("Skipping group '%s': no domains loaded", group.Name)
 			continue
+		}
+
+		// Deduplicate domains (in case same domain appears in multiple files/URLs)
+		// Sort first, then use Compact to remove consecutive duplicates
+		originalCount := len(allDomains)
+		slices.Sort(allDomains)
+		allDomains = slices.Compact(allDomains)
+		if duplicates := originalCount - len(allDomains); duplicates > 0 {
+			gokeenlog.InfoSubStepf("Removed %v duplicate domain(s) from group %v",
+				color.YellowString("%d", duplicates),
+				color.CyanString(group.Name))
 		}
 
 		// Check router limit: maximum domains per group
