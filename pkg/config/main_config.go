@@ -392,8 +392,13 @@ func expandBatLists(configPath string) error {
 					expandedBatFiles = append(expandedBatFiles, batLists.BatFile...)
 				}
 			} else {
-				// Regular .bat file, keep as is
-				expandedBatFiles = append(expandedBatFiles, batFile)
+				// Regular .bat file - resolve relative paths relative to config file
+				resolvedPath := batFile
+				if !filepath.IsAbs(resolvedPath) {
+					configDir := filepath.Dir(configPath)
+					resolvedPath = filepath.Join(configDir, resolvedPath)
+				}
+				expandedBatFiles = append(expandedBatFiles, resolvedPath)
 			}
 		}
 
