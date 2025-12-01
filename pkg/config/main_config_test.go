@@ -409,11 +409,11 @@ routes:
 	err = LoadConfig(configPath)
 	assert.NoError(t, err)
 
-	// Should have 3 items: /main/file1.bat, nested.yaml (not expanded), /main/file2.bat
-	// This is current behavior - nested YAML is NOT recursively expanded
+	// Should have 3 items: /main/file1.bat, nested.yaml (resolved to absolute path), /main/file2.bat
+	// Nested YAML is NOT recursively expanded, but relative paths are resolved
 	assert.Len(t, Cfg.Routes[0].BatFile, 3)
 	assert.Equal(t, "/main/file1.bat", Cfg.Routes[0].BatFile[0])
-	assert.Equal(t, "nested.yaml", Cfg.Routes[0].BatFile[1])
+	assert.Equal(t, nestedPath, Cfg.Routes[0].BatFile[1]) // Now resolved to absolute path
 	assert.Equal(t, "/main/file2.bat", Cfg.Routes[0].BatFile[2])
 }
 
@@ -961,4 +961,213 @@ dns:
 	// Verify DNS records are loaded correctly
 	assert.Len(t, Cfg.DNS.Records, 1)
 	assert.Equal(t, "test.local", Cfg.DNS.Records[0].Domain)
+}
+
+func TestValidateDnsRoutingGroups_ValidGroups(t *testing.T) {
+	groups := []DnsRoutingGroup{
+		{
+			Name:        "group1",
+			DomainFile:  []string{"/path/to/domains.txt"},
+			InterfaceID: "Wireguard0",
+		},
+		{
+			Name:        "group2",
+			DomainURL:   []string{"https://example.com/domains.txt"},
+			InterfaceID: "Wireguard1",
+		},
+	}
+
+	err := ValidateDnsRoutingGroups(groups)
+	assert.NoError(t, err)
+}
+
+func TestValidateDnsRoutingGroups_EmptyName(t *testing.T) {
+	groups := []DnsRoutingGroup{
+		{
+			Name:        "",
+			DomainFile:  []string{"/path/to/domains.txt"},
+			InterfaceID: "Wireguard0",
+		},
+	}
+
+	err := ValidateDnsRoutingGroups(groups)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "name cannot be empty")
+}
+
+func TestValidateDnsRoutingGroups_WhitespaceOnlyName(t *testing.T) {
+	groups := []DnsRoutingGroup{
+		{
+			Name:        "   \t\n  ",
+			DomainFile:  []string{"/path/to/domains.txt"},
+			InterfaceID: "Wireguard0",
+		},
+	}
+
+	err := ValidateDnsRoutingGroups(groups)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot contain only whitespace")
+}
+
+func TestValidateDnsRoutingGroups_DuplicateNames(t *testing.T) {
+	groups := []DnsRoutingGroup{
+		{
+			Name:        "youtube",
+			DomainFile:  []string{"/path/to/youtube.txt"},
+			InterfaceID: "Wireguard0",
+		},
+		{
+			Name:        "instagram",
+			DomainURL:   []string{"https://example.com/instagram.txt"},
+			InterfaceID: "Wireguard0",
+		},
+		{
+			Name:        "youtube", // Duplicate!
+			DomainFile:  []string{"/path/to/youtube2.txt"},
+			InterfaceID: "Wireguard1",
+		},
+	}
+
+	err := ValidateDnsRoutingGroups(groups)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate DNS routing group name")
+	assert.Contains(t, err.Error(), "youtube")
+}
+
+func TestValidateDnsRoutingGroups_NoDomainSources(t *testing.T) {
+	groups := []DnsRoutingGroup{
+		{
+			Name:        "group1",
+			InterfaceID: "Wireguard0",
+			// No DomainFile or DomainURL
+		},
+	}
+
+	err := ValidateDnsRoutingGroups(groups)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "must contain at least one domain-file or domain-url")
+}
+
+func TestValidateDnsRoutingGroups_EmptyInterfaceID(t *testing.T) {
+	groups := []DnsRoutingGroup{
+		{
+			Name:        "group1",
+			DomainFile:  []string{"/path/to/domains.txt"},
+			InterfaceID: "",
+		},
+	}
+
+	err := ValidateDnsRoutingGroups(groups)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "interface ID cannot be empty")
+}
+
+func TestValidateDnsRoutingGroups_EmptyList(t *testing.T) {
+	groups := []DnsRoutingGroup{}
+
+	err := ValidateDnsRoutingGroups(groups)
+	assert.NoError(t, err) // Empty list is valid
+}
+
+func TestValidateDnsRoutingGroups_BothDomainFileAndURL(t *testing.T) {
+	groups := []DnsRoutingGroup{
+		{
+			Name:        "group1",
+			DomainFile:  []string{"/path/to/domains.txt"},
+			DomainURL:   []string{"https://example.com/domains.txt"},
+			InterfaceID: "Wireguard0",
+		},
+	}
+
+	err := ValidateDnsRoutingGroups(groups)
+	assert.NoError(t, err) // Having both is valid
+}
+
+func TestValidateDomainList_ValidDomains(t *testing.T) {
+	domains := []string{
+		"example.com",
+		"sub.example.com",
+		"another-domain.org",
+	}
+
+	err := ValidateDomainList(domains, "testgroup")
+	assert.NoError(t, err)
+}
+
+func TestValidateDomainList_ValidIPs(t *testing.T) {
+	domains := []string{
+		"192.168.1.1",
+		"10.0.0.1",
+		"8.8.8.8",
+	}
+
+	err := ValidateDomainList(domains, "testgroup")
+	assert.NoError(t, err)
+}
+
+func TestValidateDomainList_MixedDomainsAndIPs(t *testing.T) {
+	domains := []string{
+		"example.com",
+		"192.168.1.1",
+		"sub.example.org",
+		"10.0.0.1",
+	}
+
+	err := ValidateDomainList(domains, "testgroup")
+	assert.NoError(t, err)
+}
+
+func TestValidateDomainList_EmptyDomain(t *testing.T) {
+	domains := []string{
+		"example.com",
+		"",
+		"another.com",
+	}
+
+	err := ValidateDomainList(domains, "testgroup")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot be empty")
+}
+
+func TestValidateDomainList_WhitespaceOnlyDomain(t *testing.T) {
+	domains := []string{
+		"example.com",
+		"   \t  ",
+		"another.com",
+	}
+
+	err := ValidateDomainList(domains, "testgroup")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot contain only whitespace")
+}
+
+func TestValidateDomainList_InvalidDomain(t *testing.T) {
+	domains := []string{
+		"example.com",
+		"invalid domain with spaces",
+		"another.com",
+	}
+
+	err := ValidateDomainList(domains, "testgroup")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid domain or IP address")
+}
+
+func TestValidateDomainList_InvalidIP(t *testing.T) {
+	domains := []string{
+		"example.com",
+		"999.999.999.999",
+		"another.com",
+	}
+
+	err := ValidateDomainList(domains, "testgroup")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid domain or IP address")
+}
+
+func TestValidateDomainList_EmptyList(t *testing.T) {
+	domains := []string{}
+
+	err := ValidateDomainList(domains, "testgroup")
+	assert.NoError(t, err) // Empty list is valid
 }

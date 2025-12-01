@@ -4,7 +4,7 @@ inclusion: always
 
 # Project Overview
 
-This is **gokeenapi**, a Go CLI tool for automating Keenetic (Netcraze) router management. It handles routes, DNS records, WireGuard connections, and scheduled tasks.
+This is **gokeenapi**, a Go CLI tool for automating Keenetic (Netcraze) router management. It handles routes, DNS records, DNS-routing (policy-based routing by domain), WireGuard connections, and scheduled tasks.
 
 ## Initial Context Gathering
 
@@ -44,7 +44,10 @@ When starting work on this project:
 
 ## Key Features to Understand
 
+- **DNS-routing**: Policy-based routing by domain (requires firmware 5.0.1+) - route traffic for specific domains through designated interfaces (`cmd/add_dns_routing.go`, `cmd/delete_dns_routing.go`)
 - **Scheduler**: Automated task execution at intervals or specific times (`cmd/scheduler.go`)
+- **Domain-file expansion**: YAML files can reference other YAML files containing domain lists (similar to bat-file expansion)
+- **Domain-url expansion**: YAML files can reference URLs serving domain lists (similar to bat-url expansion)
 - **Bat-file expansion**: YAML files can reference other YAML files containing bat-file lists
 - **Bat-url expansion**: YAML files can reference other YAML files containing bat-url lists
 - **Multi-router support**: Single config CAN'T manage multiple routers - to do that use multiple configuration files (one per router)

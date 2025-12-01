@@ -15,6 +15,11 @@ func TestApiTestSuite(t *testing.T) {
 	suite.Run(t, new(ApiTestSuite))
 }
 
+func (s *ApiTestSuite) TestPing() {
+	err := Common.Ping()
+	s.NoError(err)
+}
+
 func (s *ApiTestSuite) TestAuth() {
 	err := Common.Auth()
 	s.NoError(err)
@@ -24,7 +29,7 @@ func (s *ApiTestSuite) TestVersion() {
 	version, err := Common.Version()
 	s.NoError(err)
 	s.Equal("KN-1010", version.Model)
-	s.Equal("KeeneticOS 3.7.5", version.Title)
+	s.Equal("4.3.6.3", version.Title)
 }
 
 func (s *ApiTestSuite) TestGetInterfacesViaRciShowInterfaces() {

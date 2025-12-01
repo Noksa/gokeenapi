@@ -9,6 +9,8 @@ const (
 	CmdUpdateAwg        = "update-awg"
 	CmdAddDnsRecords    = "add-dns-records"
 	CmdDeleteDnsRecords = "delete-dns-records"
+	CmdAddDnsRouting    = "add-dns-routing"
+	CmdDeleteDnsRouting = "delete-dns-routing"
 	CmdDeleteKnownHosts = "delete-known-hosts"
 	CmdExec             = "exec"
 	CmdScheduler        = "scheduler"
@@ -36,6 +38,8 @@ var (
 	AliasesUpdateAwg        = []string{"updateawg", "uawg"}
 	AliasesAddDnsRecords    = []string{"adddnsrecords", "adr"}
 	AliasesDeleteDnsRecords = []string{"deletednsrecords", "ddr"}
+	AliasesAddDnsRouting    = []string{"adddnsrouting", "adnsr"}
+	AliasesDeleteDnsRouting = []string{"deletednsrouting", "ddnsr"}
 	AliasesDeleteKnownHosts = []string{"deleteknownhosts", "dkh"}
 	AliasesExec             = []string{"e"}
 	AliasesScheduler        = []string{"schedule", "sched"}
