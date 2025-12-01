@@ -31,3 +31,10 @@ build: lint ## Build
 binaries: lint ## Build
 	@chmod +x ./scripts/create_binaries.sh
 	@cd ./scripts && ./create_binaries.sh --version ${VERSION}
+
+.PHONY: docker-build-test
+docker-build-test: ## Build Docker image for testing (no push)
+	docker build -t gokeenapi-test:local \
+		--build-arg GOKEENAPI_VERSION=test \
+		--build-arg GOKEENAPI_BUILDDATE="$$(date)" \
+		-f Dockerfile .
