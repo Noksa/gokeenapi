@@ -45,7 +45,7 @@ func createDockerAccessibleTempDir(t *testing.T) string {
 
 	// Register cleanup
 	t.Cleanup(func() {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 	})
 
 	return tmpDir
