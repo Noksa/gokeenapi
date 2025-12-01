@@ -15,6 +15,11 @@ func TestApiTestSuite(t *testing.T) {
 	suite.Run(t, new(ApiTestSuite))
 }
 
+func (s *ApiTestSuite) TestPing() {
+	err := Common.Ping()
+	s.NoError(err)
+}
+
 func (s *ApiTestSuite) TestAuth() {
 	err := Common.Auth()
 	s.NoError(err)

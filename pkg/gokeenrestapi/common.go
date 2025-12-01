@@ -207,10 +207,45 @@ func (c *keeneticCommon) performAuth(client *resty.Client) error {
 	return nil
 }
 
+// Ping checks if the router is reachable by attempting a simple GET request
+// This is faster than waiting for authentication to timeout
+func (c *keeneticCommon) Ping() error {
+	client := resty.New()
+	client.SetDisableWarn(true)
+	client.SetCookieJar(nil)
+	client.SetTimeout(time.Second * 5) // Short timeout for ping
+	client.SetBaseURL(config.Cfg.Keenetic.URL)
+
+	response, err := client.R().Get("/rci/show/version")
+	if err != nil {
+		return fmt.Errorf("router is not reachable: %w", err)
+	}
+
+	if response == nil {
+		return errors.New("router is not reachable: no response")
+	}
+
+	// We expect either 200 (if no auth required) or 401 (auth required)
+	// Both mean the router is reachable
+	if response.StatusCode() != http.StatusOK && response.StatusCode() != http.StatusUnauthorized {
+		return fmt.Errorf("router returned unexpected status: %d %s", response.StatusCode(), response.Status())
+	}
+
+	return nil
+}
+
 // Auth authenticates with the Keenetic router using configured credentials
 // Handles the router's challenge-response authentication mechanism and caches the session
 func (c *keeneticCommon) Auth() error {
-	err := gokeenspinner.WrapWithSpinner(fmt.Sprintf("Authorizing in %v", color.CyanString("Keenetic")), func() error {
+	// First check if router is reachable
+	err := gokeenspinner.WrapWithSpinner(fmt.Sprintf("Checking connectivity to %v", color.CyanString("Keenetic")), func() error {
+		return c.Ping()
+	})
+	if err != nil {
+		return err
+	}
+
+	err = gokeenspinner.WrapWithSpinner(fmt.Sprintf("Authorizing in %v", color.CyanString("Keenetic")), func() error {
 		return c.performAuth(c.GetApiClient())
 	})
 	if err != nil {
