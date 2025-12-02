@@ -93,6 +93,15 @@ func (s *DeleteDnsRoutingTestSuite) TestDeleteDnsRoutingCmd_WithForce() {
 
 	err = cmd.RunE(cmd, []string{})
 	assert.NoError(s.T(), err)
+
+	// Verify the social-media group was deleted
+	groups, err := gokeenrestapi.DnsRouting.GetExistingDnsRoutingGroups()
+	assert.NoError(s.T(), err)
+	_, exists := groups["social-media"]
+	assert.False(s.T(), exists, "social-media group should be deleted")
+	// streaming group should still exist (not in config)
+	_, exists = groups["streaming"]
+	assert.True(s.T(), exists, "streaming group should still exist")
 }
 
 func (s *DeleteDnsRoutingTestSuite) TestDeleteDnsRoutingCmd_WithForce_MultipleGroups() {
@@ -130,48 +139,73 @@ func (s *DeleteDnsRoutingTestSuite) TestDeleteDnsRoutingCmd_WithForce_MultipleGr
 
 	err = cmd.RunE(cmd, []string{})
 	assert.NoError(s.T(), err)
-}
 
-func (s *DeleteDnsRoutingTestSuite) TestDeleteDnsRoutingCmd_EmptyConfiguration() {
-	// Empty DNS routing configuration
-	config.Cfg.DNS = config.DNS{
-		Routes: config.DnsRoutes{
-			Groups: []config.DnsRoutingGroup{},
-		},
-	}
-
-	cmd := newDeleteDnsRoutingCmd()
-	_ = cmd.Flags().Set("force", "true")
-
-	err := cmd.RunE(cmd, []string{})
+	// Verify all groups were deleted
+	groupsAfter, err := gokeenrestapi.DnsRouting.GetExistingDnsRoutingGroups()
 	assert.NoError(s.T(), err)
+	assert.Empty(s.T(), groupsAfter, "All DNS routing groups should be deleted")
 }
 
-func (s *DeleteDnsRoutingTestSuite) TestDeleteDnsRoutingCmd_NoMatchingGroups() {
-	// Create temporary domain file
-	tmpDir := s.T().TempDir()
-	domainFile := filepath.Join(tmpDir, "domains.txt")
-	err := os.WriteFile(domainFile, []byte("example.com\n"), 0644)
+func (s *DeleteDnsRoutingTestSuite) TestDeleteDnsRoutingCmd_NoGroupsOnRouter() {
+	// Create a router with no DNS routing groups
+	s.server = gokeenrestapi.SetupMockRouterForTest(
+		gokeenrestapi.WithVersion("5.0.1"),
+	)
+	err := gokeenrestapi.Common.Auth()
 	s.Require().NoError(err)
-
-	// Set up test config with groups that don't exist in the router
-	config.Cfg.DNS = config.DNS{
-		Routes: config.DnsRoutes{
-			Groups: []config.DnsRoutingGroup{
-				{
-					Name:        "non-existent-group",
-					DomainFile:  []string{domainFile},
-					InterfaceID: "Wireguard0",
-				},
-			},
-		},
-	}
 
 	cmd := newDeleteDnsRoutingCmd()
 	_ = cmd.Flags().Set("force", "true")
 
 	err = cmd.RunE(cmd, []string{})
 	assert.NoError(s.T(), err)
+}
+
+func (s *DeleteDnsRoutingTestSuite) TestDeleteDnsRoutingCmd_DeletesAllGroups() {
+	// Create temporary domain files
+	tmpDir := s.T().TempDir()
+
+	socialFile := filepath.Join(tmpDir, "social-media.txt")
+	err := os.WriteFile(socialFile, []byte("facebook.com\ninstagram.com\ntwitter.com\n"), 0644)
+	s.Require().NoError(err)
+
+	streamingFile := filepath.Join(tmpDir, "streaming.txt")
+	err = os.WriteFile(streamingFile, []byte("youtube.com\nnetflix.com\n8.8.8.8\n"), 0644)
+	s.Require().NoError(err)
+
+	// Set up test config with both groups
+	config.Cfg.DNS = config.DNS{
+		Routes: config.DnsRoutes{
+			Groups: []config.DnsRoutingGroup{
+				{
+					Name:        "social-media",
+					DomainFile:  []string{socialFile},
+					InterfaceID: "Wireguard0",
+				},
+				{
+					Name:        "streaming",
+					DomainFile:  []string{streamingFile},
+					InterfaceID: "ISP",
+				},
+			},
+		},
+	}
+
+	// Verify router has groups before deletion
+	groupsBefore, err := gokeenrestapi.DnsRouting.GetExistingDnsRoutingGroups()
+	assert.NoError(s.T(), err)
+	assert.NotEmpty(s.T(), groupsBefore, "Router should have groups before deletion")
+
+	cmd := newDeleteDnsRoutingCmd()
+	_ = cmd.Flags().Set("force", "true")
+
+	err = cmd.RunE(cmd, []string{})
+	assert.NoError(s.T(), err)
+
+	// Verify all groups were deleted
+	groupsAfter, err := gokeenrestapi.DnsRouting.GetExistingDnsRoutingGroups()
+	assert.NoError(s.T(), err)
+	assert.Empty(s.T(), groupsAfter, "All groups should be deleted")
 }
 
 func (s *DeleteDnsRoutingTestSuite) TestDeleteDnsRoutingCmd_ForceFlagDefaultValue() {
@@ -217,4 +251,45 @@ func (s *DeleteDnsRoutingTestSuite) TestDeleteDnsRoutingCmd_PartialMatch() {
 
 	err = cmd.RunE(cmd, []string{})
 	assert.NoError(s.T(), err)
+}
+
+func (s *DeleteDnsRoutingTestSuite) TestDeleteDnsRoutingCmd_WithInterfaceId() {
+	// Create temporary domain files
+	tmpDir := s.T().TempDir()
+
+	socialFile := filepath.Join(tmpDir, "social-media.txt")
+	err := os.WriteFile(socialFile, []byte("facebook.com\ninstagram.com\ntwitter.com\n"), 0644)
+	s.Require().NoError(err)
+
+	// Set up test config - but we'll use --interface-id flag instead
+	config.Cfg.DNS = config.DNS{
+		Routes: config.DnsRoutes{
+			Groups: []config.DnsRoutingGroup{},
+		},
+	}
+
+	cmd := newDeleteDnsRoutingCmd()
+	_ = cmd.Flags().Set("force", "true")
+	_ = cmd.Flags().Set("interface-id", "Wireguard0")
+
+	err = cmd.RunE(cmd, []string{})
+	assert.NoError(s.T(), err)
+
+	// Verify only Wireguard0 group was deleted
+	groups, err := gokeenrestapi.DnsRouting.GetExistingDnsRoutingGroups()
+	assert.NoError(s.T(), err)
+	_, exists := groups["social-media"]
+	assert.False(s.T(), exists, "social-media group (Wireguard0) should be deleted")
+	// streaming group on ISP should still exist
+	_, exists = groups["streaming"]
+	assert.True(s.T(), exists, "streaming group (ISP) should still exist")
+}
+
+func (s *DeleteDnsRoutingTestSuite) TestDeleteDnsRoutingCmd_InterfaceIdFlag() {
+	cmd := newDeleteDnsRoutingCmd()
+
+	interfaceIdFlag := cmd.Flags().Lookup("interface-id")
+	assert.NotNil(s.T(), interfaceIdFlag)
+	assert.Equal(s.T(), "string", interfaceIdFlag.Value.Type())
+	assert.Equal(s.T(), "", interfaceIdFlag.DefValue)
 }
