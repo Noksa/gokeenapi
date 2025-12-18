@@ -11,13 +11,13 @@ SHELL [ "/bin/bash", "-euo", "pipefail", "-c" ]
 COPY go.mod go.mod
 COPY go.sum go.sum
 COPY go.wor[k] go.work
-RUN --mount=type=cache,id=golang,target=/go/pkg <<eot
+RUN --mount=type=cache,id=golang,target=/go/pkg/mod/ <<eot
     go mod download
 eot
 
 COPY . .
 
-RUN --mount=type=cache,id=golang,target=/go/pkg <<eot
+RUN --mount=type=cache,id=golang,target=/go/pkg/mod/ <<eot
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-X \"github.com/noksa/gokeenapi/internal/gokeenversion.version=${GOKEENAPI_VERSION}\" -X \"github.com/noksa/gokeenapi/internal/gokeenversion.buildDate=${GOKEENAPI_BUILDDATE}\"" -o gokeenapi
 eot
 

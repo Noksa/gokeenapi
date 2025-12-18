@@ -264,7 +264,7 @@ func ValidateDnsRoutingGroups(groups []DnsRoutingGroup) error {
 
 		// Check for empty domain sources (must have at least one domain-file or domain-url)
 		if len(group.DomainFile) == 0 && len(group.DomainURL) == 0 {
-			return errors.New("DNS routing group must contain at least one domain-file or domain-url")
+			return errors.New("DNS routing group '" + group.Name + "' must contain at least one domain-file or domain-url")
 		}
 
 		// Check for empty interface ID
