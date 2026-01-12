@@ -14,6 +14,7 @@ import (
 	"github.com/noksa/gokeenapi/internal/gokeencache"
 	"github.com/noksa/gokeenapi/internal/gokeenlog"
 	"github.com/noksa/gokeenapi/internal/gokeenspinner"
+	"github.com/noksa/gokeenapi/pkg/config"
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
 	"go.uber.org/multierr"
 )
@@ -240,18 +241,28 @@ func (*keeneticIp) AddRoutesFromBatUrl(url string, interfaceId string) error {
 	if err != nil {
 		return err
 	}
-	rClient := resty.New()
-	rClient.SetDisableWarn(true)
-	rClient.SetTimeout(time.Second * 5)
-	var response *resty.Response
-	err = gokeenspinner.WrapWithSpinner(fmt.Sprintf("Fetching %v url", color.CyanString(url)), func() error {
-		response, err = rClient.R().Get(url)
-		return err
-	})
-	if err != nil {
-		return err
+
+	var str string
+	// Check cache first
+	if cached, ok := gokeencache.GetURLContent(url); ok {
+		str = cached
+	} else {
+		rClient := resty.New()
+		rClient.SetDisableWarn(true)
+		rClient.SetTimeout(time.Second * 5)
+		var response *resty.Response
+		err = gokeenspinner.WrapWithSpinner(fmt.Sprintf("Fetching %v url", color.CyanString(url)), func() error {
+			response, err = rClient.R().Get(url)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+		str = string(response.Body())
+		// Cache with configured TTL
+		gokeencache.SetURLContent(url, str, config.GetURLCacheTTL())
 	}
-	str := string(response.Body())
+
 	var mErr error
 	splitted := strings.Split(str, "\n")
 	var parseSlice []gokeenrestapimodels.ParseRequest

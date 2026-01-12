@@ -60,21 +60,11 @@ func (f *keeneticCacheFile) Save() error {
 }
 
 func (c *keeneticCommon) getKeeneticCacheFile() (keeneticCacheFile, error) {
-	var dataDir string
-	var err error
-	if config.Cfg.DataDir != "" {
-		dataDir = path.Clean(config.Cfg.DataDir)
-	} else {
-		dataDir, err = os.UserHomeDir()
-		if err != nil {
-			return keeneticCacheFile{}, err
-		}
-	}
-	gokeenDir := path.Join(dataDir, ".gokeenapi")
-	err = os.MkdirAll(gokeenDir, os.ModePerm)
+	gokeenDir, err := gokeencache.GetGokeenDir()
 	if err != nil {
 		return keeneticCacheFile{}, err
 	}
+
 	if !cleanedOldCacheFiles {
 		err = filepath.WalkDir(gokeenDir, func(path string, d fs.DirEntry, err error) error {
 			if d.IsDir() {

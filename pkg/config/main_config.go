@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
 	"gopkg.in/yaml.v3"
@@ -35,6 +36,8 @@ type GokeenapiConfig struct {
 	DNS DNS `yaml:"dns"`
 	// Logs contains logging configuration (optional)
 	Logs Logs `yaml:"logs,omitempty"`
+	// Cache contains caching configuration (optional)
+	Cache Cache `yaml:"cache,omitempty"`
 }
 
 // Keenetic holds connection parameters for the Keenetic router
@@ -144,6 +147,15 @@ type DnsRoutingGroup struct {
 type Logs struct {
 	// Debug enables debug-level logging for troubleshooting
 	Debug bool `yaml:"debug"`
+}
+
+// Cache contains caching configuration options
+type Cache struct {
+	// URLTTL specifies how long to cache downloaded content from URLs
+	// Default: 1m if not specified
+	// Examples: "1m", "5m", "1h", "30s"
+	// Used for bat-url and domain-url downloads to reduce network requests
+	URLTTL time.Duration `yaml:"urlTtl,omitempty"`
 }
 
 // isValidDomain validates a domain name according to RFC 1035 and RFC 1123
@@ -550,4 +562,13 @@ func loadDomainListsFromYAML(listPath, configPath string) (*DomainLists, error) 
 	}
 
 	return &domainLists, nil
+}
+
+// GetURLCacheTTL returns the configured URL cache TTL
+// Returns 1 minute as default if not configured
+func GetURLCacheTTL() time.Duration {
+	if Cfg.Cache.URLTTL <= 0 {
+		return time.Minute
+	}
+	return Cfg.Cache.URLTTL
 }

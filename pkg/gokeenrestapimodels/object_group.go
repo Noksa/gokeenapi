@@ -1,20 +1,17 @@
 package gokeenrestapimodels
 
-// ObjectGroupFqdnResponse represents the response from /rci/show/object-group/fqdn
-type ObjectGroupFqdnResponse struct {
-	Group []ObjectGroupFqdn `json:"group"`
-}
+// ObjectGroupFqdnResponse represents the response from /rci/object-group/fqdn
+// Maps group names to their configurations
+type ObjectGroupFqdnResponse map[string]ObjectGroupFqdn
 
 // ObjectGroupFqdn represents a single FQDN object-group
 type ObjectGroupFqdn struct {
-	GroupName string                 `json:"group-name"`
-	Entry     []ObjectGroupFqdnEntry `json:"entry"`
+	Include []ObjectGroupFqdnEntry `json:"include"`
 }
 
 // ObjectGroupFqdnEntry represents a single entry in an object-group
 type ObjectGroupFqdnEntry struct {
-	Fqdn string `json:"fqdn"`
-	Type string `json:"type"` // "config" for user-configured, "runtime" for auto-discovered subdomains
+	Address string `json:"address"`
 }
 
 // DnsProxyRouteResponse represents the response from /rci/dns-proxy/route

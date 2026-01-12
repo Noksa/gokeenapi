@@ -453,7 +453,7 @@ func NewMockRouterServer(opts ...MockRouterOption) *httptest.Server {
 	mux.HandleFunc("/rci/show/ip/name-server", m.handleDnsRecords)
 
 	// DNS-routing endpoints
-	mux.HandleFunc("/rci/show/object-group/fqdn", m.handleObjectGroupFqdn)
+	mux.HandleFunc("/rci/object-group/fqdn", m.handleObjectGroupFqdn)
 	mux.HandleFunc("/rci/dns-proxy/route", m.handleDnsProxyRoute)
 
 	// Hotspot endpoint
@@ -811,24 +811,20 @@ func (m *MockRouter) handleObjectGroupFqdn(w http.ResponseWriter, r *http.Reques
 	defer m.mu.RUnlock()
 
 	// Convert internal DNS-routing groups to API response format
-	groups := make([]gokeenrestapimodels.ObjectGroupFqdn, 0, len(m.dnsRoutingGroups))
+	response := make(gokeenrestapimodels.ObjectGroupFqdnResponse)
 	for _, group := range m.dnsRoutingGroups {
 		entries := make([]gokeenrestapimodels.ObjectGroupFqdnEntry, 0, len(group.Domains))
 		for _, domain := range group.Domains {
 			entries = append(entries, gokeenrestapimodels.ObjectGroupFqdnEntry{
-				Fqdn: domain,
+				Address: domain,
 			})
 		}
 
-		groups = append(groups, gokeenrestapimodels.ObjectGroupFqdn{
-			GroupName: group.Name,
-			Entry:     entries,
-		})
+		response[group.Name] = gokeenrestapimodels.ObjectGroupFqdn{
+			Include: entries,
+		}
 	}
 
-	response := gokeenrestapimodels.ObjectGroupFqdnResponse{
-		Group: groups,
-	}
 	m.encodeJSON(w, response)
 }
 

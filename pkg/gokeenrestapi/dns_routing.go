@@ -73,7 +73,7 @@ func (*keeneticDnsRouting) GetExistingDnsRoutingGroups() (map[string][]string, e
 		func() error {
 			var objectGroupResponse gokeenrestapimodels.ObjectGroupFqdnResponse
 
-			body, fetchErr := Common.ExecuteGetSubPath("/rci/show/object-group/fqdn")
+			body, fetchErr := Common.ExecuteGetSubPath("/rci/object-group/fqdn")
 			if fetchErr != nil {
 				return fetchErr
 			}
@@ -83,16 +83,12 @@ func (*keeneticDnsRouting) GetExistingDnsRoutingGroups() (map[string][]string, e
 			}
 
 			groups = make(map[string][]string)
-			for _, group := range objectGroupResponse.Group {
-				domains := make([]string, 0, len(group.Entry))
-				for _, entry := range group.Entry {
-					// Only include user-configured domains, skip runtime auto-discovered subdomains
-					// Runtime entries are automatically managed by the router
-					if entry.Type == "config" || entry.Type == "" {
-						domains = append(domains, entry.Fqdn)
-					}
+			for groupName, group := range objectGroupResponse {
+				domains := make([]string, 0, len(group.Include))
+				for _, entry := range group.Include {
+					domains = append(domains, entry.Address)
 				}
-				groups[group.GroupName] = domains
+				groups[groupName] = domains
 			}
 
 			return nil
@@ -237,6 +233,13 @@ func (*keeneticDnsRouting) LoadDomainsFromFile(filePath string) ([]string, error
 
 // LoadDomainsFromURL downloads a .txt file from a URL and returns the domains
 func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
+	// Check cache first
+	if cached, ok := gokeencache.GetURLContent(url); ok {
+		lines := strings.Split(cached, "\n")
+		domains, _ := parseDomainLines(lines, "URL")
+		return domains, nil
+	}
+
 	rClient := resty.New()
 	rClient.SetDisableWarn(true)
 	rClient.SetTimeout(time.Second * 5)
@@ -260,7 +263,11 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 		return nil, fmt.Errorf("failed to fetch domain URL '%s': status code %d", url, response.StatusCode())
 	}
 
-	lines := strings.Split(string(response.Body()), "\n")
+	content := string(response.Body())
+	// Cache with configured TTL
+	gokeencache.SetURLContent(url, content, config.GetURLCacheTTL())
+
+	lines := strings.Split(content, "\n")
 	domains, skipped := parseDomainLines(lines, "URL")
 
 	if skipped > 0 {
@@ -376,6 +383,7 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 	}
 
 	// Get existing groups from router to make operation idempotent
+
 	existingGroups, err := DnsRouting.GetExistingDnsRoutingGroups()
 	if err != nil {
 		return fmt.Errorf("failed to get existing DNS-routing groups: %w", err)

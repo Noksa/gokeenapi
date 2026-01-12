@@ -136,3 +136,14 @@ logs:
   # Enable debug logging for all commands
   # Also controllable via --debug command line flag
   debug: false
+
+# =============================================================================
+# Cache Configuration
+# =============================================================================
+
+cache:
+  # URL cache TTL - how long to cache downloaded content from bat-url and domain-url
+  # Format: duration string (e.g., "1m", "5m", "1h", "30s")
+  # Default: 1m (1 minute) if not specified
+  # Reduces network requests when running commands multiple times
+  urlTtl: 1m
