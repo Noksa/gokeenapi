@@ -38,8 +38,8 @@ var (
 	AliasesUpdateAwg        = []string{"updateawg", "uawg"}
 	AliasesAddDnsRecords    = []string{"adddnsrecords", "adr"}
 	AliasesDeleteDnsRecords = []string{"deletednsrecords", "ddr"}
-	AliasesAddDnsRouting    = []string{"adddnsrouting", "adnsr"}
-	AliasesDeleteDnsRouting = []string{"deletednsrouting", "ddnsr"}
+	AliasesAddDnsRouting    = []string{"adddnsrouting", "adnsr", "adddnsroutes", "add-dns-routes"}
+	AliasesDeleteDnsRouting = []string{"deletednsrouting", "ddnsr", "deletednsroutes", "delete-dns-routes"}
 	AliasesDeleteKnownHosts = []string{"deleteknownhosts", "dkh"}
 	AliasesExec             = []string{"e"}
 	AliasesScheduler        = []string{"schedule", "sched"}
