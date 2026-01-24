@@ -139,7 +139,7 @@ func GetURLContent(url string) (string, bool) {
 	}
 
 	if time.Now().After(entry.ExpiresAt) {
-		_ = os.Remove(filepath)
+		// Cache expired - return miss but keep file for checksum comparison
 		return "", false
 	}
 
