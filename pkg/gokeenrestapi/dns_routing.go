@@ -549,20 +549,22 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 	parseSlice = Common.EnsureSaveConfigAtEnd(parseSlice)
 
 	var parseResponse []gokeenrestapimodels.ParseResponse
-	err = gokeenspinner.WrapWithSpinner(
+	err = gokeenspinner.WrapWithSpinnerAndOptions(
 		fmt.Sprintf("Applying %v DNS-routing groups", color.CyanString("%d", len(groups))),
-		func() error {
+		func(opts *gokeenspinner.SpinnerOptions) error {
 			var executeErr error
 			parseResponse, executeErr = Common.ExecutePostParse(parseSlice...)
+
+			opts.AddActionAfterSpinner(func() {
+				gokeenlog.PrintParseResponse(parseResponse)
+				if executeErr == nil {
+					gokeenlog.InfoSubStepf("Successfully applied %v DNS-routing groups", len(groups))
+				}
+			})
+
 			return executeErr
 		},
 	)
-
-	gokeenlog.PrintParseResponse(parseResponse)
-
-	if err == nil {
-		gokeenlog.InfoSubStepf("Successfully applied %v DNS-routing groups", len(groups))
-	}
 
 	return err
 }
@@ -600,20 +602,22 @@ func (*keeneticDnsRouting) DeleteDnsRoutingGroups(groups []config.DnsRoutingGrou
 	parseSlice = Common.EnsureSaveConfigAtEnd(parseSlice)
 
 	var parseResponse []gokeenrestapimodels.ParseResponse
-	err := gokeenspinner.WrapWithSpinner(
+	err := gokeenspinner.WrapWithSpinnerAndOptions(
 		fmt.Sprintf("Deleting %v DNS-routing groups", color.CyanString("%d", len(groups))),
-		func() error {
+		func(opts *gokeenspinner.SpinnerOptions) error {
 			var executeErr error
 			parseResponse, executeErr = Common.ExecutePostParse(parseSlice...)
+
+			opts.AddActionAfterSpinner(func() {
+				gokeenlog.PrintParseResponse(parseResponse)
+				if executeErr == nil {
+					gokeenlog.InfoSubStepf("Successfully deleted %v DNS-routing groups", len(groups))
+				}
+			})
+
 			return executeErr
 		},
 	)
-
-	gokeenlog.PrintParseResponse(parseResponse)
-
-	if err == nil {
-		gokeenlog.InfoSubStepf("Successfully deleted %v DNS-routing groups", len(groups))
-	}
 
 	return err
 }

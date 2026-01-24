@@ -33,16 +33,21 @@ type keeneticIp struct {
 // GetAllHotspots retrieves all known hosts (devices) from the router's hotspot database
 func (*keeneticIp) GetAllHotspots() (gokeenrestapimodels.RciShowIpHotspot, error) {
 	var hotspot gokeenrestapimodels.RciShowIpHotspot
-	err := gokeenspinner.WrapWithSpinner("Fetching hotspots", func() error {
+	err := gokeenspinner.WrapWithSpinnerAndOptions("Fetching hotspots", func(opts *gokeenspinner.SpinnerOptions) error {
 		body, err := Common.ExecuteGetSubPath("/rci/show/ip/hotspot")
 		if err != nil {
 			return err
 		}
-		return json.Unmarshal(body, &hotspot)
+		if err := json.Unmarshal(body, &hotspot); err != nil {
+			return err
+		}
+
+		opts.AddActionAfterSpinner(func() {
+			gokeenlog.InfoSubStepf("Found %v hosts", color.BlueString("%v", len(hotspot.Host)))
+		})
+
+		return nil
 	})
-	if err == nil {
-		gokeenlog.InfoSubStepf("Found %v hosts", color.BlueString("%v", len(hotspot.Host)))
-	}
 	return hotspot, err
 }
 
@@ -97,24 +102,34 @@ func (*keeneticIp) DeleteKnownHosts(hostMacs []string) error {
 // GetAllUserRoutesRciIpRoute retrieves all user-defined static routes for a specific interface
 func (*keeneticIp) GetAllUserRoutesRciIpRoute(keeneticInterface string) ([]gokeenrestapimodels.RciIpRoute, error) {
 	var routes []gokeenrestapimodels.RciIpRoute
-	err := gokeenspinner.WrapWithSpinner("Fetching static routes", func() error {
+	var realRoutes []gokeenrestapimodels.RciIpRoute
+
+	err := gokeenspinner.WrapWithSpinnerAndOptions("Fetching static routes", func(opts *gokeenspinner.SpinnerOptions) error {
 		body, err := Common.ExecuteGetSubPath("/rci/ip/route")
 		if err != nil {
 			return err
 		}
-		return json.Unmarshal(body, &routes)
+		if err := json.Unmarshal(body, &routes); err != nil {
+			return err
+		}
+
+		for _, route := range routes {
+			if route.Interface == keeneticInterface {
+				realRoutes = append(realRoutes, route)
+			}
+		}
+
+		opts.AddActionAfterSpinner(func() {
+			gokeenlog.InfoSubStepf("Found %v static routes for %v interface", color.BlueString("%v", len(realRoutes)), keeneticInterface)
+		})
+
+		return nil
 	})
+
 	if err != nil {
 		return nil, err
 	}
-	var realRoutes []gokeenrestapimodels.RciIpRoute
-	for _, route := range routes {
-		if route.Interface == keeneticInterface {
-			realRoutes = append(realRoutes, route)
-		}
-	}
-	gokeenlog.InfoSubStepf("Found %v static routes for %v interface", color.BlueString("%v", len(realRoutes)), keeneticInterface)
-	return realRoutes, err
+	return realRoutes, nil
 }
 
 // DeleteRoutes removes static routes from the specified interface
