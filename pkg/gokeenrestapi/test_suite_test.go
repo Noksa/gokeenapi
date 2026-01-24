@@ -22,4 +22,5 @@ func (s *GokeenrestapiTestSuite) TearDownTest() {
 	if s.server != nil {
 		s.server.Close()
 	}
+	CleanupTestConfig()
 }

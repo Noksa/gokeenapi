@@ -258,13 +258,7 @@ func ValidateDnsRoutingGroups(groups []DnsRoutingGroup) error {
 		}
 
 		// Check if name contains only whitespace
-		trimmed := ""
-		for _, r := range group.Name {
-			if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
-				trimmed += string(r)
-			}
-		}
-		if len(trimmed) == 0 {
+		if len(strings.TrimSpace(group.Name)) == 0 {
 			return errors.New("DNS routing group name cannot contain only whitespace")
 		}
 
@@ -296,19 +290,18 @@ func ValidateDomainList(domains []string, groupName string) error {
 		}
 
 		// Check if domain contains only whitespace
-		domainTrimmed := ""
-		for _, r := range domain {
-			if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
-				domainTrimmed += string(r)
-			}
-		}
-		if len(domainTrimmed) == 0 {
+		if len(strings.TrimSpace(domain)) == 0 {
 			return errors.New("domain or IP address cannot contain only whitespace in DNS routing group " + groupName + " at position " + string(rune(j)))
 		}
 
 		// Validate domain or IP format
-		// Try to parse as IP first, then as domain
-		if !isValidIP(domain) && !isValidDomain(domain) {
+		// Try to parse as IP first
+		if isValidIP(domain) {
+			continue
+		}
+
+		// Then validate as domain using IDNA (same validation as during parsing)
+		if !isValidDomain(domain) {
 			return errors.New("invalid domain or IP address '" + domain + "' in DNS routing group " + groupName)
 		}
 	}
@@ -369,8 +362,8 @@ func expandBatLists(configPath string) error {
 	yamlCache := make(map[string]*BatLists)
 
 	for i := range Cfg.Routes {
-		expandedBatFiles := []string{}
-		expandedBatURLs := []string{}
+		var expandedBatFiles []string
+		var expandedBatURLs []string
 
 		// Collect all unique YAML file paths from both bat-file and bat-url
 		yamlFiles := make(map[string]bool)
@@ -470,8 +463,8 @@ func expandDomainLists(configPath string) error {
 	yamlCache := make(map[string]*DomainLists)
 
 	for i := range Cfg.DNS.Routes.Groups {
-		expandedDomainFiles := []string{}
-		expandedDomainURLs := []string{}
+		var expandedDomainFiles []string
+		var expandedDomainURLs []string
 
 		// Collect all unique YAML file paths from both domain-file and domain-url
 		yamlFiles := make(map[string]bool)

@@ -134,9 +134,12 @@ func (*keeneticDnsRouting) GetExistingDnsProxyRoutes() (map[string]string, error
 // Returns true if valid, false otherwise. If debug logging is enabled, logs the reason for rejection.
 // Results are cached in memory to avoid redundant IDNA lookups.
 func validateDomainWithIDNA(domain string) (bool, string) {
-	// Check cache first
+	// Check cache first - but still need to recompute reason for invalid domains
 	if valid, cached := gokeencache.GetDomainValidation(domain); cached {
-		return valid, ""
+		if valid {
+			return true, ""
+		}
+		// For invalid cached domains, fall through to recompute the reason
 	}
 
 	// Skip empty domains
@@ -303,7 +306,7 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 
 // validateNoDuplicateDomainsAcrossGroups checks that no domain appears in multiple groups
 // This prevents routing conflicts where the same domain would be routed through different interfaces
-func validateNoDuplicateDomainsAcrossGroups(groupDomains map[string][]string) error {
+func validateNoDuplicateDomainsAcrossGroups(groupDomains map[string][]string) {
 	domainToGroups := make(map[string][]string)
 	for groupName, domains := range groupDomains {
 		for _, domain := range domains {
@@ -320,20 +323,17 @@ func validateNoDuplicateDomainsAcrossGroups(groupDomains map[string][]string) er
 
 	if len(duplicates) > 0 {
 		slices.Sort(duplicates)
-		gokeenlog.Info("Configuration error: domains cannot appear in multiple groups")
-		gokeenlog.HorizontalLine()
+		gokeenlog.Infof("%s: domains cannot appear in multiple groups", color.RedString("Misconfiguration found"))
 		for _, domain := range duplicates {
 			groupNames := domainToGroups[domain]
-			gokeenlog.InfoSubStepf("  - %s appears in groups: %s",
+			gokeenlog.InfoSubStepf("%s appears in groups: %s",
 				color.YellowString(domain),
 				color.CyanString(strings.Join(groupNames, ", ")))
 		}
-		gokeenlog.HorizontalLine()
 		gokeenlog.Info("Each domain must belong to exactly one DNS-routing group to avoid routing conflicts")
-		return errors.New("duplicate domains found across groups")
+		gokeenlog.Info("Continue anyway - but keep in mind that it should be fixed")
+		gokeenlog.HorizontalLine()
 	}
-
-	return nil
 }
 
 // AddDnsRoutingGroups creates object-groups and dns-proxy routes for the specified groups
@@ -440,9 +440,7 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 	}
 
 	// Validate no domain appears in multiple groups (configuration error)
-	if err := validateNoDuplicateDomainsAcrossGroups(groupDomains); err != nil {
-		return err
-	}
+	validateNoDuplicateDomainsAcrossGroups(groupDomains)
 
 	// Get existing groups from router to make operation idempotent
 

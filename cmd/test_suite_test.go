@@ -29,6 +29,7 @@ func (s *CmdTestSuite) TearDownTest() {
 	if s.server != nil {
 		s.server.Close()
 	}
+	gokeenrestapi.CleanupTestConfig()
 }
 
 // CaptureOutput executes a command and captures its stdout output
