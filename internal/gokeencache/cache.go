@@ -17,6 +17,7 @@ const (
 	rciShowInterfaces = "rci_show_interfaces"
 	runtimeConfig     = "runtime_config"
 	rciShowIpRoute    = "rci_show_ip_route"
+	domainValidation  = "domain_validation_"
 )
 
 var (
@@ -25,6 +26,7 @@ var (
 
 type urlCacheEntry struct {
 	Content   string    `json:"content"`
+	Checksum  string    `json:"checksum"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
@@ -48,6 +50,11 @@ func GetGokeenDir() (string, error) {
 func urlToCacheFilename(url string) string {
 	hash := md5.Sum([]byte(url))
 	return fmt.Sprintf("url_%x.json", hash)
+}
+
+// ComputeChecksum calculates MD5 checksum of content
+func ComputeChecksum(content []byte) [16]byte {
+	return md5.Sum(content)
 }
 
 func UpdateRuntimeConfig(f func(runtime *config.Runtime)) {
@@ -89,8 +96,10 @@ func GetRciShowInterfaces() map[string]gokeenrestapimodels.RciShowInterface {
 }
 
 func SetURLContent(url string, content string, ttl time.Duration) {
+	checksum := fmt.Sprintf("%x", md5.Sum([]byte(content)))
 	entry := urlCacheEntry{
 		Content:   content,
+		Checksum:  checksum,
 		ExpiresAt: time.Now().Add(ttl),
 	}
 
@@ -135,4 +144,41 @@ func GetURLContent(url string) (string, bool) {
 	}
 
 	return entry.Content, true
+}
+
+// GetURLChecksum returns the cached checksum for a URL, or empty string if not cached
+func GetURLChecksum(url string) string {
+	gokeenDir, err := GetGokeenDir()
+	if err != nil {
+		return ""
+	}
+
+	filename := urlToCacheFilename(url)
+	filepath := path.Join(gokeenDir, filename)
+
+	data, err := os.ReadFile(filepath)
+	if err != nil {
+		return ""
+	}
+
+	var entry urlCacheEntry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return ""
+	}
+
+	return entry.Checksum
+}
+
+// SetDomainValidation caches domain validation result (in-memory only)
+func SetDomainValidation(domain string, valid bool) {
+	c.Set(domainValidation+domain, valid, cache.NoExpiration)
+}
+
+// GetDomainValidation retrieves cached domain validation result
+func GetDomainValidation(domain string) (bool, bool) {
+	v, ok := c.Get(domainValidation + domain)
+	if !ok {
+		return false, false
+	}
+	return v.(bool), true
 }

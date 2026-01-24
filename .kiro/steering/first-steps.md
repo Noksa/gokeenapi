@@ -11,7 +11,7 @@ This is **gokeenapi**, a Go CLI tool for automating Keenetic (Netcraze) router m
 When starting work on this project:
 
 1. Read `README.md` for feature overview and command documentation
-1. Read `SCHEDULER.md` for Scheduler feature overview and related commands
+2. Read `SCHEDULER.md` for Scheduler feature overview and related commands
 3. Check `Makefile` for available build, test, and lint targets
 4. Examine `go.mod` for Go version and dependencies
 5. Review `main.go` for application entry point
@@ -65,3 +65,8 @@ When starting work on this project:
 - Modifying API client: Update `pkg/gokeenrestapi/`, ensure models in `pkg/gokeenrestapimodels/` match
 - Configuration changes: Update `pkg/config/`, maintain backward compatibility
 - Scheduler tasks: Modify `cmd/scheduler.go` and related test files
+
+## Documentation
+
+- Do not create summary documents if not asked for it explicitly
+- Update existing documentation (*.md) after changes if required

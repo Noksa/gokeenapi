@@ -663,6 +663,46 @@ func TestHandleParse_DnsRoutingSkipExistingRoute(t *testing.T) {
 	assert.Equal(t, "Wireguard0", existingRoutes["test-group"])
 }
 
+// TestHandleParse_DnsRoutingDuplicateDomainAcrossGroups verifies that duplicate domains across groups are rejected
+func TestHandleParse_DnsRoutingDuplicateDomainAcrossGroups(t *testing.T) {
+	server := NewMockRouterServer(WithVersion("5.0.1"))
+	defer server.Close()
+
+	SetupTestConfig(server.URL)
+	err := Common.Auth()
+	require.NoError(t, err)
+
+	// Create temporary domain files with overlapping domains
+	tmpDir := t.TempDir()
+
+	file1 := filepath.Join(tmpDir, "group1.txt")
+	err = os.WriteFile(file1, []byte("example.com\ntest.com\n"), 0644)
+	require.NoError(t, err)
+
+	file2 := filepath.Join(tmpDir, "group2.txt")
+	err = os.WriteFile(file2, []byte("example.com\nother.com\n"), 0644)
+	require.NoError(t, err)
+
+	// Create groups with duplicate domain (example.com in both)
+	groups := []config.DnsRoutingGroup{
+		{
+			Name:        "group1",
+			DomainFile:  []string{file1},
+			InterfaceID: "Wireguard0",
+		},
+		{
+			Name:        "group2",
+			DomainFile:  []string{file2},
+			InterfaceID: "ISP",
+		},
+	}
+
+	// Should fail with duplicate domain error
+	err = DnsRouting.AddDnsRoutingGroups(groups)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate domains found across groups")
+}
+
 // TestHandleParse_DnsRoutingUpdateRouteInterface verifies that dns-proxy route is updated when interface changes
 func TestHandleParse_DnsRoutingUpdateRouteInterface(t *testing.T) {
 	// Start with a group and route configured with Wireguard0

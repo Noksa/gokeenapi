@@ -132,15 +132,23 @@ func (*keeneticDnsRouting) GetExistingDnsProxyRoutes() (map[string]string, error
 // validateDomainWithIDNA validates a domain name using IDNA (Internationalized Domain Names in Applications)
 // This handles both ASCII and internationalized domain names correctly
 // Returns true if valid, false otherwise. If debug logging is enabled, logs the reason for rejection.
+// Results are cached in memory to avoid redundant IDNA lookups.
 func validateDomainWithIDNA(domain string) (bool, string) {
+	// Check cache first
+	if valid, cached := gokeencache.GetDomainValidation(domain); cached {
+		return valid, ""
+	}
+
 	// Skip empty domains
 	if domain == "" {
+		gokeencache.SetDomainValidation(domain, false)
 		return false, "empty domain"
 	}
 
 	// Domain must contain at least one dot (have a TLD)
 	// This rejects bare names like "youtube", "instagram"
 	if !strings.Contains(domain, ".") {
+		gokeencache.SetDomainValidation(domain, false)
 		return false, "missing TLD (no dot)"
 	}
 
@@ -148,9 +156,11 @@ func validateDomainWithIDNA(domain string) (bool, string) {
 	// This validates the domain structure and handles internationalized domains
 	_, err := idna.Lookup.ToASCII(domain)
 	if err != nil {
+		gokeencache.SetDomainValidation(domain, false)
 		return false, fmt.Sprintf("IDNA validation failed: %v", err)
 	}
 
+	gokeencache.SetDomainValidation(domain, true)
 	return true, ""
 }
 
@@ -232,6 +242,7 @@ func (*keeneticDnsRouting) LoadDomainsFromFile(filePath string) ([]string, error
 }
 
 // LoadDomainsFromURL downloads a .txt file from a URL and returns the domains
+// Tracks content changes via checksum and reports when remote lists are updated
 func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 	// Check cache first
 	if cached, ok := gokeencache.GetURLContent(url); ok {
@@ -239,6 +250,9 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 		domains, _ := parseDomainLines(lines, "URL")
 		return domains, nil
 	}
+
+	// Get previous checksum to detect changes
+	previousChecksum := gokeencache.GetURLChecksum(url)
 
 	rClient := resty.New()
 	rClient.SetDisableWarn(true)
@@ -264,6 +278,14 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 	}
 
 	content := string(response.Body())
+
+	// Calculate checksum and compare with previous
+	currentChecksum := fmt.Sprintf("%x", gokeencache.ComputeChecksum([]byte(content)))
+	if previousChecksum != "" && previousChecksum != currentChecksum {
+		gokeenlog.InfoSubStepf("Domain list updated (checksum changed): %v",
+			color.YellowString(url))
+	}
+
 	// Cache with configured TTL
 	gokeencache.SetURLContent(url, content, config.GetURLCacheTTL())
 
@@ -277,6 +299,41 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 	}
 
 	return domains, nil
+}
+
+// validateNoDuplicateDomainsAcrossGroups checks that no domain appears in multiple groups
+// This prevents routing conflicts where the same domain would be routed through different interfaces
+func validateNoDuplicateDomainsAcrossGroups(groupDomains map[string][]string) error {
+	domainToGroups := make(map[string][]string)
+	for groupName, domains := range groupDomains {
+		for _, domain := range domains {
+			domainToGroups[domain] = append(domainToGroups[domain], groupName)
+		}
+	}
+
+	var duplicates []string
+	for domain, groupNames := range domainToGroups {
+		if len(groupNames) > 1 {
+			duplicates = append(duplicates, domain)
+		}
+	}
+
+	if len(duplicates) > 0 {
+		slices.Sort(duplicates)
+		gokeenlog.Info("Configuration error: domains cannot appear in multiple groups")
+		gokeenlog.HorizontalLine()
+		for _, domain := range duplicates {
+			groupNames := domainToGroups[domain]
+			gokeenlog.InfoSubStepf("  - %s appears in groups: %s",
+				color.YellowString(domain),
+				color.CyanString(strings.Join(groupNames, ", ")))
+		}
+		gokeenlog.HorizontalLine()
+		gokeenlog.Info("Each domain must belong to exactly one DNS-routing group to avoid routing conflicts")
+		return errors.New("duplicate domains found across groups")
+	}
+
+	return nil
 }
 
 // AddDnsRoutingGroups creates object-groups and dns-proxy routes for the specified groups
@@ -380,6 +437,11 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 	// If there were errors loading domains, return them
 	if mErr != nil {
 		return mErr
+	}
+
+	// Validate no domain appears in multiple groups (configuration error)
+	if err := validateNoDuplicateDomainsAcrossGroups(groupDomains); err != nil {
+		return err
 	}
 
 	// Get existing groups from router to make operation idempotent
