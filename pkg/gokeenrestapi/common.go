@@ -235,23 +235,32 @@ func (c *keeneticCommon) Auth() error {
 		return err
 	}
 
-	err = gokeenspinner.WrapWithSpinner(fmt.Sprintf("Authorizing in %v", color.CyanString("Keenetic")), func() error {
-		return c.performAuth(c.GetApiClient())
+	var version gokeenrestapimodels.Version
+
+	err = gokeenspinner.WrapWithSpinnerAndOptions(fmt.Sprintf("Authorizing in %v", color.CyanString("Keenetic")), func(opts *gokeenspinner.SpinnerOptions) error {
+		if err := c.performAuth(c.GetApiClient()); err != nil {
+			return err
+		}
+		if _, _, err := c.CheckRouterMode(); err != nil {
+			return err
+		}
+		var vErr error
+		version, vErr = c.Version()
+		if vErr != nil {
+			return vErr
+		}
+
+		opts.AddActionAfterSpinner(func() {
+			gokeenlog.InfoSubStepf("%v: %v", color.BlueString("Router"), color.CyanString(version.Model))
+			gokeenlog.InfoSubStepf("%v: %v", color.BlueString("OS version"), color.CyanString(version.Title))
+		})
+
+		return nil
 	})
 	if err != nil {
 		return err
 	}
-	_, _, err = c.CheckRouterMode()
-	if err != nil {
-		return err
-	}
-	version, err := c.Version()
-	if err != nil {
-		return err
-	}
-	gokeenlog.InfoSubStepf("%v: %v", color.BlueString("Router"), color.CyanString(version.Model))
-	gokeenlog.InfoSubStepf("%v: %v", color.BlueString("OS version"), color.CyanString(version.Title))
-	gokeenlog.HorizontalLine()
+
 	gokeencache.UpdateRuntimeConfig(func(runtime *config.Runtime) {
 		runtime.RouterInfo.Version = version
 	})
