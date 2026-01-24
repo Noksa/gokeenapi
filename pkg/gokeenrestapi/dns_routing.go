@@ -251,6 +251,10 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 	if cached, ok := gokeencache.GetURLContent(url); ok {
 		lines := strings.Split(cached, "\n")
 		domains, _ := parseDomainLines(lines, "URL")
+		gokeenlog.InfoSubStepf("Loaded %v domains from cache, URL: %v",
+			color.GreenString("%d", len(domains)),
+			color.CyanString(url))
+		gokeenlog.HorizontalLine()
 		return domains, nil
 	}
 
@@ -261,44 +265,54 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 	rClient.SetDisableWarn(true)
 	rClient.SetTimeout(time.Second * 5)
 
-	var response *resty.Response
-	var err error
+	var domains []string
+	var skipped int
+	var checksumChanged bool
 
-	err = gokeenspinner.WrapWithSpinner(
+	err := gokeenspinner.WrapWithSpinnerAndOptions(
 		fmt.Sprintf("Fetching %v url", color.CyanString(url)),
-		func() error {
-			response, err = rClient.R().Get(url)
-			return err
+		func(opts *gokeenspinner.SpinnerOptions) error {
+			response, err := rClient.R().Get(url)
+			if err != nil {
+				return err
+			}
+			if response.StatusCode() != 200 {
+				return fmt.Errorf("status code %d", response.StatusCode())
+			}
+
+			content := string(response.Body())
+
+			// Calculate checksum and compare with previous
+			currentChecksum := fmt.Sprintf("%x", gokeencache.ComputeChecksum([]byte(content)))
+			if previousChecksum != "" && previousChecksum != currentChecksum {
+				checksumChanged = true
+			}
+
+			// Cache with configured TTL
+			gokeencache.SetURLContent(url, content, config.GetURLCacheTTL())
+
+			lines := strings.Split(content, "\n")
+			domains, skipped = parseDomainLines(lines, "URL")
+
+			opts.AddActionAfterSpinner(func() {
+				if checksumChanged {
+					gokeenlog.InfoSubStepf("Domain list updated (checksum changed): %v",
+						color.YellowString(url))
+				}
+				if skipped > 0 {
+					gokeenlog.InfoSubStepf("Skipped %v invalid domain(s)",
+						color.YellowString("%d", skipped))
+				}
+				gokeenlog.InfoSubStepf("Loaded %v domains",
+					color.GreenString("%d", len(domains)))
+			})
+
+			return nil
 		},
 	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch domain URL '%s': %w", url, err)
-	}
-
-	if response.StatusCode() != 200 {
-		return nil, fmt.Errorf("failed to fetch domain URL '%s': status code %d", url, response.StatusCode())
-	}
-
-	content := string(response.Body())
-
-	// Calculate checksum and compare with previous
-	currentChecksum := fmt.Sprintf("%x", gokeencache.ComputeChecksum([]byte(content)))
-	if previousChecksum != "" && previousChecksum != currentChecksum {
-		gokeenlog.InfoSubStepf("Domain list updated (checksum changed): %v",
-			color.YellowString(url))
-	}
-
-	// Cache with configured TTL
-	gokeencache.SetURLContent(url, content, config.GetURLCacheTTL())
-
-	lines := strings.Split(content, "\n")
-	domains, skipped := parseDomainLines(lines, "URL")
-
-	if skipped > 0 {
-		gokeenlog.InfoSubStepf("Skipped %v invalid domain(s) from URL: %v",
-			color.YellowString("%d", skipped),
-			color.CyanString(url))
 	}
 
 	return domains, nil
@@ -396,11 +410,7 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 				mErr = multierr.Append(mErr, fmt.Errorf("group '%s': %w", group.Name, err))
 				continue
 			}
-			gokeenlog.InfoSubStepf("Loaded %v domains from URL: %v",
-				color.GreenString("%d", len(domains)),
-				color.CyanString(url))
 			allDomains = append(allDomains, domains...)
-			gokeenlog.HorizontalLine()
 		}
 
 		if len(allDomains) == 0 {
