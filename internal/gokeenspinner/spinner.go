@@ -1,3 +1,6 @@
+// Package gokeenspinner provides terminal spinner utilities for long-running operations.
+// It displays progress indicators with timing information and supports both
+// interactive terminals (with animated spinners) and non-interactive environments.
 package gokeenspinner
 
 import (
@@ -11,25 +14,34 @@ import (
 	"golang.org/x/term"
 )
 
+// SpinnerOptions provides configuration for spinner behavior and post-completion actions.
 type SpinnerOptions struct {
 	mutex               sync.Mutex
 	actionsAfterSpinner []func()
 }
 
+// AddActionAfterSpinner registers a function to be called after the spinner completes.
+// Multiple actions can be registered and will be executed in order.
+// This is useful for printing additional information after the operation finishes.
 func (opts *SpinnerOptions) AddActionAfterSpinner(fn func()) {
 	opts.mutex.Lock()
 	defer opts.mutex.Unlock()
 	opts.actionsAfterSpinner = append(opts.actionsAfterSpinner, fn)
 }
 
-// WrapWithSpinner wraps a function with a spinner (simple version without options)
+// WrapWithSpinner wraps a function with a spinner display.
+// This is a simplified version that doesn't expose SpinnerOptions.
+// Use WrapWithSpinnerAndOptions for more control over post-completion behavior.
 func WrapWithSpinner(spinnerText string, f func() error) error {
 	return WrapWithSpinnerAndOptions(spinnerText, func(opts *SpinnerOptions) error {
 		return f()
 	})
 }
 
-// WrapWithSpinnerAndOptions wraps a function with a spinner and provides options for customization
+// WrapWithSpinnerAndOptions wraps a function with a spinner and provides options for customization.
+// In interactive terminals, displays an animated spinner with elapsed time.
+// In non-interactive environments (CI, pipes), prints simple status messages.
+// The spinnerText is displayed alongside the spinner/status.
 func WrapWithSpinnerAndOptions(spinnerText string, f func(*SpinnerOptions) error) error {
 	opts := &SpinnerOptions{}
 	startTime := time.Now()
