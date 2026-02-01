@@ -2,71 +2,53 @@
 inclusion: always
 ---
 
-# Project Overview
+# AI Assistant Guidelines
 
-This is **gokeenapi**, a Go CLI tool for automating Keenetic (Netcraze) router management. It handles routes, DNS records, DNS-routing (policy-based routing by domain), WireGuard connections, and scheduled tasks.
+Rules and priorities for AI assistants working on this codebase.
 
-## Initial Context Gathering
+## Priority Order
 
-When starting work on this project:
+1. Follow existing patterns - consistency over novelty
+2. Maintain backward compatibility in configs and APIs
+3. Run `make lint` before considering work complete
+4. Preserve existing tests when modifying code
 
-1. Read `README.md` for feature overview and command documentation
-2. Read `SCHEDULER.md` for Scheduler feature overview and related commands
-3. Check `Makefile` for available build, test, and lint targets
-4. Examine `go.mod` for Go version and dependencies
-5. Review `main.go` for application entry point
-6. Explore `cmd/` for command implementations (uses Cobra framework)
-7. Explore `pkg/` for core business logic and API clients
-8. Explore `internal/` for internal utilities (logging, caching, spinner)
+## Do NOT
 
-## Architecture Patterns
+- Create summary/documentation files unless explicitly requested
+- Add new tests unless explicitly requested
+- Create separate mocks - extend the unified mock instead
+- Guess at router API behavior - check existing implementations
 
-- **Command structure**: Uses [Cobra](https://github.com/spf13/cobra) CLI framework in `cmd/` directory
-- **Configuration**: YAML-based config files parsed in `pkg/config/`
-- **API client**: REST API client for Keenetic routers in `pkg/gokeenrestapi/`
-- **Models**: API response models in `pkg/gokeenrestapimodels/`
-- **Internal utilities**: Logging, caching, and UI components in `internal/`
+## Context Gathering
 
-## Code Conventions
+When starting unfamiliar work:
 
-- Follow existing patterns - consistency over novelty
-- Use the project's internal utilities (`gokeenlog`, `gokeencache`, `gokeenspinner`)
-- Match error handling patterns found in existing commands
-- Maintain command aliases (e.g., `show-interfaces` has aliases `showinterfaces`, `showifaces`, `si`) with constants
+1. `README.md` - Feature overview, command docs
+2. `SCHEDULER.md` - Scheduler-specific documentation
+3. `Makefile` - Available build/test targets
+4. `cmd/constants.go` - Command names and aliases
+5. Existing similar code - match patterns exactly
 
-## Build & Validation
+## Change Workflows
 
-- Run `make lint` to check code quality (runs `scripts/check.sh`)
-- Run `make test` to execute all tests
-- Run `make build` to build the binary (includes linting)
-- Tests use standard Go testing with property-based tests using `rapid` framework
-- Property tests are named `*_property_test.go`
+| Task | Key Files | Notes |
+|------|-----------|-------|
+| New command | `cmd/constants.go`, `cmd/<name>.go`, `cmd/root.go` | Define const, create cmd, register |
+| API changes | `pkg/gokeenrestapi/`, `pkg/gokeenrestapimodels/` | Keep models in sync |
+| Config changes | `pkg/config/` | Maintain backward compat |
+| Mock updates | `pkg/gokeenrestapi/mock_router.go` | Single unified mock |
 
-## Key Features to Understand
+## Error Handling Pattern
 
-- **DNS-routing**: Policy-based routing by domain (requires firmware 5.0.1+) - route traffic for specific domains through designated interfaces (`cmd/add_dns_routing.go`, `cmd/delete_dns_routing.go`)
-- **Scheduler**: Automated task execution at intervals or specific times (`cmd/scheduler.go`)
-- **Domain-file expansion**: YAML files can reference other YAML files containing domain lists (similar to bat-file expansion)
-- **Domain-url expansion**: YAML files can reference URLs serving domain lists (similar to bat-url expansion)
-- **Bat-file expansion**: YAML files can reference other YAML files containing bat-file lists
-- **Bat-url expansion**: YAML files can reference other YAML files containing bat-url lists
-- **Multi-router support**: Single config CAN'T manage multiple routers - to do that use multiple configuration files (one per router)
-- **Environment variables**: Credentials can be stored as `GOKEENAPI_KEENETIC_LOGIN` and `GOKEENAPI_KEENETIC_PASSWORD`
+Use `multierr` for aggregating errors. Match existing command error patterns:
 
-## Testing Philosophy
+```go
+if err != nil {
+    return fmt.Errorf("descriptive message: %w", err)
+}
+```
 
-- Maintain existing tests when modifying code
-- Do not add new tests unless explicitly requested
-- Test files follow Go conventions (`*_test.go`)
+## Documentation Updates
 
-## Common Workflows
-
-- Adding a new command: Create in `cmd/`, follow existing command patterns, register in `cmd/root.go`
-- Modifying API client: Update `pkg/gokeenrestapi/`, ensure models in `pkg/gokeenrestapimodels/` match
-- Configuration changes: Update `pkg/config/`, maintain backward compatibility
-- Scheduler tasks: Modify `cmd/scheduler.go` and related test files
-
-## Documentation
-
-- Do not create summary documents if not asked for it explicitly
-- Update existing documentation (*.md) after changes if required
+After code changes, update relevant `*.md` files if behavior or usage changed. Do not create new documentation files.

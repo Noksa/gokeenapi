@@ -13,3 +13,4 @@ coverage.out
 custom
 q.log
 **/testdata/rapid/**/*.fail
+.cyber.sh

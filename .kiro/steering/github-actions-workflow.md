@@ -1,49 +1,49 @@
-# GitHub Actions Workflow Management
+---
+inclusion: fileMatch
+fileMatchPattern: '.github/workflows/*.yml'
+---
 
-## Post-Change Workflow Review
+# GitHub Actions Workflow Guidelines
 
-After completing any code changes, always:
+## Project Workflow Structure
 
-1. **Review existing workflows** - Check if `.github/workflows/` files need updates based on:
-   - New dependencies or tools added
-   - Changes to build process or requirements
-   - New test types or coverage requirements
-   - Security or deployment changes
+This project uses `.github/workflows/ci.yml` with three parallel jobs:
 
-2. **Suggest workflow improvements** - Proactively recommend:
-   - New workflow steps for added functionality
-   - Additional checks or validations
-   - Performance optimizations
-   - Security scanning if new dependencies added
+| Job | Purpose | Key Steps |
+|-----|---------|-----------|
+| `build` | Compile verification | `go build -v ./...` |
+| `lint` | Code quality | `golangci-lint-action` with 15m timeout |
+| `test` | Unit + integration tests | `make test` (includes Docker tests) |
 
-3. **Validate workflow changes** - Ensure any workflow modifications:
-   - Follow GitHub Actions best practices
-   - Use official actions from trusted sources
-   - Include proper caching strategies
-   - Have appropriate timeouts and error handling
+## Required Patterns
 
-## Workflow Best Practices
+When modifying workflows:
 
-All GitHub Actions workflows MUST:
+- **Go setup**: `actions/setup-go@v6` with `go-version: '1.25'` and `cache: true`
+- **Linting**: `golangci/golangci-lint-action@v9` with `version: v2.6`
+- **Checkout**: `actions/checkout@v5`
+- **Docker**: `docker/setup-buildx-action@v3` (required for integration tests)
+- **Triggers**: Push/PR on `main`, `master`, `develop` branches
 
-- **Use semantic versioning for actions** - Pin to major versions (e.g., `@v5`) for stability with updates
-- **Enable caching** - Use built-in caching for dependencies (Go modules, npm packages, etc.)
-- **Be idiomatic** - Follow language-specific conventions and official action recommendations
-- **Be efficient** - Avoid redundant steps, use matrix builds when appropriate, parallelize independent jobs
-- **Use official actions** - Prefer `actions/*` and official language actions (e.g., `setup-go`, `setup-node`)
-- **Include proper triggers** - Set appropriate `on:` conditions (push, pull_request, schedule, etc.)
-- **Have clear names** - Use descriptive job and step names for easy debugging
-- **Handle secrets properly** - Use GitHub Secrets, never hardcode credentials
-- **Set timeouts** - Prevent runaway jobs with `timeout-minutes`
-- **Use matrix strategy** - Test across multiple versions/platforms when relevant
+## Best Practices
 
-## Go-Specific Workflow Patterns
+- Pin actions to major versions (`@v5`, `@v6`) for stability with security updates
+- Use semantic Go version (`1.25` not `1.25.0`) for patch flexibility
+- Enable `cache: true` on setup-go - avoids redundant `go mod download`
+- Set `timeout-minutes` on long-running steps (lint uses 15m)
+- Keep jobs parallel and independent for faster CI
 
-For Go projects:
+## Post-Change Review
 
-- Use `actions/setup-go@v5` with `cache: true` for dependency caching
-- Use `golangci/golangci-lint-action@v6` for linting (includes fmt, vet, and more)
-- Avoid redundant `go mod download` when caching is enabled
-- Use semantic Go versions (e.g., `1.25` not `1.25.0`) for flexibility
-- Run tests with race detector on CI: `go test -race ./...` (when appropriate)
-- Consider separate jobs for build, lint, and test for better parallelization
+After code changes, check if workflows need updates for:
+
+- New dependencies requiring additional setup steps
+- New test types or coverage requirements
+- Build process changes (Makefile targets, Docker requirements)
+
+## Do NOT
+
+- Add redundant `go mod download` steps (caching handles this)
+- Hardcode credentials (use GitHub Secrets)
+- Create overly complex matrix builds unless testing multiple Go versions
+- Duplicate lint checks already in `golangci-lint` (fmt, vet included)

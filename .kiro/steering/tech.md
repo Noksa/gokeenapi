@@ -1,55 +1,64 @@
+---
+inclusion: always
+---
+
 # Tech Stack
 
 ## Language & Runtime
 
-- **Go 1.25+** (see `go.mod`)
-- Standard Go project layout with `cmd/`, `pkg/`, `internal/`
+- Go 1.25+ with standard project layout (`cmd/`, `pkg/`, `internal/`)
+- Use `go.mod` as source of truth for version and dependencies
 
 ## Key Dependencies
 
-- **cobra** (`github.com/spf13/cobra`) - CLI framework
-- **resty** (`github.com/go-resty/resty/v2`) - HTTP client for REST API
-- **yaml.v3** (`gopkg.in/yaml.v3`) - YAML configuration parsing
-- **testify** (`github.com/stretchr/testify`) - Testing assertions and suites
-- **rapid** (`pgregory.net/rapid`) - Property-based testing framework
-- **spinner** (`github.com/briandowns/spinner`) - CLI progress indicators
-- **color** (`github.com/fatih/color`) - Colored terminal output
-- **go-cache** (`github.com/patrickmn/go-cache`) - In-memory caching
-- **multierr** (`go.uber.org/multierr`) - Error aggregation
+| Package | Import Path | Purpose |
+|---------|-------------|---------|
+| cobra | `github.com/spf13/cobra` | CLI framework |
+| resty | `github.com/go-resty/resty/v2` | HTTP client |
+| yaml.v3 | `gopkg.in/yaml.v3` | YAML parsing |
+| testify | `github.com/stretchr/testify` | Test assertions/suites |
+| rapid | `pgregory.net/rapid` | Property-based testing |
+| multierr | `go.uber.org/multierr` | Error aggregation |
+| go-version | `github.com/hashicorp/go-version` | Semantic version parsing |
 
-## Build & Development
-
-### Common Commands
+## Build Commands
 
 ```bash
-make lint      # Run linting (go fmt, go vet, golangci-lint)
-make test      # Run all tests
-make build     # Lint + build Docker image
+make lint           # go fmt, go vet, modernize, golangci-lint
+make test           # Run all tests
+make build          # Lint + Docker build
 make test-coverage  # Tests with coverage report
 ```
 
-### Linting Pipeline (`scripts/check.sh`)
+## Code Style Rules
 
-1. `go mod tidy`
-2. `go fmt ./...`
-3. `go vet ./...`
-4. `modernize -fix ./...`
-5. `golangci-lint run --timeout 15m`
+- Run `make lint` before committing - it executes `scripts/check.sh`
+- Linting includes: `go mod tidy` → `go fmt` → `go vet` → `modernize -fix` → `golangci-lint`
+- Use `multierr` for aggregating multiple errors
+- Prefer `resty` over `net/http` for API calls
 
-### Docker
+## Testing Conventions
 
-- Multi-arch builds (linux/amd64, linux/arm64)
-- Image: `noksa/gokeenapi:stable`
-- Build: `docker buildx build` with BuildKit
+| Pattern | Framework | Location |
+|---------|-----------|----------|
+| `*_test.go` | Standard Go + testify | Same directory as source |
+| `*_property_test.go` | rapid | Same directory as source |
+| Test suites | `testify/suite` | Grouped related tests |
 
-## Testing
-
-- Standard Go tests (`*_test.go`)
-- Property-based tests (`*_property_test.go`) using `rapid`
-- Test suites using `testify/suite`
-- Unified mock router in `pkg/gokeenrestapi/mock_router.go`
+- Use unified mock router: `pkg/gokeenrestapi/mock_router.go`
+- Call `SetupMockRouterForTest()` for router API tests
+- Property tests validate invariants across generated inputs
 
 ## Configuration
 
-- YAML-based config files
-- Environment variables: `GOKEENAPI_KEENETIC_LOGIN`, `GOKEENAPI_KEENETIC_PASSWORD`, `GOKEENAPI_CONFIG`
+- YAML config files parsed via `pkg/config/`
+- Environment variables:
+  - `GOKEENAPI_KEENETIC_LOGIN` - Router username
+  - `GOKEENAPI_KEENETIC_PASSWORD` - Router password
+  - `GOKEENAPI_CONFIG` - Config file path
+
+## Docker
+
+- Multi-arch: `linux/amd64`, `linux/arm64`
+- Image: `noksa/gokeenapi:stable`
+- Uses BuildKit via `docker buildx build`

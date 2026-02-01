@@ -1,66 +1,91 @@
+---
+inclusion: always
+---
+
 # Project Structure
 
 ```
 gokeenapi/
-├── main.go                 # Entry point
-├── cmd/                    # CLI commands (Cobra)
+├── main.go                 # Entry point - calls cmd.NewRootCmd().Execute()
+├── cmd/                    # CLI commands (Cobra framework)
 │   ├── root.go             # Root command, registers all subcommands
-│   ├── constants.go        # Command names and aliases
+│   ├── constants.go        # Command names (CmdXxx) and aliases (AliasesXxx)
 │   ├── common.go           # Shared utilities (validation, prompts)
-│   ├── add_routes.go       # Route management commands
-│   ├── add_dns_routing.go  # DNS-routing commands
-│   ├── scheduler.go        # Scheduler command
+│   ├── <command>.go        # Individual command implementations
 │   └── *_test.go           # Command tests
-├── pkg/                    # Public packages
+├── pkg/                    # Public packages (importable)
 │   ├── config/             # Configuration loading and validation
-│   │   ├── main_config.go  # Main config structures and loading
-│   │   └── scheduler_config.go  # Scheduler-specific config
 │   ├── gokeenrestapi/      # Keenetic REST API client
-│   │   ├── common.go       # Auth, HTTP client, core API methods
-│   │   ├── dns_routing.go  # DNS-routing API operations
-│   │   ├── ip.go           # IP route operations
-│   │   ├── mock_router.go  # Unified mock for testing
-│   │   └── *_property_test.go  # Property-based tests
 │   └── gokeenrestapimodels/ # API response/request models
-├── internal/               # Private packages
-│   ├── gokeenlog/          # Logging utilities
-│   ├── gokeencache/        # Caching utilities
-│   ├── gokeenspinner/      # CLI spinner/progress
+├── internal/               # Private packages (not importable externally)
+│   ├── gokeenlog/          # Logging (Info, Debug, Error, etc.)
+│   ├── gokeencache/        # In-memory caching
+│   ├── gokeenspinner/      # CLI progress indicators
 │   └── gokeenversion/      # Version info
 ├── custom/                 # Example configs and domain lists
-│   ├── domains/            # Domain list files (.txt, .yaml)
-│   └── *.yaml              # Example router configs
 ├── batfiles/               # Example bat files for routes
 ├── scripts/                # Build and lint scripts
 └── Makefile                # Build targets
 ```
 
-## Key Patterns
+## Command Implementation Pattern
 
-### Command Structure
+When creating or modifying commands in `cmd/`:
 
-Commands in `cmd/` follow this pattern:
-- `newXxxCmd()` function creates the Cobra command
-- Command name constant in `constants.go`
-- Aliases array in `constants.go`
-- Tests in `*_test.go`
+1. **Define constants** in `constants.go`:
+   ```go
+   const CmdMyCommand = "my-command"
+   var AliasesMyCommand = []string{"mycommand", "mc"}
+   ```
 
-### API Client
+2. **Create command file** `my_command.go`:
+   ```go
+   func newMyCommandCmd() *cobra.Command {
+       cmd := &cobra.Command{
+           Use:     CmdMyCommand,
+           Aliases: AliasesMyCommand,
+           Short:   "Brief description",
+           Long:    `Detailed description with examples`,
+       }
+       cmd.RunE = func(cmd *cobra.Command, args []string) error {
+           // Implementation
+           return nil
+       }
+       return cmd
+   }
+   ```
 
-- `pkg/gokeenrestapi/common.go` - Core client with auth
-- `Common.Auth()` - Authenticate before operations
-- `Common.ExecutePostParse()` - Execute CLI commands via RCI
-- `Common.GetApiClient()` - Get configured HTTP client
+3. **Register in `root.go`**:
+   ```go
+   rootCmd.AddCommand(newMyCommandCmd())
+   ```
 
-### Configuration
+## API Client Usage
 
-- `pkg/config/main_config.go` - Main config struct (`GokeenapiConfig`)
-- `config.LoadConfig(path)` - Load and validate config
-- `config.Cfg` - Global config instance
-- YAML expansion happens during load (bat-file, domain-file lists)
+Access router API through singleton instances in `pkg/gokeenrestapi/`:
 
-### Testing
+- `gokeenrestapi.Common.Auth()` - Authenticate (called automatically in PersistentPreRunE)
+- `gokeenrestapi.Common.ExecutePostParse()` - Execute CLI commands via RCI
+- `gokeenrestapi.Ip.*` - IP route operations
+- `gokeenrestapi.DnsRouting.*` - DNS-routing operations
+- `gokeenrestapi.Checks.*` - Validation helpers (interface exists, etc.)
+
+## Configuration Access
+
+- `config.Cfg` - Global config instance (loaded in root.go PersistentPreRunE)
+- `config.LoadConfig(path)` - Load and validate YAML config
+- Config struct: `pkg/config/main_config.go` → `GokeenapiConfig`
+
+## Testing Conventions
 
 - Use `SetupMockRouterForTest()` from `pkg/gokeenrestapi/mock_router.go`
-- Property tests use `rapid` framework
-- Test suites use `testify/suite`
+- Property tests: `*_property_test.go` using `rapid` framework
+- Test suites: `testify/suite` for grouped tests
+- See `mock-testing-guidelines.md` for mock usage rules
+
+## Logging
+
+Use `internal/gokeenlog` for consistent output:
+- `gokeenlog.Info()`, `gokeenlog.Debug()`, `gokeenlog.Error()`
+- `gokeenlog.InfoSubStepf()` - Indented sub-step messages
+- `gokeenlog.HorizontalLine()` - Visual separator
