@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -264,7 +265,7 @@ func ValidateDnsRoutingGroups(groups []DnsRoutingGroup) error {
 
 		// Check for duplicate group names
 		if firstIndex, exists := seenNames[group.Name]; exists {
-			return errors.New("duplicate DNS routing group name '" + group.Name + "' found at positions " + string(rune(firstIndex)) + " and " + string(rune(i)))
+			return errors.New("duplicate DNS routing group name '" + group.Name + "' found at positions " + strconv.Itoa(firstIndex) + " and " + strconv.Itoa(i))
 		}
 		seenNames[group.Name] = i
 
@@ -275,7 +276,7 @@ func ValidateDnsRoutingGroups(groups []DnsRoutingGroup) error {
 
 		// Check for empty interface ID
 		if len(group.InterfaceID) == 0 {
-			return errors.New("interface ID cannot be empty in DNS routing group " + group.Name + " at position " + string(rune(i)))
+			return errors.New("interface ID cannot be empty in DNS routing group " + group.Name + " at position " + strconv.Itoa(i))
 		}
 	}
 
@@ -291,7 +292,7 @@ func ValidateDomainList(domains []string, groupName string) error {
 
 		// Check if domain contains only whitespace
 		if len(strings.TrimSpace(domain)) == 0 {
-			return errors.New("domain or IP address cannot contain only whitespace in DNS routing group " + groupName + " at position " + string(rune(j)))
+			return errors.New("domain or IP address cannot contain only whitespace in DNS routing group " + groupName + " at position " + strconv.Itoa(j))
 		}
 
 		// Validate domain or IP format
