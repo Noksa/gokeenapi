@@ -344,7 +344,7 @@ func genRelativePath() *rapid.Generator[string] {
 
 // Feature: property-based-testing, Property 8: YAML round-trip preserves structure
 // Validates: Requirements 3.1
-func TestConfigYAMLMarshalAndUnmarshalPreservesAllFields(t *testing.T) {
+func TestProperty_ConfigYAMLRoundTrip(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate a valid config
 		originalCfg := genGokeenapiConfig().Draw(t, "config")
@@ -458,7 +458,7 @@ func dnsEqual(d1, d2 DNS) bool {
 
 // Feature: property-based-testing, Property 9: Bat-file expansion is idempotent
 // Validates: Requirements 3.2
-func TestBatFileListExpansionProducesSameResultWhenRepeated(t *testing.T) {
+func TestProperty_BatFileExpansionIdempotent(t *testing.T) {
 	// Create a temporary directory for test files (outside rapid.Check)
 	tmpDir := t.TempDir()
 
@@ -547,7 +547,7 @@ func TestBatFileListExpansionProducesSameResultWhenRepeated(t *testing.T) {
 
 // Feature: property-based-testing, Property 10: Relative path resolution is consistent
 // Validates: Requirements 3.3
-func TestBatFilePathResolutionIsConsistentRegardlessOfWorkingDirectory(t *testing.T) {
+func TestProperty_BatFilePathResolutionConsistent(t *testing.T) {
 	// Create a temporary directory structure (outside rapid.Check)
 	tmpDir := t.TempDir()
 
@@ -658,7 +658,7 @@ func TestBatFilePathResolutionIsConsistentRegardlessOfWorkingDirectory(t *testin
 
 // Feature: property-based-testing, Property 11: Environment overrides take precedence
 // Validates: Requirements 3.4
-func TestEnvironmentVariablesOverrideYAMLCredentials(t *testing.T) {
+func TestProperty_EnvVarsOverrideYAMLCredentials(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	rapid.Check(t, func(t *rapid.T) {
@@ -733,7 +733,7 @@ func TestEnvironmentVariablesOverrideYAMLCredentials(t *testing.T) {
 
 // Feature: property-based-testing, Property 12: Missing required fields are detected
 // Validates: Requirements 3.5
-func TestConfigWithMissingRequiredFieldsLoadsButLeavesFieldsEmpty(t *testing.T) {
+func TestProperty_MissingRequiredFieldsDetected(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	rapid.Check(t, func(t *rapid.T) {
@@ -803,7 +803,7 @@ func TestConfigWithMissingRequiredFieldsLoadsButLeavesFieldsEmpty(t *testing.T) 
 
 // Feature: property-based-testing, Property 13: Bat-url expansion is idempotent
 // Validates: Requirements 3.2 (for bat-url)
-func TestBatURLListExpansionProducesSameResultWhenRepeated(t *testing.T) {
+func TestProperty_BatURLExpansionIdempotent(t *testing.T) {
 	// Create a temporary directory for test files (outside rapid.Check)
 	tmpDir := t.TempDir()
 
@@ -925,7 +925,7 @@ func TestBatURLListExpansionProducesSameResultWhenRepeated(t *testing.T) {
 
 // Feature: property-based-testing, Property 14: Bat-file and bat-url expansion are independent
 // Validates: Requirements 3.6 (context-aware expansion)
-func TestBatFileAndBatURLExpansionAreIndependent(t *testing.T) {
+func TestProperty_BatFileAndBatURLExpansionIndependent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	rapid.Check(t, func(t *rapid.T) {
@@ -1042,7 +1042,7 @@ func TestBatFileAndBatURLExpansionAreIndependent(t *testing.T) {
 
 // Feature: property-based-testing, Property 15: YAML file caching avoids redundant reads
 // Validates: Requirements 3.7 (optimization)
-func TestYAMLFileCachingAvoidsRedundantReads(t *testing.T) {
+func TestProperty_YAMLFileCachingAvoidsRedundantReads(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	rapid.Check(t, func(t *rapid.T) {
@@ -1139,7 +1139,7 @@ func TestYAMLFileCachingAvoidsRedundantReads(t *testing.T) {
 
 // Feature: dns-routing, Property 6: Empty or whitespace-only group names are rejected
 // Validates: Requirements 1.5, 7.1
-func TestProperty6_EmptyOrWhitespaceGroupNamesAreRejected(t *testing.T) {
+func TestProperty_EmptyGroupNamesRejected(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate a whitespace-only or empty group name
 		invalidName := genWhitespaceString().Draw(t, "invalidName")
@@ -1170,7 +1170,7 @@ func TestProperty6_EmptyOrWhitespaceGroupNamesAreRejected(t *testing.T) {
 
 // Feature: dns-routing, Property 7: Empty domain lists are rejected
 // Validates: Requirements 7.2
-func TestProperty7_EmptyDomainListsAreRejected(t *testing.T) {
+func TestProperty_EmptyDomainListsRejected(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate a valid DNS routing group but with empty domain-file and domain-url
 		validGroup := genDnsRoutingGroup().Draw(t, "validGroup")
@@ -1277,7 +1277,7 @@ func genMalformedIP() *rapid.Generator[string] {
 
 // Feature: dns-routing, Property 9: Malformed domains and IP addresses are rejected
 // Validates: Requirements 7.4
-func TestProperty9_MalformedDomainsAndIPsAreRejected(t *testing.T) {
+func TestProperty_MalformedDomainsAndIPsRejected(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Choose whether to test malformed domain or IP
 		testDomain := rapid.Bool().Draw(t, "testDomain")

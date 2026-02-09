@@ -286,7 +286,7 @@ func writeConfToTempFile(t *rapid.T, content string) string {
 
 // Feature: property-based-testing, Property 13: ASC parameter extraction completeness
 // Validates: Requirements 4.1
-func TestWireGuardASCParametersExtractedFromValidConfig(t *testing.T) {
+func TestProperty_ASCParametersExtractedFromValidConfig(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate a complete WireGuard config with all ASC parameters
 		expectedParams := genASCParameters().Draw(t, "expectedParams")
@@ -335,7 +335,7 @@ PersistentKeepalive = 25`,
 
 // Feature: property-based-testing, Property 14: INI formatting variations are normalized
 // Validates: Requirements 4.2
-func TestWireGuardINIWhitespaceVariationsProduceSameParameters(t *testing.T) {
+func TestProperty_INIWhitespaceNormalized(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate ASC parameters
 		expectedParams := genASCParameters().Draw(t, "expectedParams")
@@ -433,7 +433,7 @@ PublicKey = gN65BkIKy1eCE9pP1wdc8ROUunkiVXrBvGAKBEKdOQI=`,
 
 // Feature: property-based-testing, Property 15: Missing ASC parameters are reported
 // Validates: Requirements 4.3
-func TestWireGuardConfigWithMissingASCParametersReturnsError(t *testing.T) {
+func TestProperty_MissingASCParametersReportError(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate a config with at least one missing parameter
 		confContent := genWireGuardConfWithMissingParams().Draw(t, "confContent")
@@ -458,7 +458,7 @@ func TestWireGuardConfigWithMissingASCParametersReturnsError(t *testing.T) {
 
 // Feature: property-based-testing, Property 16: ASC parameter diff is accurate
 // Validates: Requirements 4.4
-func TestWireGuardASCParameterDiffIdentifiesExactDifferences(t *testing.T) {
+func TestProperty_ASCParameterDiffAccurate(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate two sets of ASC parameters
 		params1 := genASCParameters().Draw(t, "params1")
@@ -602,7 +602,7 @@ func isValidASCParameter(value string) bool {
 
 // Feature: property-based-testing, Property 17: ASC parameter validation
 // Validates: Requirements 4.5
-func TestWireGuardASCParametersValidateAsNumericStrings(t *testing.T) {
+func TestProperty_ASCParametersValidateAsNumeric(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate ASC parameters (which should all be valid)
 		params := genASCParameters().Draw(t, "params")

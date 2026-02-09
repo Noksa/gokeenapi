@@ -12,7 +12,7 @@ import (
 
 // Feature: property-based-testing, Property 1: Route parsing extracts correct values
 // Validates: Requirements 1.1, 1.2, 1.4
-func TestRouteCommandParsingExtractsIPAndMaskRegardlessOfWhitespace(t *testing.T) {
+func TestProperty_RouteParsingExtractsIPAndMask(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate test data
 		ip := genIPv4Address().Draw(t, "ip")
@@ -51,7 +51,7 @@ func TestRouteCommandParsingExtractsIPAndMaskRegardlessOfWhitespace(t *testing.T
 
 // Feature: property-based-testing, Property 2: Invalid route commands are rejected
 // Validates: Requirements 1.3
-func TestMalformedRouteCommandsFailValidation(t *testing.T) {
+func TestProperty_MalformedRouteCommandsRejected(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate invalid route command
 		invalidCmd := genInvalidRouteCommand().Draw(t, "invalidCmd")
@@ -76,7 +76,7 @@ func TestMalformedRouteCommandsFailValidation(t *testing.T) {
 
 // Feature: property-based-testing, Property 3: Batch parsing consistency
 // Validates: Requirements 1.5
-func TestRouteParsingProducesSameResultsForIndividualAndBatchProcessing(t *testing.T) {
+func TestProperty_RouteParsingBatchConsistency(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate a batch of route commands
 		numRoutes := rapid.IntRange(1, 10).Draw(t, "numRoutes")
@@ -153,7 +153,7 @@ func TestRouteParsingProducesSameResultsForIndividualAndBatchProcessing(t *testi
 
 // Feature: property-based-testing, Property 4: CIDR and mask round-trip
 // Validates: Requirements 2.1, 2.2
-func TestCIDRToSubnetMaskConversionIsReversible(t *testing.T) {
+func TestProperty_CIDRMaskRoundTrip(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate a valid CIDR prefix length (0-32)
 		originalCIDR := genCIDR().Draw(t, "cidr")
@@ -179,7 +179,7 @@ func TestCIDRToSubnetMaskConversionIsReversible(t *testing.T) {
 
 // Feature: property-based-testing, Property 5: Network containment is transitive
 // Validates: Requirements 2.3
-func TestNetworkContainmentFollowsTransitiveProperty(t *testing.T) {
+func TestProperty_NetworkContainmentTransitive(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate three networks with increasing specificity (decreasing CIDR prefix)
 		// Network A: least specific (smallest CIDR)
@@ -233,7 +233,7 @@ func TestNetworkContainmentFollowsTransitiveProperty(t *testing.T) {
 
 // Feature: property-based-testing, Property 6: Network containment reflexivity
 // Validates: Requirements 2.3
-func TestNetworkAlwaysContainsItself(t *testing.T) {
+func TestProperty_NetworkContainmentReflexive(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate a random network
 		networkStr := genIPv4Network().Draw(t, "network")
@@ -253,7 +253,7 @@ func TestNetworkAlwaysContainsItself(t *testing.T) {
 
 // Feature: property-based-testing, Property 7: IP validation correctness
 // Validates: Requirements 2.4
-func TestIPv4ValidationAcceptsValidAddressesAndRejectsInvalid(t *testing.T) {
+func TestProperty_IPv4ValidationCorrectness(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Test with valid IPv4 addresses
 		validIP := genIPv4Address().Draw(t, "validIP")
@@ -295,7 +295,7 @@ func TestIPv4ValidationAcceptsValidAddressesAndRejectsInvalid(t *testing.T) {
 
 // Feature: property-based-testing, Property 18: Exact route matching is symmetric
 // Validates: Requirements 5.1
-func TestRouteMatchingIsSymmetricForSameDestinationAndInterface(t *testing.T) {
+func TestProperty_RouteMatchingSymmetric(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate a random interface ID
 		interfaceID := rapid.SampledFrom([]string{"ISP0", "ISP1", "Wireguard0", "Bridge0"}).Draw(t, "interfaceID")
@@ -329,7 +329,7 @@ func TestRouteMatchingIsSymmetricForSameDestinationAndInterface(t *testing.T) {
 
 // Feature: property-based-testing, Property 19: Route containment respects network containment
 // Validates: Requirements 5.2
-func TestRouteContainmentDetectionRespectsNetworkContainment(t *testing.T) {
+func TestProperty_RouteContainmentRespectsNetwork(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate a random interface ID
 		interfaceID := rapid.SampledFrom([]string{"ISP0", "ISP1", "Wireguard0", "Bridge0"}).Draw(t, "interfaceID")
@@ -394,7 +394,7 @@ func TestRouteContainmentDetectionRespectsNetworkContainment(t *testing.T) {
 
 // Feature: property-based-testing, Property 20: Duplicate route handling is consistent
 // Validates: Requirements 5.3
-func TestDuplicateRouteDetectionProducesConsistentResults(t *testing.T) {
+func TestProperty_DuplicateRouteDetectionConsistent(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate a random interface ID
 		interfaceID := rapid.SampledFrom([]string{"ISP0", "ISP1", "Wireguard0", "Bridge0"}).Draw(t, "interfaceID")
@@ -476,7 +476,7 @@ func TestDuplicateRouteDetectionProducesConsistentResults(t *testing.T) {
 
 // Feature: property-based-testing, Property 21: Interface isolation in route comparison
 // Validates: Requirements 5.4
-func TestRoutesWithSameDestinationButDifferentInterfacesAreTreatedAsDistinct(t *testing.T) {
+func TestProperty_RouteInterfaceIsolation(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// Generate two different interface IDs
 		interface1 := rapid.SampledFrom([]string{"ISP0", "ISP1", "Wireguard0", "Bridge0"}).Draw(t, "interface1")
