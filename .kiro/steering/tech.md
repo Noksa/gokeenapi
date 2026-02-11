@@ -2,63 +2,126 @@
 inclusion: always
 ---
 
-# Tech Stack
+# Tech Stack & Development Rules
 
 ## Language & Runtime
 
 - Go 1.25+ with standard project layout (`cmd/`, `pkg/`, `internal/`)
-- Use `go.mod` as source of truth for version and dependencies
+- `go.mod` is the source of truth for version and dependencies
+- NEVER modify `go.mod` manually - use `go get` or `go mod tidy`
 
-## Key Dependencies
+## Critical Dependencies
 
-| Package | Import Path | Purpose |
-|---------|-------------|---------|
-| cobra | `github.com/spf13/cobra` | CLI framework |
-| resty | `github.com/go-resty/resty/v2` | HTTP client |
-| yaml.v3 | `gopkg.in/yaml.v3` | YAML parsing |
-| testify | `github.com/stretchr/testify` | Test assertions/suites |
-| rapid | `pgregory.net/rapid` | Property-based testing |
-| multierr | `go.uber.org/multierr` | Error aggregation |
-| go-version | `github.com/hashicorp/go-version` | Semantic version parsing |
+| Package | Import Path | When to Use |
+|---------|-------------|-------------|
+| cobra | `github.com/spf13/cobra` | All CLI commands - use `RunE` not `Run` |
+| resty | `github.com/go-resty/resty/v2` | HTTP/API calls - NEVER use `net/http` directly |
+| yaml.v3 | `gopkg.in/yaml.v3` | YAML parsing - use `yaml.Unmarshal()` |
+| testify | `github.com/stretchr/testify` | Assertions: `assert.NoError()`, `assert.Equal()` |
+| rapid | `pgregory.net/rapid` | Property tests in `*_property_test.go` files |
+| multierr | `go.uber.org/multierr` | Aggregating errors: `multierr.Append(errs, err)` |
+| go-version | `github.com/hashicorp/go-version` | Version comparison - use `version.NewVersion()` |
 
-## Build Commands
+## Mandatory Build & Test Commands
 
+Before any commit or code change:
 ```bash
-make lint           # go fmt, go vet, modernize, golangci-lint
-make test           # Run all tests
-make build          # Lint + Docker build
-make test-coverage  # Tests with coverage report
+make lint           # REQUIRED before committing
+make test           # REQUIRED - all tests must pass
+make test-coverage  # Use when adding new functionality
 ```
 
-## Code Style Rules
+Linting pipeline (executed by `make lint`):
+1. `go mod tidy` - Clean dependencies
+2. `go fmt` - Format code
+3. `go vet` - Static analysis
+4. `modernize -fix` - Update deprecated patterns
+5. `golangci-lint` - Comprehensive linting
 
-- Run `make lint` before committing - it executes `scripts/check.sh`
-- Linting includes: `go mod tidy` → `go fmt` → `go vet` → `modernize -fix` → `golangci-lint`
-- Use `multierr` for aggregating multiple errors
-- Prefer `resty` over `net/http` for API calls
+## Code Style Requirements
 
-## Testing Conventions
+### Error Handling
+- ALWAYS use `multierr.Append()` when processing lists/loops
+- Return errors from `RunE` functions - NEVER call `os.Exit()` in commands
+- Validate inputs before API calls - fail fast with clear messages
 
-| Pattern | Framework | Location |
-|---------|-----------|----------|
-| `*_test.go` | Standard Go + testify | Same directory as source |
-| `*_property_test.go` | rapid | Same directory as source |
-| Test suites | `testify/suite` | Grouped related tests |
+### API Client Usage
+- ALWAYS use `resty` for HTTP requests
+- NEVER use `net/http` directly
+- Use singleton instances from `pkg/gokeenrestapi/` package
 
-- Use unified mock router: `pkg/gokeenrestapi/mock_router.go`
-- Call `SetupMockRouterForTest()` for router API tests
-- Property tests validate invariants across generated inputs
+### Logging
+- ALWAYS use `gokeenlog` package for output
+- NEVER use `fmt.Println()`, `log.Println()`, or `print()`
+- Available methods: `Info()`, `Debug()`, `Error()`, `Infof()`, `InfoSubStepf()`
 
-## Configuration
+## Testing Requirements
 
-- YAML config files parsed via `pkg/config/`
-- Environment variables:
+### File Naming
+- Unit tests: `*_test.go` (same directory as source)
+- Property tests: `*_property_test.go` (same directory as source)
+- Integration tests: `docker_*_test.go` (repository root)
+
+### Test Setup Pattern
+```go
+func TestMyFunction(t *testing.T) {
+    cleanup := gokeenrestapi.SetupMockRouterForTest()
+    defer cleanup()
+    // Test code here
+}
+```
+
+### Property Test Pattern
+```go
+func TestProperty_MyInvariant(t *testing.T) {
+    rapid.Check(t, func(t *rapid.T) {
+        input := rapid.String().Draw(t, "input")
+        result := MyFunction(input)
+        // Assert invariant holds
+    })
+}
+```
+
+### Test Suite Pattern
+```go
+type MyTestSuite struct {
+    suite.Suite
+}
+
+func (s *MyTestSuite) TestSomething() {
+    s.NoError(err)
+    s.Equal(expected, actual)
+}
+
+func TestMyTestSuite(t *testing.T) {
+    suite.Run(t, new(MyTestSuite))
+}
+```
+
+## Configuration Rules
+
+- Config loaded automatically in `root.go` PersistentPreRunE
+- Access via global `config.Cfg` variable
+- Environment variables override config file values:
   - `GOKEENAPI_KEENETIC_LOGIN` - Router username
   - `GOKEENAPI_KEENETIC_PASSWORD` - Router password
   - `GOKEENAPI_CONFIG` - Config file path
+- YAML files support expansion - paths resolved relative to referencing file
 
-## Docker
+## Docker Build
 
-- Multi-arch: `linux/amd64`, `linux/arm64`
+- Multi-arch support: `linux/amd64`, `linux/arm64`
 - Image: `noksa/gokeenapi:stable`
-- Uses BuildKit via `docker buildx build`
+- Uses BuildKit: `docker buildx build`
+- Dockerfile at repository root
+
+## Common Mistakes to Avoid
+
+- ❌ Using `fmt.Println()` instead of `gokeenlog`
+- ❌ Using `net/http` instead of `resty`
+- ❌ Calling `os.Exit()` in command functions
+- ❌ Not using `multierr` for error aggregation
+- ❌ Forgetting to run `make lint` before committing
+- ❌ Using `Run` instead of `RunE` in cobra commands
+- ❌ Manually editing `go.mod` instead of using `go get`
+- ❌ Not calling `SetupMockRouterForTest()` in API tests

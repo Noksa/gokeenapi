@@ -328,7 +328,42 @@ tasks:
 - Удаленные URL с списками доменов
 - YAML файлы, содержащие списки путей к domain-file или domain-url (для организации)
 
-**Раскрытие YAML:** Утилита автоматически определяет `.yaml`/`.yml` файлы в массивах `domain-file` и `domain-url` и раскрывает их в содержащиеся в них пути. Относительные пути в YAML-файлах списков разрешаются относительно директории YAML-файла.
+**Раскрытие YAML:** Утилита автоматически определяет `.yaml`/`.yml` файлы в массивах `domain-file` и `domain-url` и раскрывает их в содержащиеся в них пути к доменам (аналогично раскрытию bat-file/bat-url).
+
+**НОВОЕ: Переиспользуемые группы DNS-маршрутизации**
+
+Теперь вы можете создавать общие YAML файлы с полными определениями групп DNS-маршрутизации и импортировать их в конфигурации нескольких роутеров. Это отличается от раскрытия domain-file/domain-url - вы импортируете целые определения групп, а не только списки доменов.
+
+**custom/common_dns_groups.yaml:**
+```yaml
+groups:
+  - name: youtube
+    domain-url:
+      - domains/youtube.yaml
+    interfaceId: Wireguard0
+  - name: telegram
+    domain-url:
+      - domains/telegram.yaml
+    interfaceId: Wireguard0
+  - name: trackers
+    domain-file:
+      - domains/trackers.yaml
+    interfaceId: Wireguard0
+```
+
+**Конфиг роутера:**
+```yaml
+dns:
+  routes:
+    groups:
+      - common_dns_groups.yaml    # Импорт всех групп из файла
+      - name: router-specific     # Смешивание с группами конкретного роутера
+        domain-file:
+          - domains/local.txt
+        interfaceId: GigabitEthernet0
+```
+
+Это позволяет хранить общие правила DNS-маршрутизации в одном месте и использовать их на всех ваших роутерах. Когда вы добавляете telegram в один роутер, просто обновите `common_dns_groups.yaml` и все роутеры, использующие его, получат обновление.
 
 **Примеры использования:**
 - Направить трафик социальных сетей через VPN (Wireguard0)

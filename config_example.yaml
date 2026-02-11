@@ -91,6 +91,34 @@ dns:
       # Domain groups for routing specific domains through designated interfaces
       # Each group creates an object-group and dns-proxy route on the router
       
+      # =============================================================================
+      # Option 1: Import groups from shared YAML file
+      # =============================================================================
+      # You can create a shared YAML file with common DNS routing groups
+      # and import it across multiple router configs
+      # 
+      # Example: custom/common_dns_groups.yaml
+      # groups:
+      #   - name: youtube
+      #     domain-url:
+      #       - domains/youtube.yaml
+      #     interfaceId: Wireguard0
+      #   - name: telegram
+      #     domain-url:
+      #       - domains/telegram.yaml
+      #     interfaceId: Wireguard0
+      #
+      # Then import it in your config:
+      # - custom/common_dns_groups.yaml
+      #
+      # This allows you to maintain common DNS routing rules in one place
+      # and share them across all your routers
+      # =============================================================================
+      
+      # =============================================================================
+      # Option 2: Define groups directly in config
+      # =============================================================================
+      
       - name: social-media
         # Local .txt files containing domains (one per line)
         # You can also specify .yaml files that contain lists of domain-file paths
@@ -126,6 +154,22 @@ dns:
         domain-url:
           - https://example.com/blocked-domains.txt
         interfaceId: ISP
+      
+      # =============================================================================
+      # Option 3: Mix imported and router-specific groups
+      # =============================================================================
+      # You can combine imported groups with router-specific groups:
+      #
+      # groups:
+      #   - custom/common_dns_groups.yaml    # Import common groups
+      #   - name: router-specific-isp        # Add router-specific group
+      #     domain-file:
+      #       - domains/isp.yaml
+      #     interfaceId: GigabitEthernet0/Vlan4
+      #
+      # This is useful when you have some common groups shared across all routers
+      # and some unique groups specific to individual routers
+      # =============================================================================
 
 # =============================================================================
 # Logging Configuration

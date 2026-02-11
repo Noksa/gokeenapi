@@ -334,7 +334,42 @@ Adds DNS-routing rules (policy-based routing by domain) to your router. This fea
 - Remote URLs serving domain lists
 - YAML files containing lists of domain-file or domain-url paths (for organization)
 
-**YAML expansion:** The tool automatically detects `.yaml`/`.yml` files in the `domain-file` and `domain-url` arrays and expands them to their contained paths. Relative paths in YAML list files are resolved relative to the YAML file's directory.
+**YAML expansion:** The tool automatically detects `.yaml`/`.yml` files in the `domain-file` and `domain-url` arrays and expands them to their contained domain paths (similar to bat-file/bat-url expansion).
+
+**NEW: Reusable DNS Routing Groups**
+
+You can now create shared YAML files containing complete DNS routing group definitions and import them across multiple router configs. This is different from domain-file/domain-url expansion - you're importing entire group definitions, not just domain lists.
+
+**custom/common_dns_groups.yaml:**
+```yaml
+groups:
+  - name: youtube
+    domain-url:
+      - domains/youtube.yaml
+    interfaceId: Wireguard0
+  - name: telegram
+    domain-url:
+      - domains/telegram.yaml
+    interfaceId: Wireguard0
+  - name: trackers
+    domain-file:
+      - domains/trackers.yaml
+    interfaceId: Wireguard0
+```
+
+**Router config:**
+```yaml
+dns:
+  routes:
+    groups:
+      - common_dns_groups.yaml    # Import all groups from file
+      - name: router-specific     # Mix with router-specific groups
+        domain-file:
+          - domains/local.txt
+        interfaceId: GigabitEthernet0
+```
+
+This allows you to maintain common DNS routing rules in one place and share them across all your routers. When you add telegram to one router, just update `common_dns_groups.yaml` and all routers using it will get the update.
 
 **Example use cases:**
 - Route social media traffic through a VPN (Wireguard0)

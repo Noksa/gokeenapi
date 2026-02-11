@@ -99,6 +99,21 @@ type DomainLists struct {
 	DomainURLList  `yaml:",inline"`
 }
 
+// GroupsList represents the structure of a YAML file containing DNS routing groups
+type GroupsList struct {
+	// Groups contains list of DNS routing groups to be imported
+	// This allows sharing common DNS routing group configurations across multiple router configs
+	// Example YAML structure:
+	//   groups:
+	//     - name: youtube
+	//       domain-url: [domains/youtube.yaml]
+	//       interfaceId: Wireguard0
+	//     - name: telegram
+	//       domain-url: [domains/telegram.yaml]
+	//       interfaceId: Wireguard0
+	Groups []DnsRoutingGroup `yaml:"groups"`
+}
+
 // Route defines routing configuration for a specific interface
 type Route struct {
 	// InterfaceID specifies the target interface (e.g., Wireguard0)
@@ -128,6 +143,14 @@ type DNS struct {
 // DnsRoutes contains DNS-routing configuration
 type DnsRoutes struct {
 	// Groups contains list of domain groups with routing policies
+	// Can also reference .yaml/.yml files containing lists of groups for sharing common configurations
+	// When a string ending with .yaml/.yml is specified, it's loaded and its groups are expanded inline
+	// Example:
+	//   groups:
+	//     - common_dns_groups.yaml        # Import groups from file
+	//     - name: local-group              # Regular group definition
+	//       domain-file: [domains/local.txt]
+	//       interfaceId: Wireguard0
 	Groups []DnsRoutingGroup `yaml:"groups"`
 }
 
@@ -142,6 +165,33 @@ type DnsRoutingGroup struct {
 	DomainURL []string `yaml:"domain-url"`
 	// InterfaceID specifies the target interface for routing
 	InterfaceID string `yaml:"interfaceId"`
+
+	// isFileReference is set to true when this group represents a file reference (string)
+	// This is used internally by expandGroupLists to identify which groups need expansion
+	isFileReference bool `yaml:"-"`
+}
+
+// UnmarshalYAML implements custom unmarshaling for DnsRoutingGroup to support both
+// string references (file paths) and object definitions (groups)
+func (g *DnsRoutingGroup) UnmarshalYAML(node *yaml.Node) error {
+	// Check if this is a scalar (string) - file reference
+	if node.Kind == yaml.ScalarNode {
+		// This is a string - treat it as a file reference
+		g.Name = node.Value
+		g.isFileReference = true
+		return nil
+	}
+
+	// This is a mapping (object) - unmarshal normally
+	type dnsRoutingGroupAlias DnsRoutingGroup
+	alias := (*dnsRoutingGroupAlias)(g)
+
+	if err := node.Decode(alias); err != nil {
+		return err
+	}
+
+	g.isFileReference = false
+	return nil
 }
 
 // Logs contains logging configuration options
@@ -347,6 +397,12 @@ func LoadConfig(configPath string) error {
 		return err
 	}
 
+	// Expand YAML files in groups list (must be done before expandDomainLists)
+	err = expandGroupLists(configPath)
+	if err != nil {
+		return err
+	}
+
 	// Expand YAML files in domain-file and domain-url lists
 	err = expandDomainLists(configPath)
 	if err != nil {
@@ -457,6 +513,128 @@ func loadBatListsFromYAML(listPath, configPath string) (*BatLists, error) {
 	return &batLists, nil
 }
 
+// expandGroupLists expands .yaml/.yml file references in DNS routing groups array
+// This function processes groups that were marked as file references during YAML unmarshaling
+// (identified by isFileReference flag set in DnsRoutingGroup.UnmarshalYAML)
+//
+// Example usage in config:
+//
+//	dns:
+//	  routes:
+//	    groups:
+//	      - common_dns_groups.yaml        # String - import groups from file
+//	      - name: local-only              # Object - regular group definition
+//	        domain-file: [domains/local.txt]
+//	        interfaceId: Wireguard0
+//
+// The function:
+// 1. Scans Cfg.DNS.Routes.Groups for groups with isFileReference=true
+// 2. Loads groups from those files (with caching to avoid duplicate reads)
+// 3. Replaces file references with actual groups inline
+// 4. Resolves relative paths relative to the config file directory
+func expandGroupLists(configPath string) error {
+	// Cache for loaded YAML files to avoid reading the same file multiple times
+	yamlCache := make(map[string]*GroupsList)
+
+	var expandedGroups []DnsRoutingGroup
+
+	for _, group := range Cfg.DNS.Routes.Groups {
+		if group.isFileReference {
+			// This is a file reference - validate and load
+			groupsFile := group.Name
+
+			if filepath.Ext(groupsFile) != ".yaml" && filepath.Ext(groupsFile) != ".yml" {
+				return errors.New("group file reference must be a .yaml or .yml file: " + groupsFile)
+			}
+
+			// Load from cache or read file
+			var groupsList *GroupsList
+			if cached, exists := yamlCache[groupsFile]; exists {
+				groupsList = cached
+			} else {
+				loaded, err := loadGroupsListFromYAML(groupsFile, configPath)
+				if err != nil {
+					return err
+				}
+				yamlCache[groupsFile] = loaded
+				groupsList = loaded
+			}
+
+			// Append all groups from the file
+			expandedGroups = append(expandedGroups, groupsList.Groups...)
+		} else {
+			// Regular group definition - keep as is
+			expandedGroups = append(expandedGroups, group)
+		}
+	}
+
+	// Replace the groups array with expanded version
+	Cfg.DNS.Routes.Groups = expandedGroups
+
+	return nil
+}
+
+// loadGroupsListFromYAML loads DNS routing groups from a YAML file
+// The file should contain a 'groups' key with an array of DnsRoutingGroup objects
+//
+// Example file structure:
+//
+//	groups:
+//	  - name: youtube
+//	    domain-url: [domains/youtube.yaml]
+//	    interfaceId: Wireguard0
+//	  - name: telegram
+//	    domain-url: [domains/telegram.yaml]
+//	    interfaceId: Wireguard0
+//
+// Relative paths in the file are resolved relative to the YAML file's directory,
+// not the main config file directory.
+func loadGroupsListFromYAML(listPath, configPath string) (*GroupsList, error) {
+	// If listPath is relative, resolve it relative to the config file directory
+	if !filepath.IsAbs(listPath) {
+		configDir := filepath.Dir(configPath)
+		listPath = filepath.Join(configDir, listPath)
+	}
+
+	b, err := os.ReadFile(listPath)
+	if err != nil {
+		return nil, errors.New("failed to read groups-list from " + listPath + ": " + err.Error())
+	}
+
+	var groupsList GroupsList
+	err = yaml.Unmarshal(b, &groupsList)
+	if err != nil {
+		return nil, errors.New("failed to parse groups-list from " + listPath + ": " + err.Error())
+	}
+
+	// Validate that we actually loaded some groups
+	if len(groupsList.Groups) == 0 {
+		return nil, errors.New("groups-list file " + listPath + " contains no groups")
+	}
+
+	// Resolve relative paths in domain-file arrays relative to the YAML file's directory
+	// This ensures that domain-file paths in imported groups are resolved correctly
+	// We make paths absolute here to prevent double resolution in expandDomainLists
+	yamlDir := filepath.Dir(listPath)
+	for i := range groupsList.Groups {
+		for j, domainFile := range groupsList.Groups[i].DomainFile {
+			if !filepath.IsAbs(domainFile) && filepath.Ext(domainFile) != ".yaml" && filepath.Ext(domainFile) != ".yml" {
+				// Only resolve non-YAML files (actual domain files, not references)
+				// YAML references will be resolved later by expandDomainLists
+				// Make the path absolute to prevent double resolution
+				joined := filepath.Join(yamlDir, domainFile)
+				absPath, err := filepath.Abs(joined)
+				if err != nil {
+					return nil, errors.New("failed to resolve absolute path for " + joined + ": " + err.Error())
+				}
+				groupsList.Groups[i].DomainFile[j] = absPath
+			}
+		}
+	}
+
+	return &groupsList, nil
+}
+
 // expandDomainLists expands .yaml files in domain-file and domain-url arrays to their contained lists
 // This function reads each YAML file only once and extracts both domain-file and domain-url lists
 func expandDomainLists(configPath string) error {
@@ -499,7 +677,8 @@ func expandDomainLists(configPath string) error {
 					expandedDomainFiles = append(expandedDomainFiles, domainLists.DomainFile...)
 				}
 			} else {
-				// Regular .txt file - resolve relative paths relative to config file
+				// Regular .txt file - if already absolute (resolved in loadGroupsListFromYAML), keep as is
+				// Otherwise resolve relative to config file
 				resolvedPath := domainFile
 				if !filepath.IsAbs(resolvedPath) {
 					configDir := filepath.Dir(configPath)
