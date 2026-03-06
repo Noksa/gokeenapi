@@ -1,45 +1,47 @@
 package cmd
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestNewRootCmd(t *testing.T) {
-	cmd := NewRootCmd()
+var _ = Describe("NewRootCmd", func() {
+	It("should create root command with correct configuration", func() {
+		cmd := NewRootCmd()
 
-	assert.Equal(t, "gokeenapi", cmd.Use)
-	assert.NotNil(t, cmd.PersistentPreRunE)
+		Expect(cmd.Use).To(Equal("gokeenapi"))
+		Expect(cmd.PersistentPreRunE).NotTo(BeNil())
 
-	// Check that config flag exists
-	configFlag := cmd.PersistentFlags().Lookup("config")
-	assert.NotNil(t, configFlag)
-	assert.Equal(t, "string", configFlag.Value.Type())
+		configFlag := cmd.PersistentFlags().Lookup("config")
+		Expect(configFlag).NotTo(BeNil())
+		Expect(configFlag.Value.Type()).To(Equal("string"))
+	})
 
-	// Check that subcommands are added
-	subcommands := cmd.Commands()
-	assert.True(t, len(subcommands) > 0)
+	It("should register all expected subcommands", func() {
+		cmd := NewRootCmd()
 
-	// Verify some expected subcommands exist
-	commandNames := make(map[string]bool)
-	for _, subcmd := range subcommands {
-		commandNames[subcmd.Use] = true
-	}
+		subcommands := cmd.Commands()
+		Expect(subcommands).NotTo(BeEmpty())
 
-	expectedCommands := []string{
-		CmdShowInterfaces,
-		CmdAddRoutes,
-		CmdDeleteRoutes,
-		CmdAddDnsRecords,
-		CmdDeleteDnsRecords,
-		CmdAddAwg,
-		CmdUpdateAwg,
-		CmdDeleteKnownHosts,
-		CmdExec,
-	}
+		commandNames := make(map[string]bool)
+		for _, subcmd := range subcommands {
+			commandNames[subcmd.Use] = true
+		}
 
-	for _, expectedCmd := range expectedCommands {
-		assert.True(t, commandNames[expectedCmd], "Expected command %s not found", expectedCmd)
-	}
-}
+		expectedCommands := []string{
+			CmdShowInterfaces,
+			CmdAddRoutes,
+			CmdDeleteRoutes,
+			CmdAddDnsRecords,
+			CmdDeleteDnsRecords,
+			CmdAddAwg,
+			CmdUpdateAwg,
+			CmdDeleteKnownHosts,
+			CmdExec,
+		}
+
+		for _, expectedCmd := range expectedCommands {
+			Expect(commandNames).To(HaveKey(expectedCmd), "Expected command %s not found", expectedCmd)
+		}
+	})
+})

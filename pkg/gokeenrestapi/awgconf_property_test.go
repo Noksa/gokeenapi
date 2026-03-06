@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"testing"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"gopkg.in/ini.v1"
 	"pgregory.net/rapid"
 )
@@ -30,7 +31,6 @@ type ASCParameters struct {
 // genASCParameter generates a valid ASC parameter value (numeric string)
 func genASCParameter() *rapid.Generator[string] {
 	return rapid.Custom(func(t *rapid.T) string {
-		// ASC parameters are typically numeric values
 		value := rapid.IntRange(0, 100).Draw(t, "value")
 		return fmt.Sprintf("%d", value)
 	})
@@ -56,7 +56,6 @@ func genASCParameters() *rapid.Generator[ASCParameters] {
 // genWireGuardConfWithMissingParams generates a .conf file with some ASC parameters missing
 func genWireGuardConfWithMissingParams() *rapid.Generator[string] {
 	return rapid.Custom(func(t *rapid.T) string {
-		// Generate which parameters to include (at least one missing)
 		includeJc := rapid.Bool().Draw(t, "includeJc")
 		includeJmin := rapid.Bool().Draw(t, "includeJmin")
 		includeJmax := rapid.Bool().Draw(t, "includeJmax")
@@ -67,12 +66,10 @@ func genWireGuardConfWithMissingParams() *rapid.Generator[string] {
 		includeH3 := rapid.Bool().Draw(t, "includeH3")
 		includeH4 := rapid.Bool().Draw(t, "includeH4")
 
-		// Ensure at least one is missing
 		allIncluded := includeJc && includeJmin && includeJmax &&
 			includeS1 && includeS2 && includeH1 && includeH2 && includeH3 && includeH4
 
 		if allIncluded {
-			// Force at least one to be missing
 			switch rapid.IntRange(0, 8).Draw(t, "missingParam") {
 			case 0:
 				includeJc = false
@@ -97,7 +94,6 @@ func genWireGuardConfWithMissingParams() *rapid.Generator[string] {
 
 		params := genASCParameters().Draw(t, "params")
 
-		// Build config with only included parameters
 		var lines []string
 		lines = append(lines, "[Interface]")
 		lines = append(lines, "PrivateKey = cOFA+3p5IjkzIjkzIjkzIjkzIjkzIjkzIjkzIjkzIjk=")
@@ -159,7 +155,6 @@ func extractASCParametersFromConf(confPath string) (ASCParameters, error) {
 
 	params := ASCParameters{}
 
-	// Try to extract each parameter
 	if key, err := interfaceSection.GetKey("Jc"); err == nil {
 		params.Jc = key.String()
 	} else {
@@ -266,33 +261,43 @@ func ascParametersDiff(p1, p2 ASCParameters) []string {
 }
 
 // writeConfToTempFile writes config content to a temporary file and returns the path
-func writeConfToTempFile(t *rapid.T, content string) string {
+func writeConfToTempFile(content string) string {
 	tmpDir, err := os.MkdirTemp("", "awgconf-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred(), "Failed to create temp dir")
 
 	confPath := filepath.Join(tmpDir, "test.conf")
-
 	err = os.WriteFile(confPath, []byte(content), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write temp config file: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred(), "Failed to write temp config file")
 
 	return confPath
 }
 
-// Property-based tests for WireGuard configuration
+// contains checks if a slice contains a string
+func contains(slice []string, item string) bool {
+	return slices.Contains(slice, item)
+}
 
-// Feature: property-based-testing, Property 13: ASC parameter extraction completeness
-// Validates: Requirements 4.1
-func TestProperty_ASCParametersExtractedFromValidConfig(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate a complete WireGuard config with all ASC parameters
-		expectedParams := genASCParameters().Draw(t, "expectedParams")
+// isValidASCParameter checks if a parameter value is valid (numeric string)
+func isValidASCParameter(value string) bool {
+	if value == "" {
+		return false
+	}
 
-		// Create config content with these parameters
-		confContent := fmt.Sprintf(`[Interface]
+	for _, c := range value {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+
+	return true
+}
+
+var _ = Describe("Property: ASC Parameter Extraction", func() {
+	It("should extract all ASC parameters from a valid config", func() {
+		rapid.Check(GinkgoT(), func(t *rapid.T) {
+			expectedParams := genASCParameters().Draw(t, "expectedParams")
+
+			confContent := fmt.Sprintf(`[Interface]
 PrivateKey = cOFA+3p5IjkzIjkzIjkzIjkzIjkzIjkzIjkzIjkzIjk=
 Address = 10.0.0.2/24
 DNS = 8.8.8.8
@@ -311,44 +316,30 @@ PublicKey = gN65BkIKy1eCE9pP1wdc8ROUunkiVXrBvGAKBEKdOQI=
 Endpoint = example.com:51820
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25`,
-			expectedParams.Jc, expectedParams.Jmin, expectedParams.Jmax,
-			expectedParams.S1, expectedParams.S2,
-			expectedParams.H1, expectedParams.H2, expectedParams.H3, expectedParams.H4)
+				expectedParams.Jc, expectedParams.Jmin, expectedParams.Jmax,
+				expectedParams.S1, expectedParams.S2,
+				expectedParams.H1, expectedParams.H2, expectedParams.H3, expectedParams.H4)
 
-		// Write to temp file
-		confPath := writeConfToTempFile(t, confContent)
+			confPath := writeConfToTempFile(confContent)
 
-		// Extract parameters
-		extractedParams, err := extractASCParametersFromConf(confPath)
-
-		// Property: All ASC parameters should be extracted correctly
-		if err != nil {
-			t.Fatalf("Failed to extract ASC parameters: %v", err)
-		}
-
-		if !ascParametersEqual(expectedParams, extractedParams) {
-			t.Fatalf("Extracted parameters don't match expected.\nExpected: %+v\nGot: %+v",
+			extractedParams, err := extractASCParametersFromConf(confPath)
+			Expect(err).NotTo(HaveOccurred(), "Failed to extract ASC parameters")
+			Expect(ascParametersEqual(expectedParams, extractedParams)).To(BeTrue(),
+				"Extracted parameters don't match expected.\nExpected: %+v\nGot: %+v",
 				expectedParams, extractedParams)
-		}
+		})
 	})
-}
 
-// Feature: property-based-testing, Property 14: INI formatting variations are normalized
-// Validates: Requirements 4.2
-func TestProperty_INIWhitespaceNormalized(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate ASC parameters
-		expectedParams := genASCParameters().Draw(t, "expectedParams")
+	It("should normalize INI whitespace variations", func() {
+		rapid.Check(GinkgoT(), func(t *rapid.T) {
+			expectedParams := genASCParameters().Draw(t, "expectedParams")
 
-		// Generate two configs with the same parameters but different whitespace
-		ws1_1 := rapid.SampledFrom([]string{"", " ", "  ", "\t"}).Draw(t, "ws1_1")
-		ws2_1 := rapid.SampledFrom([]string{"", " ", "  ", "\t"}).Draw(t, "ws2_1")
+			ws1_1 := rapid.SampledFrom([]string{"", " ", "  ", "\t"}).Draw(t, "ws1_1")
+			ws2_1 := rapid.SampledFrom([]string{"", " ", "  ", "\t"}).Draw(t, "ws2_1")
+			ws1_2 := rapid.SampledFrom([]string{"", " ", "  ", "\t"}).Draw(t, "ws1_2")
+			ws2_2 := rapid.SampledFrom([]string{"", " ", "  ", "\t"}).Draw(t, "ws2_2")
 
-		ws1_2 := rapid.SampledFrom([]string{"", " ", "  ", "\t"}).Draw(t, "ws1_2")
-		ws2_2 := rapid.SampledFrom([]string{"", " ", "  ", "\t"}).Draw(t, "ws2_2")
-
-		// Create two configs with different formatting
-		confContent1 := fmt.Sprintf(`[Interface]
+			confContent1 := fmt.Sprintf(`[Interface]
 PrivateKey%s=%scOFA+3p5IjkzIjkzIjkzIjkzIjkzIjkzIjkzIjkzIjk=
 Address%s=%s10.0.0.2/24
 Jc%s=%s%s
@@ -363,19 +354,19 @@ H4%s=%s%s
 
 [Peer]
 PublicKey = gN65BkIKy1eCE9pP1wdc8ROUunkiVXrBvGAKBEKdOQI=`,
-			ws1_1, ws2_1,
-			ws1_1, ws2_1,
-			ws1_1, ws2_1, expectedParams.Jc,
-			ws1_1, ws2_1, expectedParams.Jmin,
-			ws1_1, ws2_1, expectedParams.Jmax,
-			ws1_1, ws2_1, expectedParams.S1,
-			ws1_1, ws2_1, expectedParams.S2,
-			ws1_1, ws2_1, expectedParams.H1,
-			ws1_1, ws2_1, expectedParams.H2,
-			ws1_1, ws2_1, expectedParams.H3,
-			ws1_1, ws2_1, expectedParams.H4)
+				ws1_1, ws2_1,
+				ws1_1, ws2_1,
+				ws1_1, ws2_1, expectedParams.Jc,
+				ws1_1, ws2_1, expectedParams.Jmin,
+				ws1_1, ws2_1, expectedParams.Jmax,
+				ws1_1, ws2_1, expectedParams.S1,
+				ws1_1, ws2_1, expectedParams.S2,
+				ws1_1, ws2_1, expectedParams.H1,
+				ws1_1, ws2_1, expectedParams.H2,
+				ws1_1, ws2_1, expectedParams.H3,
+				ws1_1, ws2_1, expectedParams.H4)
 
-		confContent2 := fmt.Sprintf(`[Interface]
+			confContent2 := fmt.Sprintf(`[Interface]
 PrivateKey%s=%scOFA+3p5IjkzIjkzIjkzIjkzIjkzIjkzIjkzIjkzIjk=
 Address%s=%s10.0.0.2/24
 Jc%s=%s%s
@@ -390,258 +381,111 @@ H4%s=%s%s
 
 [Peer]
 PublicKey = gN65BkIKy1eCE9pP1wdc8ROUunkiVXrBvGAKBEKdOQI=`,
-			ws1_2, ws2_2,
-			ws1_2, ws2_2,
-			ws1_2, ws2_2, expectedParams.Jc,
-			ws1_2, ws2_2, expectedParams.Jmin,
-			ws1_2, ws2_2, expectedParams.Jmax,
-			ws1_2, ws2_2, expectedParams.S1,
-			ws1_2, ws2_2, expectedParams.S2,
-			ws1_2, ws2_2, expectedParams.H1,
-			ws1_2, ws2_2, expectedParams.H2,
-			ws1_2, ws2_2, expectedParams.H3,
-			ws1_2, ws2_2, expectedParams.H4)
+				ws1_2, ws2_2,
+				ws1_2, ws2_2,
+				ws1_2, ws2_2, expectedParams.Jc,
+				ws1_2, ws2_2, expectedParams.Jmin,
+				ws1_2, ws2_2, expectedParams.Jmax,
+				ws1_2, ws2_2, expectedParams.S1,
+				ws1_2, ws2_2, expectedParams.S2,
+				ws1_2, ws2_2, expectedParams.H1,
+				ws1_2, ws2_2, expectedParams.H2,
+				ws1_2, ws2_2, expectedParams.H3,
+				ws1_2, ws2_2, expectedParams.H4)
 
-		// Write to temp files
-		confPath1 := writeConfToTempFile(t, confContent1)
-		confPath2 := writeConfToTempFile(t, confContent2)
+			confPath1 := writeConfToTempFile(confContent1)
+			confPath2 := writeConfToTempFile(confContent2)
 
-		// Extract parameters from both
-		params1, err1 := extractASCParametersFromConf(confPath1)
-		params2, err2 := extractASCParametersFromConf(confPath2)
+			params1, err1 := extractASCParametersFromConf(confPath1)
+			params2, err2 := extractASCParametersFromConf(confPath2)
 
-		// Property: Both should parse successfully and produce the same values
-		if err1 != nil {
-			t.Fatalf("Failed to parse config 1: %v", err1)
-		}
-		if err2 != nil {
-			t.Fatalf("Failed to parse config 2: %v", err2)
-		}
-
-		if !ascParametersEqual(params1, params2) {
-			t.Fatalf("Formatting variations produced different parameters.\nParams1: %+v\nParams2: %+v",
+			Expect(err1).NotTo(HaveOccurred(), "Failed to parse config 1")
+			Expect(err2).NotTo(HaveOccurred(), "Failed to parse config 2")
+			Expect(ascParametersEqual(params1, params2)).To(BeTrue(),
+				"Formatting variations produced different parameters.\nParams1: %+v\nParams2: %+v",
 				params1, params2)
-		}
-
-		// Also verify they match the expected values
-		if !ascParametersEqual(params1, expectedParams) {
-			t.Fatalf("Extracted parameters don't match expected.\nExpected: %+v\nGot: %+v",
+			Expect(ascParametersEqual(params1, expectedParams)).To(BeTrue(),
+				"Extracted parameters don't match expected.\nExpected: %+v\nGot: %+v",
 				expectedParams, params1)
-		}
+		})
 	})
-}
 
-// Feature: property-based-testing, Property 15: Missing ASC parameters are reported
-// Validates: Requirements 4.3
-func TestProperty_MissingASCParametersReportError(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate a config with at least one missing parameter
-		confContent := genWireGuardConfWithMissingParams().Draw(t, "confContent")
+	It("should report error for missing ASC parameters", func() {
+		rapid.Check(GinkgoT(), func(t *rapid.T) {
+			confContent := genWireGuardConfWithMissingParams().Draw(t, "confContent")
+			confPath := writeConfToTempFile(confContent)
 
-		// Write to temp file
-		confPath := writeConfToTempFile(t, confContent)
-
-		// Try to extract parameters
-		_, err := extractASCParametersFromConf(confPath)
-
-		// Property: Extraction should fail with an error indicating missing parameter
-		if err == nil {
-			t.Fatalf("Expected error for missing parameters, but extraction succeeded")
-		}
-
-		// Verify the error message mentions "missing"
-		if !strings.Contains(err.Error(), "missing") {
-			t.Fatalf("Error should mention 'missing' parameter, got: %v", err)
-		}
+			_, err := extractASCParametersFromConf(confPath)
+			Expect(err).To(HaveOccurred(), "Expected error for missing parameters")
+			Expect(err.Error()).To(ContainSubstring("missing"),
+				"Error should mention 'missing' parameter, got: %v", err)
+		})
 	})
-}
+})
 
-// Feature: property-based-testing, Property 16: ASC parameter diff is accurate
-// Validates: Requirements 4.4
-func TestProperty_ASCParameterDiffAccurate(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate two sets of ASC parameters
-		params1 := genASCParameters().Draw(t, "params1")
-		params2 := genASCParameters().Draw(t, "params2")
+var _ = Describe("Property: ASC Parameter Diff", func() {
+	It("should accurately identify differing parameters", func() {
+		rapid.Check(GinkgoT(), func(t *rapid.T) {
+			params1 := genASCParameters().Draw(t, "params1")
+			params2 := genASCParameters().Draw(t, "params2")
 
-		// Calculate diff
-		diffs := ascParametersDiff(params1, params2)
+			diffs := ascParametersDiff(params1, params2)
 
-		// Property: Diff should identify exactly those parameters where values differ
-		// Check each parameter individually
-		if params1.Jc != params2.Jc {
-			if !contains(diffs, "Jc") {
-				t.Fatalf("Diff should include 'Jc' (values: %s vs %s), but got: %v",
-					params1.Jc, params2.Jc, diffs)
+			paramChecks := []struct {
+				name string
+				v1   string
+				v2   string
+			}{
+				{"Jc", params1.Jc, params2.Jc},
+				{"Jmin", params1.Jmin, params2.Jmin},
+				{"Jmax", params1.Jmax, params2.Jmax},
+				{"S1", params1.S1, params2.S1},
+				{"S2", params1.S2, params2.S2},
+				{"H1", params1.H1, params2.H1},
+				{"H2", params1.H2, params2.H2},
+				{"H3", params1.H3, params2.H3},
+				{"H4", params1.H4, params2.H4},
 			}
-		} else {
-			if contains(diffs, "Jc") {
-				t.Fatalf("Diff should not include 'Jc' (both are %s), but got: %v",
-					params1.Jc, diffs)
-			}
-		}
 
-		if params1.Jmin != params2.Jmin {
-			if !contains(diffs, "Jmin") {
-				t.Fatalf("Diff should include 'Jmin' (values: %s vs %s), but got: %v",
-					params1.Jmin, params2.Jmin, diffs)
+			for _, pc := range paramChecks {
+				if pc.v1 != pc.v2 {
+					Expect(contains(diffs, pc.name)).To(BeTrue(),
+						"Diff should include '%s' (values: %s vs %s), but got: %v",
+						pc.name, pc.v1, pc.v2, diffs)
+				} else {
+					Expect(contains(diffs, pc.name)).To(BeFalse(),
+						"Diff should not include '%s' (both are %s), but got: %v",
+						pc.name, pc.v1, diffs)
+				}
 			}
-		} else {
-			if contains(diffs, "Jmin") {
-				t.Fatalf("Diff should not include 'Jmin' (both are %s), but got: %v",
-					params1.Jmin, diffs)
-			}
-		}
-
-		if params1.Jmax != params2.Jmax {
-			if !contains(diffs, "Jmax") {
-				t.Fatalf("Diff should include 'Jmax' (values: %s vs %s), but got: %v",
-					params1.Jmax, params2.Jmax, diffs)
-			}
-		} else {
-			if contains(diffs, "Jmax") {
-				t.Fatalf("Diff should not include 'Jmax' (both are %s), but got: %v",
-					params1.Jmax, diffs)
-			}
-		}
-
-		if params1.S1 != params2.S1 {
-			if !contains(diffs, "S1") {
-				t.Fatalf("Diff should include 'S1' (values: %s vs %s), but got: %v",
-					params1.S1, params2.S1, diffs)
-			}
-		} else {
-			if contains(diffs, "S1") {
-				t.Fatalf("Diff should not include 'S1' (both are %s), but got: %v",
-					params1.S1, diffs)
-			}
-		}
-
-		if params1.S2 != params2.S2 {
-			if !contains(diffs, "S2") {
-				t.Fatalf("Diff should include 'S2' (values: %s vs %s), but got: %v",
-					params1.S2, params2.S2, diffs)
-			}
-		} else {
-			if contains(diffs, "S2") {
-				t.Fatalf("Diff should not include 'S2' (both are %s), but got: %v",
-					params1.S2, diffs)
-			}
-		}
-
-		if params1.H1 != params2.H1 {
-			if !contains(diffs, "H1") {
-				t.Fatalf("Diff should include 'H1' (values: %s vs %s), but got: %v",
-					params1.H1, params2.H1, diffs)
-			}
-		} else {
-			if contains(diffs, "H1") {
-				t.Fatalf("Diff should not include 'H1' (both are %s), but got: %v",
-					params1.H1, diffs)
-			}
-		}
-
-		if params1.H2 != params2.H2 {
-			if !contains(diffs, "H2") {
-				t.Fatalf("Diff should include 'H2' (values: %s vs %s), but got: %v",
-					params1.H2, params2.H2, diffs)
-			}
-		} else {
-			if contains(diffs, "H2") {
-				t.Fatalf("Diff should not include 'H2' (both are %s), but got: %v",
-					params1.H2, diffs)
-			}
-		}
-
-		if params1.H3 != params2.H3 {
-			if !contains(diffs, "H3") {
-				t.Fatalf("Diff should include 'H3' (values: %s vs %s), but got: %v",
-					params1.H3, params2.H3, diffs)
-			}
-		} else {
-			if contains(diffs, "H3") {
-				t.Fatalf("Diff should not include 'H3' (both are %s), but got: %v",
-					params1.H3, diffs)
-			}
-		}
-
-		if params1.H4 != params2.H4 {
-			if !contains(diffs, "H4") {
-				t.Fatalf("Diff should include 'H4' (values: %s vs %s), but got: %v",
-					params1.H4, params2.H4, diffs)
-			}
-		} else {
-			if contains(diffs, "H4") {
-				t.Fatalf("Diff should not include 'H4' (both are %s), but got: %v",
-					params1.H4, diffs)
-			}
-		}
+		})
 	})
-}
+})
 
-// Helper function to check if a slice contains a string
-func contains(slice []string, item string) bool {
-	return slices.Contains(slice, item)
-}
+var _ = Describe("Property: ASC Parameter Validation", func() {
+	It("should validate generated parameters as numeric", func() {
+		rapid.Check(GinkgoT(), func(t *rapid.T) {
+			params := genASCParameters().Draw(t, "params")
 
-// isValidASCParameter checks if a parameter value is valid (numeric string)
-func isValidASCParameter(value string) bool {
-	// ASC parameters should be numeric strings
-	if value == "" {
-		return false
-	}
-
-	for _, c := range value {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-
-	return true
-}
-
-// Feature: property-based-testing, Property 17: ASC parameter validation
-// Validates: Requirements 4.5
-func TestProperty_ASCParametersValidateAsNumeric(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate ASC parameters (which should all be valid)
-		params := genASCParameters().Draw(t, "params")
-
-		// Property: All generated parameters should be valid
-		if !isValidASCParameter(params.Jc) {
-			t.Fatalf("Generated Jc parameter is invalid: %s", params.Jc)
-		}
-		if !isValidASCParameter(params.Jmin) {
-			t.Fatalf("Generated Jmin parameter is invalid: %s", params.Jmin)
-		}
-		if !isValidASCParameter(params.Jmax) {
-			t.Fatalf("Generated Jmax parameter is invalid: %s", params.Jmax)
-		}
-		if !isValidASCParameter(params.S1) {
-			t.Fatalf("Generated S1 parameter is invalid: %s", params.S1)
-		}
-		if !isValidASCParameter(params.S2) {
-			t.Fatalf("Generated S2 parameter is invalid: %s", params.S2)
-		}
-		if !isValidASCParameter(params.H1) {
-			t.Fatalf("Generated H1 parameter is invalid: %s", params.H1)
-		}
-		if !isValidASCParameter(params.H2) {
-			t.Fatalf("Generated H2 parameter is invalid: %s", params.H2)
-		}
-		if !isValidASCParameter(params.H3) {
-			t.Fatalf("Generated H3 parameter is invalid: %s", params.H3)
-		}
-		if !isValidASCParameter(params.H4) {
-			t.Fatalf("Generated H4 parameter is invalid: %s", params.H4)
-		}
-
-		// Also test that invalid values are rejected
-		invalidValues := []string{"", "abc", "12.5", "-10", "1a2", " 10", "10 "}
-		for _, invalid := range invalidValues {
-			if isValidASCParameter(invalid) {
-				t.Fatalf("Validation should reject invalid value: %s", invalid)
+			allParams := []struct {
+				name  string
+				value string
+			}{
+				{"Jc", params.Jc}, {"Jmin", params.Jmin}, {"Jmax", params.Jmax},
+				{"S1", params.S1}, {"S2", params.S2},
+				{"H1", params.H1}, {"H2", params.H2}, {"H3", params.H3}, {"H4", params.H4},
 			}
-		}
+
+			for _, p := range allParams {
+				Expect(isValidASCParameter(p.value)).To(BeTrue(),
+					"Generated %s parameter is invalid: %s", p.name, p.value)
+			}
+
+			invalidValues := []string{"", "abc", "12.5", "-10", "1a2", " 10", "10 "}
+			for _, invalid := range invalidValues {
+				Expect(isValidASCParameter(invalid)).To(BeFalse(),
+					"Validation should reject invalid value: %s", invalid)
+			}
+		})
 	})
-}
+})

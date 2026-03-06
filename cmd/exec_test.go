@@ -1,39 +1,39 @@
 package cmd
 
 import (
-	"testing"
+	"net/http/httptest"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-type ExecTestSuite struct {
-	CmdTestSuite
-}
+var _ = Describe("Exec", func() {
+	var server *httptest.Server
 
-func TestExecTestSuite(t *testing.T) {
-	suite.Run(t, new(ExecTestSuite))
-}
+	BeforeEach(func() {
+		server = setupMockRouter()
+	})
 
-func (s *ExecTestSuite) TestNewExecCmd() {
-	cmd := newExecCmd()
+	AfterEach(func() {
+		cleanupMockRouter(server)
+	})
 
-	assert.Equal(s.T(), CmdExec, cmd.Use)
-	assert.Equal(s.T(), AliasesExec, cmd.Aliases)
-	assert.NotEmpty(s.T(), cmd.Short)
-	assert.NotNil(s.T(), cmd.RunE)
-}
+	It("should create command with correct attributes", func() {
+		cmd := newExecCmd()
 
-func (s *ExecTestSuite) TestExecCmd_Execute() {
-	cmd := newExecCmd()
+		Expect(cmd.Use).To(Equal(CmdExec))
+		Expect(cmd.Aliases).To(Equal(AliasesExec))
+		Expect(cmd.Short).NotTo(BeEmpty())
+		Expect(cmd.RunE).NotTo(BeNil())
+	})
 
-	err := cmd.RunE(cmd, []string{"system", "configuration", "save"})
-	assert.NoError(s.T(), err)
-}
+	It("should execute with arguments", func() {
+		cmd := newExecCmd()
+		Expect(cmd.RunE(cmd, []string{"system", "configuration", "save"})).To(Succeed())
+	})
 
-func (s *ExecTestSuite) TestExecCmd_NoArgs() {
-	cmd := newExecCmd()
-
-	err := cmd.RunE(cmd, []string{})
-	assert.NoError(s.T(), err)
-}
+	It("should handle no arguments", func() {
+		cmd := newExecCmd()
+		Expect(cmd.RunE(cmd, []string{})).To(Succeed())
+	})
+})

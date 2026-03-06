@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM --platform=${BUILDPLATFORM} golang:1.25-alpine3.21 as builder
+FROM --platform=${BUILDPLATFORM} golang:1.26-alpine3.22 as builder
 ENV GOPATH="/go"
 ARG TARGETOS
 ARG TARGETARCH
@@ -21,7 +21,7 @@ RUN --mount=type=cache,id=golang,target=/go/pkg/mod/ <<eot
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-X \"github.com/noksa/gokeenapi/internal/gokeenversion.version=${GOKEENAPI_VERSION}\" -X \"github.com/noksa/gokeenapi/internal/gokeenversion.buildDate=${GOKEENAPI_BUILDDATE}\"" -o gokeenapi
 eot
 
-FROM alpine:3.21 as final
+FROM alpine:3.22 as final
 WORKDIR /opt/gokeenapi
 COPY --from=builder /workspace/gokeenapi ./gokeenapi
 ENV PATH="${PATH}:/opt/gokeenapi"

@@ -1,62 +1,44 @@
 package gokeenrestapi
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/suite"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-type CheckRouterModeTestSuite struct {
-	suite.Suite
-}
+var _ = Describe("CheckRouterMode", func() {
+	AfterEach(func() {
+		CleanupTestConfig()
+	})
 
-func TestCheckRouterModeTestSuite(t *testing.T) {
-	suite.Run(t, new(CheckRouterModeTestSuite))
-}
+	It("should succeed in router mode", func() {
+		server := SetupMockRouterForTest(WithSystemMode(MockSystemMode{Active: "router", Selected: "router"}))
+		DeferCleanup(server.Close)
 
-func (s *CheckRouterModeTestSuite) TestCheckRouterMode_RouterMode() {
-	server := SetupMockRouterForTest(
-		WithSystemMode(MockSystemMode{
-			Active:   "router",
-			Selected: "router",
-		}),
-	)
-	defer server.Close()
+		active, selected, err := Common.CheckRouterMode()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(active).To(Equal("router"))
+		Expect(selected).To(Equal("router"))
+	})
 
-	active, selected, err := Common.CheckRouterMode()
-	s.NoError(err)
-	s.Equal("router", active)
-	s.Equal("router", selected)
-}
+	It("should fail in extender mode", func() {
+		server := SetupMockRouterForTest(WithSystemMode(MockSystemMode{Active: "extender", Selected: "extender"}))
+		DeferCleanup(server.Close)
 
-func (s *CheckRouterModeTestSuite) TestCheckRouterMode_ExtenderMode() {
-	server := SetupMockRouterForTest(
-		WithSystemMode(MockSystemMode{
-			Active:   "extender",
-			Selected: "extender",
-		}),
-	)
-	defer server.Close()
+		active, selected, err := Common.CheckRouterMode()
+		Expect(err).To(HaveOccurred())
+		Expect(active).To(Equal("extender"))
+		Expect(selected).To(Equal("extender"))
+		Expect(err.Error()).To(ContainSubstring("router is not in router mode"))
+	})
 
-	active, selected, err := Common.CheckRouterMode()
-	s.Error(err)
-	s.Equal("extender", active)
-	s.Equal("extender", selected)
-	s.Contains(err.Error(), "router is not in router mode")
-}
+	It("should fail in mixed mode", func() {
+		server := SetupMockRouterForTest(WithSystemMode(MockSystemMode{Active: "router", Selected: "extender"}))
+		DeferCleanup(server.Close)
 
-func (s *CheckRouterModeTestSuite) TestCheckRouterMode_MixedMode() {
-	server := SetupMockRouterForTest(
-		WithSystemMode(MockSystemMode{
-			Active:   "router",
-			Selected: "extender",
-		}),
-	)
-	defer server.Close()
-
-	active, selected, err := Common.CheckRouterMode()
-	s.Error(err)
-	s.Equal("router", active)
-	s.Equal("extender", selected)
-	s.Contains(err.Error(), "router is not in router mode")
-}
+		active, selected, err := Common.CheckRouterMode()
+		Expect(err).To(HaveOccurred())
+		Expect(active).To(Equal("router"))
+		Expect(selected).To(Equal("extender"))
+		Expect(err.Error()).To(ContainSubstring("router is not in router mode"))
+	})
+})

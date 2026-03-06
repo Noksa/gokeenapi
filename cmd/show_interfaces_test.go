@@ -1,48 +1,52 @@
 package cmd
 
 import (
-	"testing"
+	"net/http/httptest"
 
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapi"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-type ShowInterfacesTestSuite struct {
-	CmdTestSuite
-}
+var _ = Describe("ShowInterfaces", func() {
+	var server *httptest.Server
 
-func TestShowInterfacesTestSuite(t *testing.T) {
-	suite.Run(t, new(ShowInterfacesTestSuite))
-}
+	BeforeEach(func() {
+		server = setupMockRouter()
+	})
 
-func (s *ShowInterfacesTestSuite) TestNewShowInterfacesCmd() {
-	cmd := newShowInterfacesCmd()
+	AfterEach(func() {
+		cleanupMockRouter(server)
+	})
 
-	assert.Equal(s.T(), CmdShowInterfaces, cmd.Use)
-	assert.Equal(s.T(), AliasesShowInterfaces, cmd.Aliases)
-	assert.NotEmpty(s.T(), cmd.Short)
-	assert.NotNil(s.T(), cmd.RunE)
+	It("should create command with correct attributes and flags", func() {
+		cmd := newShowInterfacesCmd()
 
-	typeFlag := cmd.Flags().Lookup("type")
-	assert.NotNil(s.T(), typeFlag)
-	assert.Equal(s.T(), "stringSlice", typeFlag.Value.Type())
-}
+		Expect(cmd.Use).To(Equal(CmdShowInterfaces))
+		Expect(cmd.Aliases).To(Equal(AliasesShowInterfaces))
+		Expect(cmd.Short).NotTo(BeEmpty())
+		Expect(cmd.RunE).NotTo(BeNil())
 
-func (s *ShowInterfacesTestSuite) TestShowInterfacesCmd_Execute() {
-	cmd := newShowInterfacesCmd()
-	output, err := s.CaptureOutput(cmd, []string{})
+		typeFlag := cmd.Flags().Lookup("type")
+		Expect(typeFlag).NotTo(BeNil())
+		Expect(typeFlag.Value.Type()).To(Equal("stringSlice"))
+	})
 
-	assert.NoError(s.T(), err)
-	assert.Contains(s.T(), output, "Wireguard0")
-	assert.Contains(s.T(), output, "ISP")
-}
+	It("should execute and show interfaces", func() {
+		cmd := newShowInterfacesCmd()
+		output, err := captureOutput(cmd, []string{})
 
-func (s *ShowInterfacesTestSuite) TestShowInterfacesCmd_WithTypeFilter() {
-	cmd := newShowInterfacesCmd()
-	_ = cmd.Flags().Set("type", gokeenrestapi.InterfaceTypeWireguard)
-	output, err := s.CaptureOutput(cmd, []string{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(output).To(ContainSubstring("Wireguard0"))
+		Expect(output).To(ContainSubstring("ISP"))
+	})
 
-	assert.NoError(s.T(), err)
-	assert.Contains(s.T(), output, "Wireguard0")
-}
+	It("should filter by type", func() {
+		cmd := newShowInterfacesCmd()
+		_ = cmd.Flags().Set("type", gokeenrestapi.InterfaceTypeWireguard)
+		output, err := captureOutput(cmd, []string{})
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(output).To(ContainSubstring("Wireguard0"))
+	})
+})

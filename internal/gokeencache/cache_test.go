@@ -1,76 +1,86 @@
 package gokeencache
 
 import (
-	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestDomainValidationCache(t *testing.T) {
-	domain := "example.com"
+var _ = Describe("DomainValidationCache", func() {
+	It("should return not cached for unknown domain", func() {
+		_, cached := GetDomainValidation("example.com")
+		Expect(cached).To(BeFalse())
+	})
 
-	// Initially not cached
-	_, cached := GetDomainValidation(domain)
-	assert.False(t, cached)
+	It("should cache valid domain", func() {
+		domain := "cached-valid.com"
+		SetDomainValidation(domain, true)
 
-	// Cache as valid
-	SetDomainValidation(domain, true)
+		valid, cached := GetDomainValidation(domain)
+		Expect(cached).To(BeTrue())
+		Expect(valid).To(BeTrue())
+	})
 
-	// Should be cached now
-	valid, cached := GetDomainValidation(domain)
-	assert.True(t, cached)
-	assert.True(t, valid)
+	It("should cache invalid domain", func() {
+		domain := "invalid..domain"
+		SetDomainValidation(domain, false)
 
-	// Cache another domain as invalid
-	invalidDomain := "invalid..domain"
-	SetDomainValidation(invalidDomain, false)
+		valid, cached := GetDomainValidation(domain)
+		Expect(cached).To(BeTrue())
+		Expect(valid).To(BeFalse())
+	})
+})
 
-	valid, cached = GetDomainValidation(invalidDomain)
-	assert.True(t, cached)
-	assert.False(t, valid)
-}
+var _ = Describe("URLContentWithChecksum", func() {
+	var (
+		url     string
+		content string
+		ttl     time.Duration
+	)
 
-func TestURLContentWithChecksum(t *testing.T) {
-	url := "https://example.com/domains.txt"
-	content := "example.com\ntest.com\n"
-	ttl := 5 * time.Minute
+	BeforeEach(func() {
+		url = "https://example.com/domains.txt"
+		content = "example.com\ntest.com\n"
+		ttl = 5 * time.Minute
+	})
 
-	// Set content
-	SetURLContent(url, content, ttl)
+	It("should store and retrieve content", func() {
+		SetURLContent(url, content, ttl)
 
-	// Get content back
-	retrieved, ok := GetURLContent(url)
-	require.True(t, ok)
-	assert.Equal(t, content, retrieved)
+		retrieved, ok := GetURLContent(url)
+		Expect(ok).To(BeTrue())
+		Expect(retrieved).To(Equal(content))
+	})
 
-	// Get checksum
-	checksum := GetURLChecksum(url)
-	assert.NotEmpty(t, checksum)
+	It("should compute checksum", func() {
+		SetURLContent(url, content, ttl)
 
-	// Update content with different data
-	newContent := "example.com\ntest.com\nnew.com\n"
-	SetURLContent(url, newContent, ttl)
+		checksum := GetURLChecksum(url)
+		Expect(checksum).NotTo(BeEmpty())
+	})
 
-	// Checksum should be different
-	newChecksum := GetURLChecksum(url)
-	assert.NotEmpty(t, newChecksum)
-	assert.NotEqual(t, checksum, newChecksum)
-}
+	It("should change checksum when content changes", func() {
+		SetURLContent(url, content, ttl)
+		checksum1 := GetURLChecksum(url)
 
-func TestComputeChecksum(t *testing.T) {
-	content1 := []byte("example.com\ntest.com\n")
-	content2 := []byte("example.com\ntest.com\n")
-	content3 := []byte("different.com\n")
+		newContent := "example.com\ntest.com\nnew.com\n"
+		SetURLContent(url, newContent, ttl)
+		checksum2 := GetURLChecksum(url)
 
-	checksum1 := ComputeChecksum(content1)
-	checksum2 := ComputeChecksum(content2)
-	checksum3 := ComputeChecksum(content3)
+		Expect(checksum2).NotTo(Equal(checksum1))
+	})
+})
 
-	// Same content should produce same checksum
-	assert.Equal(t, checksum1, checksum2)
+var _ = Describe("ComputeChecksum", func() {
+	It("should produce same checksum for same content", func() {
+		content := []byte("example.com\ntest.com\n")
+		Expect(ComputeChecksum(content)).To(Equal(ComputeChecksum(content)))
+	})
 
-	// Different content should produce different checksum
-	assert.NotEqual(t, checksum1, checksum3)
-}
+	It("should produce different checksum for different content", func() {
+		content1 := []byte("example.com\ntest.com\n")
+		content2 := []byte("different.com\n")
+		Expect(ComputeChecksum(content1)).NotTo(Equal(ComputeChecksum(content2)))
+	})
+})

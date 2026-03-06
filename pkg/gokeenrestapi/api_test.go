@@ -1,141 +1,141 @@
 package gokeenrestapi
 
 import (
-	"testing"
-
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
-	"github.com/stretchr/testify/suite"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-type ApiTestSuite struct {
-	GokeenrestapiTestSuite
-}
+var _ = Describe("API", func() {
+	var server interface{ Close() }
 
-func TestApiTestSuite(t *testing.T) {
-	suite.Run(t, new(ApiTestSuite))
-}
+	BeforeEach(func() {
+		server = SetupMockRouterForTest()
+	})
 
-func (s *ApiTestSuite) TestPing() {
-	err := Common.Ping()
-	s.NoError(err)
-}
+	AfterEach(func() {
+		if server != nil {
+			server.Close()
+		}
+		CleanupTestConfig()
+	})
 
-func (s *ApiTestSuite) TestAuth() {
-	err := Common.Auth()
-	s.NoError(err)
-}
+	It("should ping", func() {
+		Expect(Common.Ping()).To(Succeed())
+	})
 
-func (s *ApiTestSuite) TestVersion() {
-	version, err := Common.Version()
-	s.NoError(err)
-	s.Equal("KN-1010", version.Model)
-	s.Equal("4.3.6.3", version.Title)
-}
+	It("should auth", func() {
+		Expect(Common.Auth()).To(Succeed())
+	})
 
-func (s *ApiTestSuite) TestGetInterfacesViaRciShowInterfaces() {
-	interfaces, err := Interface.GetInterfacesViaRciShowInterfaces(false)
-	s.NoError(err)
-	s.Len(interfaces, 2)
+	It("should get version", func() {
+		version, err := Common.Version()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(version.Model).To(Equal("KN-1010"))
+		Expect(version.Title).To(Equal("4.3.6.3"))
+	})
 
-	wg, exists := interfaces["Wireguard0"]
-	s.True(exists)
-	s.Equal(InterfaceTypeWireguard, wg.Type)
-	s.Equal("10.0.0.1/24", wg.Address)
-}
+	Context("interfaces", func() {
+		It("should get all interfaces", func() {
+			interfaces, err := Interface.GetInterfacesViaRciShowInterfaces(false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(interfaces).To(HaveLen(2))
 
-func (s *ApiTestSuite) TestGetInterfacesWithTypeFilter() {
-	interfaces, err := Interface.GetInterfacesViaRciShowInterfaces(false, InterfaceTypeWireguard)
-	s.NoError(err)
-	s.Len(interfaces, 1)
+			wg, exists := interfaces["Wireguard0"]
+			Expect(exists).To(BeTrue())
+			Expect(wg.Type).To(Equal(InterfaceTypeWireguard))
+			Expect(wg.Address).To(Equal("10.0.0.1/24"))
+		})
 
-	wg, exists := interfaces["Wireguard0"]
-	s.True(exists)
-	s.Equal(InterfaceTypeWireguard, wg.Type)
-}
+		It("should filter interfaces by type", func() {
+			interfaces, err := Interface.GetInterfacesViaRciShowInterfaces(false, InterfaceTypeWireguard)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(interfaces).To(HaveLen(1))
 
-func (s *ApiTestSuite) TestGetInterfaceViaRciShowInterfaces() {
-	iface, err := Interface.GetInterfaceViaRciShowInterfaces("Wireguard0")
-	s.NoError(err)
-	s.Equal("Wireguard0", iface.Id)
-	s.Equal(InterfaceTypeWireguard, iface.Type)
-}
+			_, exists := interfaces["Wireguard0"]
+			Expect(exists).To(BeTrue())
+		})
 
-func (s *ApiTestSuite) TestGetInterfacesViaRciShowScInterfaces() {
-	interfaces, err := Interface.GetInterfacesViaRciShowScInterfaces()
-	s.NoError(err)
-	s.Len(interfaces, 1)
+		It("should get single interface", func() {
+			iface, err := Interface.GetInterfaceViaRciShowInterfaces("Wireguard0")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(iface.Id).To(Equal("Wireguard0"))
+			Expect(iface.Type).To(Equal(InterfaceTypeWireguard))
+		})
 
-	wg, exists := interfaces["Wireguard0"]
-	s.True(exists)
-	s.Equal("Test WireGuard interface", wg.Description)
-}
+		It("should get SC interfaces", func() {
+			interfaces, err := Interface.GetInterfacesViaRciShowScInterfaces()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(interfaces).To(HaveLen(1))
 
-func (s *ApiTestSuite) TestExecutePostParse() {
-	parseRequests := []gokeenrestapimodels.ParseRequest{
-		{Parse: "interface Wireguard0 up"},
-		{Parse: "system configuration save"},
-	}
+			wg, exists := interfaces["Wireguard0"]
+			Expect(exists).To(BeTrue())
+			Expect(wg.Description).To(Equal("Test WireGuard interface"))
+		})
 
-	responses, err := Common.ExecutePostParse(parseRequests...)
-	s.NoError(err)
-	s.Len(responses, 2)
+		It("should up interface", func() {
+			Expect(Interface.UpInterface("Wireguard0")).To(Succeed())
+		})
 
-	for i, response := range responses {
-		s.NotEmpty(response.Parse.Status, "Response %d has no status", i)
-		s.Equal(StatusOK, response.Parse.Status[0].Status, "Response %d status", i)
-	}
-}
+		It("should set global IP in interface", func() {
+			Expect(Interface.SetGlobalIpInInterface("Wireguard0", true)).To(Succeed())
+			Expect(Interface.SetGlobalIpInInterface("Wireguard0", false)).To(Succeed())
+		})
+	})
 
-func (s *ApiTestSuite) TestShowRunningConfig() {
-	config, err := Common.ShowRunningConfig()
-	s.NoError(err)
-	s.NotEmpty(config.Message)
+	It("should execute post parse", func() {
+		parseRequests := []gokeenrestapimodels.ParseRequest{
+			{Parse: "interface Wireguard0 up"},
+			{Parse: "system configuration save"},
+		}
 
-	// Verify config contains expected system mode
-	s.Contains(config.Message, "system mode router")
-}
+		responses, err := Common.ExecutePostParse(parseRequests...)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(responses).To(HaveLen(2))
 
-func (s *ApiTestSuite) TestShowRunningConfigWithStaticConfig() {
-	// Create a separate server for this specific test case
-	server := SetupMockRouterForTest(WithStaticRunningConfig([]string{
-		"test running config line 1",
-		"test running config line 2",
-	}))
-	defer server.Close()
+		for i, response := range responses {
+			Expect(response.Parse.Status).NotTo(BeEmpty(), "Response %d has no status", i)
+			Expect(response.Parse.Status[0].Status).To(Equal(StatusOK), "Response %d status", i)
+		}
+	})
 
-	config, err := Common.ShowRunningConfig()
-	s.NoError(err)
-	s.Len(config.Message, 2)
-	s.Equal("test running config line 1", config.Message[0])
-}
+	It("should show running config", func() {
+		config, err := Common.ShowRunningConfig()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(config.Message).NotTo(BeEmpty())
+		Expect(config.Message).To(ContainElement(ContainSubstring("system mode router")))
+	})
 
-func (s *ApiTestSuite) TestUpInterface() {
-	err := Interface.UpInterface("Wireguard0")
-	s.NoError(err)
-}
+	It("should show static running config", func() {
+		if server != nil {
+			server.Close()
+		}
+		s := SetupMockRouterForTest(WithStaticRunningConfig([]string{
+			"test running config line 1",
+			"test running config line 2",
+		}))
+		DeferCleanup(s.Close)
 
-func (s *ApiTestSuite) TestSetGlobalIpInInterface() {
-	err := Interface.SetGlobalIpInInterface("Wireguard0", true)
-	s.NoError(err)
+		config, err := Common.ShowRunningConfig()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(config.Message).To(HaveLen(2))
+		Expect(config.Message[0]).To(Equal("test running config line 1"))
+	})
 
-	err = Interface.SetGlobalIpInInterface("Wireguard0", false)
-	s.NoError(err)
-}
+	It("should get all hotspots", func() {
+		hotspot, err := Ip.GetAllHotspots()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(hotspot.Host).To(HaveLen(2))
 
-func (s *ApiTestSuite) TestGetAllHotspots() {
-	hotspot, err := Ip.GetAllHotspots()
-	s.NoError(err)
-	s.Len(hotspot.Host, 2)
+		expectedHosts := map[string]string{
+			"test-device-1": "aa:bb:cc:dd:ee:ff",
+			"test-device-2": "11:22:33:44:55:66",
+		}
 
-	// Verify default hotspot devices from unified mock
-	expectedHosts := map[string]string{
-		"test-device-1": "aa:bb:cc:dd:ee:ff",
-		"test-device-2": "11:22:33:44:55:66",
-	}
-
-	for _, host := range hotspot.Host {
-		expectedMac, exists := expectedHosts[host.Name]
-		s.True(exists, "Unexpected host: %s", host.Name)
-		s.Equal(expectedMac, host.Mac, "Host %s MAC mismatch", host.Name)
-	}
-}
+		for _, host := range hotspot.Host {
+			expectedMac, exists := expectedHosts[host.Name]
+			Expect(exists).To(BeTrue(), "Unexpected host: %s", host.Name)
+			Expect(host.Mac).To(Equal(expectedMac), "Host %s MAC mismatch", host.Name)
+		}
+	})
+})

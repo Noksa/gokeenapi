@@ -6,10 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/gomega"
 )
 
 const (
@@ -17,44 +16,41 @@ const (
 	testTimeout   = 5 * time.Minute
 )
 
-// createDockerAccessibleTempDir creates a temp directory that Docker can access
-// For Colima on macOS, this needs to be under $HOME
-// For Docker Desktop, this would work with default file sharing
-// For Linux, any temp dir works
-func createDockerAccessibleTempDir(t *testing.T) string {
-	// Try to create in $HOME/tmp for Colima compatibility
+type cleanupRegistrar interface {
+	Cleanup(func())
+}
+
+// createDockerAccessibleTempDir creates a temp directory that Docker can access.
+// For Colima on macOS, this needs to be under $HOME.
+func createDockerAccessibleTempDir(t cleanupRegistrar) string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		// Fallback to standard temp dir
-		return t.TempDir()
+		return fallbackTempDir(t)
 	}
 
 	tmpBase := filepath.Join(homeDir, ".tmp", "gokeenapi-docker-test")
-	err = os.MkdirAll(tmpBase, 0755)
-	if err != nil {
-		// Fallback to standard temp dir
-		return t.TempDir()
+	if err = os.MkdirAll(tmpBase, 0755); err != nil {
+		return fallbackTempDir(t)
 	}
 
-	// Create unique subdirectory
 	tmpDir, err := os.MkdirTemp(tmpBase, "test-*")
 	if err != nil {
-		// Fallback to standard temp dir
-		return t.TempDir()
+		return fallbackTempDir(t)
 	}
 
-	// Register cleanup
-	t.Cleanup(func() {
-		_ = os.RemoveAll(tmpDir)
-	})
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+	return tmpDir
+}
 
+func fallbackTempDir(t cleanupRegistrar) string {
+	tmpDir, err := os.MkdirTemp("", "gokeenapi-docker-test-*")
+	Expect(err).NotTo(HaveOccurred())
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 	return tmpDir
 }
 
 // buildDockerImage builds the Docker image for testing
-func buildDockerImage(t *testing.T, ctx context.Context) {
-	t.Log("Building Docker image...")
-
+func buildDockerImage(ctx context.Context) {
 	version := "test-" + time.Now().Format("20060102-150405")
 	buildDate := time.Now().Format(time.RFC3339)
 
@@ -67,18 +63,15 @@ func buildDockerImage(t *testing.T, ctx context.Context) {
 	)
 
 	output, err := cmd.CombinedOutput()
-	require.NoError(t, err, "Docker build failed: %s", string(output))
-	t.Log("Docker image built successfully")
+	Expect(err).NotTo(HaveOccurred(), "Docker build failed: %s", string(output))
 }
 
 // ensureDockerImage ensures the test image exists
-func ensureDockerImage(t *testing.T, ctx context.Context) {
-	// Check if image exists
+func ensureDockerImage(ctx context.Context) {
 	cmd := exec.CommandContext(ctx, "docker", "images", "-q", testImageName)
 	output, err := cmd.Output()
 
 	if err != nil || len(output) == 0 {
-		t.Log("Test image not found, building...")
-		buildDockerImage(t, ctx)
+		buildDockerImage(ctx)
 	}
 }

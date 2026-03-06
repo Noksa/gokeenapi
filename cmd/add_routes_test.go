@@ -1,56 +1,50 @@
 package cmd
 
 import (
-	"testing"
+	"net/http/httptest"
 
 	"github.com/noksa/gokeenapi/pkg/config"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-type AddRoutesTestSuite struct {
-	CmdTestSuite
-}
+var _ = Describe("AddRoutes", func() {
+	var server *httptest.Server
 
-func TestAddRoutesTestSuite(t *testing.T) {
-	suite.Run(t, new(AddRoutesTestSuite))
-}
+	BeforeEach(func() {
+		server = setupMockRouter()
+	})
 
-func (s *AddRoutesTestSuite) TestNewAddRoutesCmd() {
-	cmd := newAddRoutesCmd()
+	AfterEach(func() {
+		cleanupMockRouter(server)
+	})
 
-	assert.Equal(s.T(), CmdAddRoutes, cmd.Use)
-	assert.Equal(s.T(), AliasesAddRoutes, cmd.Aliases)
-	assert.NotEmpty(s.T(), cmd.Short)
-	assert.NotNil(s.T(), cmd.RunE)
-}
+	It("should create command with correct attributes", func() {
+		cmd := newAddRoutesCmd()
 
-func (s *AddRoutesTestSuite) TestAddRoutesCmd_Execute() {
-	// Set up test config with routes
-	config.Cfg.Routes = []config.Route{
-		{
-			InterfaceID: "Wireguard0",
-			BatFileList: config.BatFileList{
-				BatFile: []string{},
+		Expect(cmd.Use).To(Equal(CmdAddRoutes))
+		Expect(cmd.Aliases).To(Equal(AliasesAddRoutes))
+		Expect(cmd.Short).NotTo(BeEmpty())
+		Expect(cmd.RunE).NotTo(BeNil())
+	})
+
+	It("should execute with configured routes", func() {
+		config.Cfg.Routes = []config.Route{
+			{
+				InterfaceID: "Wireguard0",
+				BatFileList: config.BatFileList{BatFile: []string{}},
+				BatURLList:  config.BatURLList{BatURL: []string{}},
 			},
-			BatURLList: config.BatURLList{
-				BatURL: []string{},
-			},
-		},
-	}
+		}
 
-	cmd := newAddRoutesCmd()
-	err := cmd.RunE(cmd, []string{})
+		cmd := newAddRoutesCmd()
+		Expect(cmd.RunE(cmd, []string{})).To(Succeed())
+	})
 
-	assert.NoError(s.T(), err)
-}
+	It("should handle empty routes config", func() {
+		config.Cfg.Routes = []config.Route{}
 
-func (s *AddRoutesTestSuite) TestAddRoutesCmd_EmptyRoutes() {
-	// Empty routes config
-	config.Cfg.Routes = []config.Route{}
-
-	cmd := newAddRoutesCmd()
-	err := cmd.RunE(cmd, []string{})
-
-	assert.NoError(s.T(), err)
-}
+		cmd := newAddRoutesCmd()
+		Expect(cmd.RunE(cmd, []string{})).To(Succeed())
+	})
+})

@@ -1,49 +1,49 @@
 package cmd
 
 import (
-	"testing"
+	"net/http/httptest"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-type ConfigureAwgTestSuite struct {
-	CmdTestSuite
-}
+var _ = Describe("ConfigureAwg", func() {
+	var server *httptest.Server
 
-func TestConfigureAwgTestSuite(t *testing.T) {
-	suite.Run(t, new(ConfigureAwgTestSuite))
-}
+	BeforeEach(func() {
+		server = setupMockRouter()
+	})
 
-func (s *ConfigureAwgTestSuite) TestNewUpdateAwgCmd() {
-	cmd := newUpdateAwgCmd()
+	AfterEach(func() {
+		cleanupMockRouter(server)
+	})
 
-	assert.Equal(s.T(), CmdUpdateAwg, cmd.Use)
-	assert.Equal(s.T(), AliasesUpdateAwg, cmd.Aliases)
-	assert.NotEmpty(s.T(), cmd.Short)
-	assert.NotNil(s.T(), cmd.RunE)
+	It("should create command with correct attributes and flags", func() {
+		cmd := newUpdateAwgCmd()
 
-	confFileFlag := cmd.Flags().Lookup("conf-file")
-	assert.NotNil(s.T(), confFileFlag)
+		Expect(cmd.Use).To(Equal(CmdUpdateAwg))
+		Expect(cmd.Aliases).To(Equal(AliasesUpdateAwg))
+		Expect(cmd.Short).NotTo(BeEmpty())
+		Expect(cmd.RunE).NotTo(BeNil())
+		Expect(cmd.Flags().Lookup("conf-file")).NotTo(BeNil())
+		Expect(cmd.Flags().Lookup("interface-id")).NotTo(BeNil())
+	})
 
-	interfaceIdFlag := cmd.Flags().Lookup("interface-id")
-	assert.NotNil(s.T(), interfaceIdFlag)
-}
+	It("should fail when conf-file is missing", func() {
+		cmd := newUpdateAwgCmd()
+		_ = cmd.Flags().Set("interface-id", "Wireguard0")
 
-func (s *ConfigureAwgTestSuite) TestUpdateAwgCmd_MissingConfFile() {
-	cmd := newUpdateAwgCmd()
-	_ = cmd.Flags().Set("interface-id", "Wireguard0")
+		err := cmd.RunE(cmd, []string{})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("--conf-file flag is required"))
+	})
 
-	err := cmd.RunE(cmd, []string{})
-	assert.Error(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "--conf-file flag is required")
-}
+	It("should fail when interface-id is missing", func() {
+		cmd := newUpdateAwgCmd()
+		_ = cmd.Flags().Set("conf-file", "/tmp/test.conf")
 
-func (s *ConfigureAwgTestSuite) TestUpdateAwgCmd_MissingInterfaceId() {
-	cmd := newUpdateAwgCmd()
-	_ = cmd.Flags().Set("conf-file", "/tmp/test.conf")
-
-	err := cmd.RunE(cmd, []string{})
-	assert.Error(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "--interface-id flag is required")
-}
+		err := cmd.RunE(cmd, []string{})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("--interface-id flag is required"))
+	})
+})

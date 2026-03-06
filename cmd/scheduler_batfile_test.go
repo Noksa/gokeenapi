@@ -3,31 +3,28 @@ package cmd
 import (
 	"os"
 	"path/filepath"
-	"testing"
 
 	"github.com/noksa/gokeenapi/pkg/config"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-// TestSchedulerWithExpandedBatFiles tests that scheduler works with expanded bat-file lists
-func TestSchedulerWithExpandedBatFiles(t *testing.T) {
-	// Create temporary directory for test files
-	tmpDir := t.TempDir()
+var _ = Describe("SchedulerBatFileExpansion", func() {
+	var tmpDir string
 
-	// Create a bat-file list YAML
-	batFileListPath := filepath.Join(tmpDir, "common-routes.yaml")
-	batFileListContent := `bat-file:
+	BeforeEach(func() {
+		tmpDir = GinkgoT().TempDir()
+	})
+
+	It("should expand bat-file lists from YAML references", func() {
+		batFileListPath := writeTempFile(tmpDir, "common-routes.yaml", `bat-file:
   - /path/to/route1.bat
   - /path/to/route2.bat
   - /path/to/route3.bat
-`
-	err := os.WriteFile(batFileListPath, []byte(batFileListContent), 0644)
-	require.NoError(t, err)
+`)
 
-	// Create a router config that references the bat-file list
-	routerConfigPath := filepath.Join(tmpDir, "router.yaml")
-	routerConfigContent := `keenetic:
+		routerConfigPath := filepath.Join(tmpDir, "router.yaml")
+		Expect(os.WriteFile(routerConfigPath, []byte(`keenetic:
   url: http://192.168.1.1
   login: admin
   password: admin
@@ -37,69 +34,49 @@ routes:
     bat-file:
       - common-routes.yaml
       - /path/to/extra-route.bat
-`
-	err = os.WriteFile(routerConfigPath, []byte(routerConfigContent), 0644)
-	require.NoError(t, err)
+`), 0644)).To(Succeed())
 
-	// Create a scheduler config that uses the router config
-	schedulerConfigPath := filepath.Join(tmpDir, "scheduler.yaml")
-	schedulerConfigContent := `tasks:
+		schedulerConfigPath := writeTempFile(tmpDir, "scheduler.yaml", `tasks:
   - name: "Test task with expanded bat-files"
     commands:
       - add-routes
     configs:
-      - ` + routerConfigPath + `
+      - `+routerConfigPath+`
     interval: "1h"
-`
-	err = os.WriteFile(schedulerConfigPath, []byte(schedulerConfigContent), 0644)
-	require.NoError(t, err)
+`)
 
-	// Load scheduler config
-	schedulerCfg, err := config.LoadSchedulerConfig(schedulerConfigPath)
-	require.NoError(t, err)
-	require.Len(t, schedulerCfg.Tasks, 1)
+		schedulerCfg, err := config.LoadSchedulerConfig(schedulerConfigPath)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(schedulerCfg.Tasks).To(HaveLen(1))
 
-	// Verify scheduler config loaded correctly
-	task := schedulerCfg.Tasks[0]
-	assert.Equal(t, "Test task with expanded bat-files", task.Name)
-	assert.Equal(t, []string{"add-routes"}, task.Commands)
-	assert.Equal(t, []string{routerConfigPath}, task.Configs)
-	assert.Equal(t, "1h", task.Interval)
+		task := schedulerCfg.Tasks[0]
+		Expect(task.Name).To(Equal("Test task with expanded bat-files"))
+		Expect(task.Commands).To(Equal([]string{"add-routes"}))
+		Expect(task.Configs).To(Equal([]string{routerConfigPath}))
+		Expect(task.Interval).To(Equal("1h"))
 
-	// Now load the router config to verify bat-file expansion works
-	err = config.LoadConfig(routerConfigPath)
-	require.NoError(t, err)
+		Expect(config.LoadConfig(routerConfigPath)).To(Succeed())
+		Expect(config.Cfg.Routes).To(HaveLen(1))
 
-	// Verify bat-files were expanded
-	require.Len(t, config.Cfg.Routes, 1)
-	route := config.Cfg.Routes[0]
-	assert.Equal(t, "Wireguard0", route.InterfaceID)
+		route := config.Cfg.Routes[0]
+		Expect(route.InterfaceID).To(Equal("Wireguard0"))
+		Expect(route.BatFile).To(Equal([]string{
+			"/path/to/route1.bat",
+			"/path/to/route2.bat",
+			"/path/to/route3.bat",
+			"/path/to/extra-route.bat",
+		}))
 
-	// Should have 4 bat files: 3 from common-routes.yaml + 1 extra
-	expectedBatFiles := []string{
-		"/path/to/route1.bat",
-		"/path/to/route2.bat",
-		"/path/to/route3.bat",
-		"/path/to/extra-route.bat",
-	}
-	assert.Equal(t, expectedBatFiles, route.BatFile)
-}
+		_ = batFileListPath // used via YAML reference
+	})
 
-// TestSchedulerValidationWithBatFileExpansion tests that scheduler validation works with bat-file expansion
-func TestSchedulerValidationWithBatFileExpansion(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create bat-file list
-	batFileListPath := filepath.Join(tmpDir, "routes.yaml")
-	batFileListContent := `bat-file:
+	It("should validate scheduler config with bat-file expansion", func() {
+		writeTempFile(tmpDir, "routes.yaml", `bat-file:
   - /path/to/route1.bat
-`
-	err := os.WriteFile(batFileListPath, []byte(batFileListContent), 0644)
-	require.NoError(t, err)
+`)
 
-	// Create router config
-	routerConfigPath := filepath.Join(tmpDir, "router.yaml")
-	routerConfigContent := `keenetic:
+		routerConfigPath := filepath.Join(tmpDir, "router.yaml")
+		Expect(os.WriteFile(routerConfigPath, []byte(`keenetic:
   url: http://192.168.1.1
   login: admin
   password: admin
@@ -108,61 +85,38 @@ routes:
   - interfaceId: Wireguard0
     bat-file:
       - routes.yaml
-`
-	err = os.WriteFile(routerConfigPath, []byte(routerConfigContent), 0644)
-	require.NoError(t, err)
+`), 0644)).To(Succeed())
 
-	// Create scheduler config
-	schedulerConfigPath := filepath.Join(tmpDir, "scheduler.yaml")
-	schedulerConfigContent := `tasks:
+		schedulerConfigPath := writeTempFile(tmpDir, "scheduler.yaml", `tasks:
   - name: "Test validation"
     commands:
       - add-routes
     configs:
-      - ` + routerConfigPath + `
+      - `+routerConfigPath+`
     interval: "3h"
-`
-	err = os.WriteFile(schedulerConfigPath, []byte(schedulerConfigContent), 0644)
-	require.NoError(t, err)
+`)
 
-	// Load and validate scheduler config
-	schedulerCfg, err := config.LoadSchedulerConfig(schedulerConfigPath)
-	require.NoError(t, err)
+		schedulerCfg, err := config.LoadSchedulerConfig(schedulerConfigPath)
+		Expect(err).NotTo(HaveOccurred())
 
-	// Validate task
-	err = validateTask(schedulerCfg.Tasks[0])
-	assert.NoError(t, err)
+		Expect(validateTask(schedulerCfg.Tasks[0])).To(Succeed())
 
-	// Verify config file exists (scheduler validation)
-	_, err = os.Stat(routerConfigPath)
-	assert.NoError(t, err)
-}
+		_, err = os.Stat(routerConfigPath)
+		Expect(err).NotTo(HaveOccurred())
+	})
 
-// TestSchedulerWithNestedBatFileExpansion tests nested YAML references
-func TestSchedulerWithNestedBatFileExpansion(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create first bat-file list
-	list1Path := filepath.Join(tmpDir, "list1.yaml")
-	list1Content := `bat-file:
+	It("should expand nested YAML references", func() {
+		writeTempFile(tmpDir, "list1.yaml", `bat-file:
   - /path/to/route1.bat
   - /path/to/route2.bat
-`
-	err := os.WriteFile(list1Path, []byte(list1Content), 0644)
-	require.NoError(t, err)
-
-	// Create second bat-file list
-	list2Path := filepath.Join(tmpDir, "list2.yaml")
-	list2Content := `bat-file:
+`)
+		writeTempFile(tmpDir, "list2.yaml", `bat-file:
   - /path/to/route3.bat
   - /path/to/route4.bat
-`
-	err = os.WriteFile(list2Path, []byte(list2Content), 0644)
-	require.NoError(t, err)
+`)
 
-	// Create router config that references both lists
-	routerConfigPath := filepath.Join(tmpDir, "router.yaml")
-	routerConfigContent := `keenetic:
+		routerConfigPath := filepath.Join(tmpDir, "router.yaml")
+		Expect(os.WriteFile(routerConfigPath, []byte(`keenetic:
   url: http://192.168.1.1
   login: admin
   password: admin
@@ -173,24 +127,17 @@ routes:
       - list1.yaml
       - list2.yaml
       - /path/to/direct.bat
-`
-	err = os.WriteFile(routerConfigPath, []byte(routerConfigContent), 0644)
-	require.NoError(t, err)
+`), 0644)).To(Succeed())
 
-	// Load router config
-	err = config.LoadConfig(routerConfigPath)
-	require.NoError(t, err)
+		Expect(config.LoadConfig(routerConfigPath)).To(Succeed())
+		Expect(config.Cfg.Routes).To(HaveLen(1))
 
-	// Verify all bat-files were expanded correctly
-	require.Len(t, config.Cfg.Routes, 1)
-	route := config.Cfg.Routes[0]
-
-	expectedBatFiles := []string{
-		"/path/to/route1.bat",
-		"/path/to/route2.bat",
-		"/path/to/route3.bat",
-		"/path/to/route4.bat",
-		"/path/to/direct.bat",
-	}
-	assert.Equal(t, expectedBatFiles, route.BatFile)
-}
+		Expect(config.Cfg.Routes[0].BatFile).To(Equal([]string{
+			"/path/to/route1.bat",
+			"/path/to/route2.bat",
+			"/path/to/route3.bat",
+			"/path/to/route4.bat",
+			"/path/to/direct.bat",
+		}))
+	})
+})

@@ -1,244 +1,171 @@
 package cmd
 
 import (
+	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"testing"
 
 	"github.com/noksa/gokeenapi/pkg/config"
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapi"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-type AddDnsRoutingTestSuite struct {
-	CmdTestSuite
-}
+var _ = Describe("AddDnsRouting", func() {
+	var server *httptest.Server
 
-func TestAddDnsRoutingTestSuite(t *testing.T) {
-	suite.Run(t, new(AddDnsRoutingTestSuite))
-}
+	BeforeEach(func() {
+		server = setupMockRouter(gokeenrestapi.WithVersion("5.0.1"))
+	})
 
-// SetupTest overrides the base SetupTest to use version 5.0.1 for DNS-routing tests
-func (s *AddDnsRoutingTestSuite) SetupTest() {
-	s.server = gokeenrestapi.SetupMockRouterForTest(gokeenrestapi.WithVersion("5.0.1"))
+	AfterEach(func() {
+		cleanupMockRouter(server)
+	})
 
-	err := gokeenrestapi.Common.Auth()
-	s.Require().NoError(err)
-}
+	It("should create command with correct attributes", func() {
+		cmd := newAddDnsRoutingCmd()
 
-func (s *AddDnsRoutingTestSuite) TestNewAddDnsRoutingCmd() {
-	cmd := newAddDnsRoutingCmd()
+		Expect(cmd.Use).To(Equal(CmdAddDnsRouting))
+		Expect(cmd.Aliases).To(Equal(AliasesAddDnsRouting))
+		Expect(cmd.Short).NotTo(BeEmpty())
+		Expect(cmd.RunE).NotTo(BeNil())
+	})
 
-	assert.Equal(s.T(), CmdAddDnsRouting, cmd.Use)
-	assert.Equal(s.T(), AliasesAddDnsRouting, cmd.Aliases)
-	assert.NotEmpty(s.T(), cmd.Short)
-	assert.NotNil(s.T(), cmd.RunE)
-}
+	It("should execute with configured DNS routing groups", func() {
+		tmpDir := GinkgoT().TempDir()
 
-func (s *AddDnsRoutingTestSuite) TestAddDnsRoutingCmd_Execute() {
-	// Create temporary domain files for testing
-	tmpDir := s.T().TempDir()
+		socialMediaFile := filepath.Join(tmpDir, "social-media.txt")
+		Expect(os.WriteFile(socialMediaFile, []byte("facebook.com\ninstagram.com\ntwitter.com\n"), 0644)).To(Succeed())
 
-	socialMediaFile := filepath.Join(tmpDir, "social-media.txt")
-	err := os.WriteFile(socialMediaFile, []byte("facebook.com\ninstagram.com\ntwitter.com\n"), 0644)
-	s.Require().NoError(err)
+		streamingFile := filepath.Join(tmpDir, "streaming.txt")
+		Expect(os.WriteFile(streamingFile, []byte("youtube.com\nnetflix.com\n8.8.8.8\n"), 0644)).To(Succeed())
 
-	streamingFile := filepath.Join(tmpDir, "streaming.txt")
-	err = os.WriteFile(streamingFile, []byte("youtube.com\nnetflix.com\n8.8.8.8\n"), 0644)
-	s.Require().NoError(err)
-
-	// Set up test config with DNS routing groups
-	config.Cfg.DNS = config.DNS{
-		Routes: config.DnsRoutes{
-			Groups: []config.DnsRoutingGroup{
-				{
-					Name:        "social-media",
-					DomainFile:  []string{socialMediaFile},
-					InterfaceID: "Wireguard0",
-				},
-				{
-					Name:        "streaming",
-					DomainFile:  []string{streamingFile},
-					InterfaceID: "ISP",
+		config.Cfg.DNS = config.DNS{
+			Routes: config.DnsRoutes{
+				Groups: []config.DnsRoutingGroup{
+					{Name: "social-media", DomainFile: []string{socialMediaFile}, InterfaceID: "Wireguard0"},
+					{Name: "streaming", DomainFile: []string{streamingFile}, InterfaceID: "ISP"},
 				},
 			},
-		},
-	}
+		}
 
-	cmd := newAddDnsRoutingCmd()
-	err = cmd.RunE(cmd, []string{})
+		cmd := newAddDnsRoutingCmd()
+		Expect(cmd.RunE(cmd, []string{})).To(Succeed())
+	})
 
-	assert.NoError(s.T(), err)
-}
+	It("should handle empty configuration", func() {
+		config.Cfg.DNS = config.DNS{
+			Routes: config.DnsRoutes{Groups: []config.DnsRoutingGroup{}},
+		}
 
-func (s *AddDnsRoutingTestSuite) TestAddDnsRoutingCmd_EmptyConfiguration() {
-	// Empty DNS routing configuration
-	config.Cfg.DNS = config.DNS{
-		Routes: config.DnsRoutes{
-			Groups: []config.DnsRoutingGroup{},
-		},
-	}
+		cmd := newAddDnsRoutingCmd()
+		Expect(cmd.RunE(cmd, []string{})).To(Succeed())
+	})
 
-	cmd := newAddDnsRoutingCmd()
-	err := cmd.RunE(cmd, []string{})
+	Context("validation errors", func() {
+		It("should reject empty group name", func() {
+			tmpDir := GinkgoT().TempDir()
+			domainFile := writeTempFile(tmpDir, "domains.txt", "facebook.com\n")
 
-	assert.NoError(s.T(), err)
-}
-
-func (s *AddDnsRoutingTestSuite) TestAddDnsRoutingCmd_InvalidConfiguration_EmptyGroupName() {
-	// Create temporary domain file
-	tmpDir := s.T().TempDir()
-	domainFile := filepath.Join(tmpDir, "domains.txt")
-	err := os.WriteFile(domainFile, []byte("facebook.com\n"), 0644)
-	s.Require().NoError(err)
-
-	// Invalid configuration: empty group name
-	config.Cfg.DNS = config.DNS{
-		Routes: config.DnsRoutes{
-			Groups: []config.DnsRoutingGroup{
-				{
-					Name:        "",
-					DomainFile:  []string{domainFile},
-					InterfaceID: "Wireguard0",
+			config.Cfg.DNS = config.DNS{
+				Routes: config.DnsRoutes{
+					Groups: []config.DnsRoutingGroup{
+						{Name: "", DomainFile: []string{domainFile}, InterfaceID: "Wireguard0"},
+					},
 				},
-			},
-		},
-	}
+			}
 
-	cmd := newAddDnsRoutingCmd()
-	err = cmd.RunE(cmd, []string{})
+			cmd := newAddDnsRoutingCmd()
+			err := cmd.RunE(cmd, []string{})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("group name cannot be empty"))
+		})
 
-	assert.Error(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "group name cannot be empty")
-}
+		It("should reject whitespace-only group name", func() {
+			tmpDir := GinkgoT().TempDir()
+			domainFile := writeTempFile(tmpDir, "domains.txt", "facebook.com\n")
 
-func (s *AddDnsRoutingTestSuite) TestAddDnsRoutingCmd_InvalidConfiguration_WhitespaceGroupName() {
-	// Create temporary domain file
-	tmpDir := s.T().TempDir()
-	domainFile := filepath.Join(tmpDir, "domains.txt")
-	err := os.WriteFile(domainFile, []byte("facebook.com\n"), 0644)
-	s.Require().NoError(err)
-
-	// Invalid configuration: whitespace-only group name
-	config.Cfg.DNS = config.DNS{
-		Routes: config.DnsRoutes{
-			Groups: []config.DnsRoutingGroup{
-				{
-					Name:        "   ",
-					DomainFile:  []string{domainFile},
-					InterfaceID: "Wireguard0",
+			config.Cfg.DNS = config.DNS{
+				Routes: config.DnsRoutes{
+					Groups: []config.DnsRoutingGroup{
+						{Name: "   ", DomainFile: []string{domainFile}, InterfaceID: "Wireguard0"},
+					},
 				},
-			},
-		},
-	}
+			}
 
-	cmd := newAddDnsRoutingCmd()
-	err = cmd.RunE(cmd, []string{})
+			cmd := newAddDnsRoutingCmd()
+			err := cmd.RunE(cmd, []string{})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("whitespace"))
+		})
 
-	assert.Error(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "whitespace")
-}
-
-func (s *AddDnsRoutingTestSuite) TestAddDnsRoutingCmd_InvalidConfiguration_EmptyDomainList() {
-	// Invalid configuration: no domain-file or domain-url
-	config.Cfg.DNS = config.DNS{
-		Routes: config.DnsRoutes{
-			Groups: []config.DnsRoutingGroup{
-				{
-					Name:        "social-media",
-					DomainFile:  []string{},
-					DomainURL:   []string{},
-					InterfaceID: "Wireguard0",
+		It("should reject empty domain list", func() {
+			config.Cfg.DNS = config.DNS{
+				Routes: config.DnsRoutes{
+					Groups: []config.DnsRoutingGroup{
+						{Name: "social-media", DomainFile: []string{}, DomainURL: []string{}, InterfaceID: "Wireguard0"},
+					},
 				},
-			},
-		},
-	}
+			}
 
-	cmd := newAddDnsRoutingCmd()
-	err := cmd.RunE(cmd, []string{})
+			cmd := newAddDnsRoutingCmd()
+			err := cmd.RunE(cmd, []string{})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must contain at least one domain-file or domain-url"))
+		})
 
-	assert.Error(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "must contain at least one domain-file or domain-url")
-}
+		It("should reject malformed domain", func() {
+			tmpDir := GinkgoT().TempDir()
+			domainFile := writeTempFile(tmpDir, "domains.txt", "invalid..domain\n")
 
-func (s *AddDnsRoutingTestSuite) TestAddDnsRoutingCmd_InvalidConfiguration_MalformedDomain() {
-	// Create temporary domain file with malformed domain
-	tmpDir := s.T().TempDir()
-	domainFile := filepath.Join(tmpDir, "domains.txt")
-	err := os.WriteFile(domainFile, []byte("invalid..domain\n"), 0644)
-	s.Require().NoError(err)
-
-	// Invalid configuration: malformed domain
-	config.Cfg.DNS = config.DNS{
-		Routes: config.DnsRoutes{
-			Groups: []config.DnsRoutingGroup{
-				{
-					Name:        "social-media",
-					DomainFile:  []string{domainFile},
-					InterfaceID: "Wireguard0",
+			config.Cfg.DNS = config.DNS{
+				Routes: config.DnsRoutes{
+					Groups: []config.DnsRoutingGroup{
+						{Name: "social-media", DomainFile: []string{domainFile}, InterfaceID: "Wireguard0"},
+					},
 				},
-			},
-		},
-	}
+			}
 
-	cmd := newAddDnsRoutingCmd()
-	err = cmd.RunE(cmd, []string{})
+			cmd := newAddDnsRoutingCmd()
+			err := cmd.RunE(cmd, []string{})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid domain"))
+		})
 
-	assert.Error(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "invalid domain")
-}
+		It("should reject invalid IP", func() {
+			tmpDir := GinkgoT().TempDir()
+			domainFile := writeTempFile(tmpDir, "domains.txt", "999.999.999.999\n")
 
-func (s *AddDnsRoutingTestSuite) TestAddDnsRoutingCmd_InvalidConfiguration_InvalidIP() {
-	// Create temporary domain file with invalid IP
-	tmpDir := s.T().TempDir()
-	domainFile := filepath.Join(tmpDir, "domains.txt")
-	err := os.WriteFile(domainFile, []byte("999.999.999.999\n"), 0644)
-	s.Require().NoError(err)
-
-	// Invalid configuration: invalid IP address
-	config.Cfg.DNS = config.DNS{
-		Routes: config.DnsRoutes{
-			Groups: []config.DnsRoutingGroup{
-				{
-					Name:        "streaming",
-					DomainFile:  []string{domainFile},
-					InterfaceID: "Wireguard0",
+			config.Cfg.DNS = config.DNS{
+				Routes: config.DnsRoutes{
+					Groups: []config.DnsRoutingGroup{
+						{Name: "streaming", DomainFile: []string{domainFile}, InterfaceID: "Wireguard0"},
+					},
 				},
-			},
-		},
-	}
+			}
 
-	cmd := newAddDnsRoutingCmd()
-	err = cmd.RunE(cmd, []string{})
+			cmd := newAddDnsRoutingCmd()
+			err := cmd.RunE(cmd, []string{})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid domain or IP"))
+		})
 
-	assert.Error(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "invalid domain or IP")
-}
+		It("should reject empty interface ID", func() {
+			tmpDir := GinkgoT().TempDir()
+			domainFile := writeTempFile(tmpDir, "domains.txt", "facebook.com\n")
 
-func (s *AddDnsRoutingTestSuite) TestAddDnsRoutingCmd_InvalidConfiguration_EmptyInterfaceID() {
-	// Create temporary domain file
-	tmpDir := s.T().TempDir()
-	domainFile := filepath.Join(tmpDir, "domains.txt")
-	err := os.WriteFile(domainFile, []byte("facebook.com\n"), 0644)
-	s.Require().NoError(err)
-
-	// Invalid configuration: empty interface ID
-	config.Cfg.DNS = config.DNS{
-		Routes: config.DnsRoutes{
-			Groups: []config.DnsRoutingGroup{
-				{
-					Name:        "social-media",
-					DomainFile:  []string{domainFile},
-					InterfaceID: "",
+			config.Cfg.DNS = config.DNS{
+				Routes: config.DnsRoutes{
+					Groups: []config.DnsRoutingGroup{
+						{Name: "social-media", DomainFile: []string{domainFile}, InterfaceID: ""},
+					},
 				},
-			},
-		},
-	}
+			}
 
-	cmd := newAddDnsRoutingCmd()
-	err = cmd.RunE(cmd, []string{})
-
-	assert.Error(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "interface ID cannot be empty")
-}
+			cmd := newAddDnsRoutingCmd()
+			err := cmd.RunE(cmd, []string{})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("interface ID cannot be empty"))
+		})
+	})
+})

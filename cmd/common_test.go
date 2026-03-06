@@ -3,112 +3,106 @@ package cmd
 import (
 	"os"
 	"strings"
-	"testing"
 
 	"github.com/noksa/gokeenapi/pkg/config"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-type CommonTestSuite struct {
-	suite.Suite
-}
+var _ = Describe("Common", func() {
+	Describe("checkRequiredFields", func() {
+		It("should pass with all fields set", func() {
+			config.Cfg.Keenetic.URL = "http://192.168.1.1"
+			config.Cfg.Keenetic.Login = "admin"
+			config.Cfg.Keenetic.Password = "password"
 
-func TestCommonTestSuite(t *testing.T) {
-	suite.Run(t, new(CommonTestSuite))
-}
+			Expect(checkRequiredFields()).To(Succeed())
+		})
 
-func (s *CommonTestSuite) TestCheckRequiredFields_Valid() {
-	config.Cfg.Keenetic.URL = "http://192.168.1.1"
-	config.Cfg.Keenetic.Login = "admin"
-	config.Cfg.Keenetic.Password = "password"
+		It("should fail when URL is missing", func() {
+			config.Cfg.Keenetic.URL = ""
+			config.Cfg.Keenetic.Login = "admin"
+			config.Cfg.Keenetic.Password = "password"
 
-	err := checkRequiredFields()
-	assert.NoError(s.T(), err)
-}
+			err := checkRequiredFields()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("keenetic.url"))
+		})
 
-func (s *CommonTestSuite) TestCheckRequiredFields_MissingURL() {
-	config.Cfg.Keenetic.URL = ""
-	config.Cfg.Keenetic.Login = "admin"
-	config.Cfg.Keenetic.Password = "password"
+		It("should fail when login is missing", func() {
+			config.Cfg.Keenetic.URL = "http://192.168.1.1"
+			config.Cfg.Keenetic.Login = ""
+			config.Cfg.Keenetic.Password = "password"
 
-	err := checkRequiredFields()
-	assert.Error(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "keenetic.url")
-}
+			err := checkRequiredFields()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("keenetic.login"))
+		})
 
-func (s *CommonTestSuite) TestCheckRequiredFields_MissingLogin() {
-	config.Cfg.Keenetic.URL = "http://192.168.1.1"
-	config.Cfg.Keenetic.Login = ""
-	config.Cfg.Keenetic.Password = "password"
+		It("should fail when password is missing", func() {
+			config.Cfg.Keenetic.URL = "http://192.168.1.1"
+			config.Cfg.Keenetic.Login = "admin"
+			config.Cfg.Keenetic.Password = ""
 
-	err := checkRequiredFields()
-	assert.Error(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "keenetic.login")
-}
-
-func (s *CommonTestSuite) TestCheckRequiredFields_MissingPassword() {
-	config.Cfg.Keenetic.URL = "http://192.168.1.1"
-	config.Cfg.Keenetic.Login = "admin"
-	config.Cfg.Keenetic.Password = ""
-
-	err := checkRequiredFields()
-	assert.Error(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "keenetic.password")
-}
-
-func (s *CommonTestSuite) TestRestoreCursor() {
-	// Test that RestoreCursor doesn't panic
-	assert.NotPanics(s.T(), func() {
-		RestoreCursor()
+			err := checkRequiredFields()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("keenetic.password"))
+		})
 	})
-}
 
-func (s *CommonTestSuite) TestConfirmAction_Yes() {
-	// Simulate user input "y"
-	oldStdin := os.Stdin
-	defer func() { os.Stdin = oldStdin }()
+	Describe("RestoreCursor", func() {
+		It("should not panic", func() {
+			Expect(func() { RestoreCursor() }).NotTo(Panic())
+		})
+	})
 
-	r, w, _ := os.Pipe()
-	os.Stdin = r
-	go func() {
-		defer func() { _ = w.Close() }()
-		_, _ = w.Write([]byte("y\n"))
-	}()
+	Describe("confirmAction", func() {
+		It("should return true for 'y' input", func() {
+			oldStdin := os.Stdin
+			defer func() { os.Stdin = oldStdin }()
 
-	result, err := confirmAction("Test question?")
-	assert.NoError(s.T(), err)
-	assert.True(s.T(), result)
-}
+			r, w, _ := os.Pipe()
+			os.Stdin = r
+			go func() {
+				defer func() { _ = w.Close() }()
+				_, _ = w.Write([]byte("y\n"))
+			}()
 
-func (s *CommonTestSuite) TestConfirmAction_No() {
-	// Simulate user input "n"
-	oldStdin := os.Stdin
-	defer func() { os.Stdin = oldStdin }()
+			result, err := confirmAction("Test question?")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeTrue())
+		})
 
-	r, w, _ := os.Pipe()
-	os.Stdin = r
-	go func() {
-		defer func() { _ = w.Close() }()
-		_, _ = w.Write([]byte("n\n"))
-	}()
+		It("should return false for 'n' input", func() {
+			oldStdin := os.Stdin
+			defer func() { os.Stdin = oldStdin }()
 
-	result, err := confirmAction("Test question?")
-	assert.NoError(s.T(), err)
-	assert.False(s.T(), result)
-}
+			r, w, _ := os.Pipe()
+			os.Stdin = r
+			go func() {
+				defer func() { _ = w.Close() }()
+				_, _ = w.Write([]byte("n\n"))
+			}()
 
-func (s *CommonTestSuite) TestConfirmAction_EOF() {
-	// Simulate EOF (Ctrl+D)
-	oldStdin := os.Stdin
-	defer func() { os.Stdin = oldStdin }()
+			result, err := confirmAction("Test question?")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeFalse())
+		})
 
-	r, w, _ := os.Pipe()
-	os.Stdin = r
-	_ = w.Close() // Close immediately to simulate EOF
+		It("should return error on EOF", func() {
+			oldStdin := os.Stdin
+			defer func() { os.Stdin = oldStdin }()
 
-	result, err := confirmAction("Test question?")
-	assert.Error(s.T(), err)
-	assert.False(s.T(), result)
-	assert.True(s.T(), strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "canceled"))
-}
+			r, w, _ := os.Pipe()
+			os.Stdin = r
+			_ = w.Close()
+
+			result, err := confirmAction("Test question?")
+			Expect(err).To(HaveOccurred())
+			Expect(result).To(BeFalse())
+			Expect(
+				strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "canceled"),
+			).To(BeTrue())
+		})
+	})
+})

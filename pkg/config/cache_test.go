@@ -3,107 +3,67 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestGetURLCacheTTL_Default(t *testing.T) {
-	// Reset config
-	Cfg = GokeenapiConfig{}
+var _ = Describe("GetURLCacheTTL", func() {
+	It("should return default TTL when not configured", func() {
+		Cfg = GokeenapiConfig{}
+		Expect(GetURLCacheTTL()).To(Equal(time.Minute))
+	})
 
-	ttl := GetURLCacheTTL()
-	assert.Equal(t, time.Minute, ttl, "Default TTL should be 1 minute")
-}
+	It("should return configured TTL", func() {
+		Cfg = GokeenapiConfig{Cache: Cache{URLTTL: 5 * time.Minute}}
+		Expect(GetURLCacheTTL()).To(Equal(5 * time.Minute))
+	})
 
-func TestGetURLCacheTTL_Configured(t *testing.T) {
-	// Reset config
-	Cfg = GokeenapiConfig{
-		Cache: Cache{
-			URLTTL: 5 * time.Minute,
-		},
-	}
+	It("should return default TTL when zero", func() {
+		Cfg = GokeenapiConfig{Cache: Cache{URLTTL: 0}}
+		Expect(GetURLCacheTTL()).To(Equal(time.Minute))
+	})
 
-	ttl := GetURLCacheTTL()
-	assert.Equal(t, 5*time.Minute, ttl, "Should return configured TTL")
-}
+	It("should return default TTL when negative", func() {
+		Cfg = GokeenapiConfig{Cache: Cache{URLTTL: -5 * time.Minute}}
+		Expect(GetURLCacheTTL()).To(Equal(time.Minute))
+	})
+})
 
-func TestGetURLCacheTTL_Zero(t *testing.T) {
-	// Reset config
-	Cfg = GokeenapiConfig{
-		Cache: Cache{
-			URLTTL: 0,
-		},
-	}
-
-	ttl := GetURLCacheTTL()
-	assert.Equal(t, time.Minute, ttl, "Zero TTL should default to 1 minute")
-}
-
-func TestGetURLCacheTTL_Negative(t *testing.T) {
-	// Reset config
-	Cfg = GokeenapiConfig{
-		Cache: Cache{
-			URLTTL: -5 * time.Minute,
-		},
-	}
-
-	ttl := GetURLCacheTTL()
-	assert.Equal(t, time.Minute, ttl, "Negative TTL should default to 1 minute")
-}
-
-func TestLoadConfig_WithCacheTTL(t *testing.T) {
-	// Create temporary config file
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
-
-	configContent := `
+var _ = Describe("LoadConfig with cache TTL", func() {
+	It("should load cache TTL from config", func() {
+		tmpDir := GinkgoT().TempDir()
+		configPath := filepath.Join(tmpDir, "config.yaml")
+		err := os.WriteFile(configPath, []byte(`
 keenetic:
   url: http://192.168.1.1
   login: admin
   password: pass
-
 cache:
   urlTtl: 10m
-`
+`), 0644)
+		Expect(err).NotTo(HaveOccurred())
 
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
-	require.NoError(t, err)
+		Expect(LoadConfig(configPath)).To(Succeed())
+		Expect(Cfg.Cache.URLTTL).To(Equal(10 * time.Minute))
+		Expect(GetURLCacheTTL()).To(Equal(10 * time.Minute))
+	})
 
-	// Load config
-	err = LoadConfig(configPath)
-	require.NoError(t, err)
-
-	// Verify cache TTL is loaded correctly
-	assert.Equal(t, 10*time.Minute, Cfg.Cache.URLTTL)
-	assert.Equal(t, 10*time.Minute, GetURLCacheTTL())
-}
-
-func TestLoadConfig_WithoutCacheTTL(t *testing.T) {
-	// Reset config
-	Cfg = GokeenapiConfig{}
-
-	// Create temporary config file without cache section
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
-
-	configContent := `
+	It("should use default TTL when cache section is absent", func() {
+		Cfg = GokeenapiConfig{}
+		tmpDir := GinkgoT().TempDir()
+		configPath := filepath.Join(tmpDir, "config.yaml")
+		err := os.WriteFile(configPath, []byte(`
 keenetic:
   url: http://192.168.1.1
   login: admin
   password: pass
-`
+`), 0644)
+		Expect(err).NotTo(HaveOccurred())
 
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
-	require.NoError(t, err)
-
-	// Load config
-	err = LoadConfig(configPath)
-	require.NoError(t, err)
-
-	// Verify default TTL is used
-	assert.Equal(t, time.Duration(0), Cfg.Cache.URLTTL)
-	assert.Equal(t, time.Minute, GetURLCacheTTL())
-}
+		Expect(LoadConfig(configPath)).To(Succeed())
+		Expect(Cfg.Cache.URLTTL).To(Equal(time.Duration(0)))
+		Expect(GetURLCacheTTL()).To(Equal(time.Minute))
+	})
+})

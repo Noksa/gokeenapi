@@ -1,58 +1,58 @@
 package cmd
 
 import (
-	"testing"
+	"net/http/httptest"
 
 	"github.com/noksa/gokeenapi/pkg/config"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-type DeleteRoutesTestSuite struct {
-	CmdTestSuite
-}
+var _ = Describe("DeleteRoutes", func() {
+	var server *httptest.Server
 
-func TestDeleteRoutesTestSuite(t *testing.T) {
-	suite.Run(t, new(DeleteRoutesTestSuite))
-}
+	BeforeEach(func() {
+		server = setupMockRouter()
+	})
 
-func (s *DeleteRoutesTestSuite) TestNewDeleteRoutesCmd() {
-	cmd := newDeleteRoutesCmd()
+	AfterEach(func() {
+		cleanupMockRouter(server)
+	})
 
-	assert.Equal(s.T(), CmdDeleteRoutes, cmd.Use)
-	assert.Equal(s.T(), AliasesDeleteRoutes, cmd.Aliases)
-	assert.NotEmpty(s.T(), cmd.Short)
-	assert.NotNil(s.T(), cmd.RunE)
+	It("should create command with correct attributes and flags", func() {
+		cmd := newDeleteRoutesCmd()
 
-	interfaceIdFlag := cmd.Flags().Lookup("interface-id")
-	assert.NotNil(s.T(), interfaceIdFlag)
+		Expect(cmd.Use).To(Equal(CmdDeleteRoutes))
+		Expect(cmd.Aliases).To(Equal(AliasesDeleteRoutes))
+		Expect(cmd.Short).NotTo(BeEmpty())
+		Expect(cmd.RunE).NotTo(BeNil())
+		Expect(cmd.Flags().Lookup("interface-id")).NotTo(BeNil())
 
-	forceFlag := cmd.Flags().Lookup("force")
-	assert.NotNil(s.T(), forceFlag)
-	assert.Equal(s.T(), "bool", forceFlag.Value.Type())
-}
+		forceFlag := cmd.Flags().Lookup("force")
+		Expect(forceFlag).NotTo(BeNil())
+		Expect(forceFlag.Value.Type()).To(Equal("bool"))
+	})
 
-func (s *DeleteRoutesTestSuite) TestDeleteRoutesCmd_WithInterfaceId() {
-	config.Cfg.Routes = []config.Route{
-		{InterfaceID: "Wireguard0"},
-	}
+	It("should execute with interface-id and force", func() {
+		config.Cfg.Routes = []config.Route{
+			{InterfaceID: "Wireguard0"},
+		}
 
-	cmd := newDeleteRoutesCmd()
-	_ = cmd.Flags().Set("interface-id", "Wireguard0")
-	_ = cmd.Flags().Set("force", "true")
+		cmd := newDeleteRoutesCmd()
+		_ = cmd.Flags().Set("interface-id", "Wireguard0")
+		_ = cmd.Flags().Set("force", "true")
 
-	err := cmd.RunE(cmd, []string{})
-	assert.NoError(s.T(), err)
-}
+		Expect(cmd.RunE(cmd, []string{})).To(Succeed())
+	})
 
-func (s *DeleteRoutesTestSuite) TestDeleteRoutesCmd_WithForceFlag() {
-	config.Cfg.Routes = []config.Route{
-		{InterfaceID: "Wireguard0"},
-	}
+	It("should execute with force flag only", func() {
+		config.Cfg.Routes = []config.Route{
+			{InterfaceID: "Wireguard0"},
+		}
 
-	cmd := newDeleteRoutesCmd()
-	_ = cmd.Flags().Set("force", "true")
+		cmd := newDeleteRoutesCmd()
+		_ = cmd.Flags().Set("force", "true")
 
-	err := cmd.RunE(cmd, []string{})
-	assert.NoError(s.T(), err)
-}
+		Expect(cmd.RunE(cmd, []string{})).To(Succeed())
+	})
+})

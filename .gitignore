@@ -14,3 +14,4 @@ custom
 q.log
 **/testdata/rapid/**/*.fail
 .cyber.sh
+gokeenapi.test

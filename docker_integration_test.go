@@ -7,104 +7,63 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-// TestDockerIntegration runs integration tests for Docker image
-func TestDockerIntegration(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-	defer cancel()
+var _ = Describe("Docker Integration", func() {
+	var ctx context.Context
+	var cancel context.CancelFunc
 
-	// Build the Docker image first
-	t.Run("BuildImage", func(t *testing.T) {
-		buildDockerImage(t, ctx)
+	BeforeEach(func() {
+		ctx, cancel = context.WithTimeout(context.Background(), testTimeout)
+		DeferCleanup(cancel)
 	})
 
-	// Run tests that depend on the image
-	t.Run("BasicCommands", func(t *testing.T) {
-		testBasicCommands(t, ctx)
-	})
-
-	t.Run("ConfigMount", func(t *testing.T) {
-		testConfigMount(t, ctx)
-	})
-
-	t.Run("EnvironmentVariables", func(t *testing.T) {
-		testEnvironmentVariables(t, ctx)
-	})
-
-	t.Run("VolumePermissions", func(t *testing.T) {
-		testVolumePermissions(t, ctx)
-	})
-
-	t.Run("MultiPlatformBuild", func(t *testing.T) {
-		testMultiPlatformBuild(t, ctx)
-	})
-}
-
-// testBasicCommands tests basic Docker commands
-func testBasicCommands(t *testing.T, ctx context.Context) {
-	tests := []struct {
-		name           string
-		args           []string
-		expectedOutput string
-		expectError    bool
-	}{
-		{
-			name:           "Help",
-			args:           []string{"--help"},
-			expectedOutput: "gokeenapi",
-			expectError:    false,
-		},
-		{
-			name:           "Version",
-			args:           []string{"version"},
-			expectedOutput: "Version:",
-			expectError:    false,
-		},
-		{
-			name:           "ShowInterfaces_NoConfig",
-			args:           []string{"show-interfaces"},
-			expectedOutput: "",
-			expectError:    true, // Should fail without config
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			args := append([]string{"run", "--rm", testImageName}, tt.args...)
-			cmd := exec.CommandContext(ctx, "docker", args...)
-
-			output, err := cmd.CombinedOutput()
-			outputStr := string(output)
-
-			if tt.expectError {
-				assert.Error(t, err, "Expected command to fail")
-			} else {
-				assert.NoError(t, err, "Command failed: %s", outputStr)
-			}
-
-			if tt.expectedOutput != "" {
-				assert.Contains(t, outputStr, tt.expectedOutput,
-					"Output should contain expected string")
-			}
-
-			t.Logf("Output: %s", outputStr)
+	Context("image build", func() {
+		It("should build the Docker image successfully", func() {
+			buildDockerImage(ctx)
 		})
-	}
-}
+	})
 
-// testConfigMount tests mounting configuration files
-func testConfigMount(t *testing.T, ctx context.Context) {
-	// Create temporary directory for test configs
-	tmpDir := createDockerAccessibleTempDir(t)
+	Context("basic commands", func() {
+		BeforeEach(func() {
+			ensureDockerImage(ctx)
+		})
 
-	// Create a test config file
-	configContent := `keenetic:
+		DescribeTable("command output",
+			func(args []string, expectedOutput string, expectError bool) {
+				cmdArgs := append([]string{"run", "--rm", testImageName}, args...)
+				cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
+				output, err := cmd.CombinedOutput()
+				outputStr := string(output)
+
+				if expectError {
+					Expect(err).To(HaveOccurred(), "Expected command to fail")
+				} else {
+					Expect(err).NotTo(HaveOccurred(), "Command failed: %s", outputStr)
+				}
+
+				if expectedOutput != "" {
+					Expect(outputStr).To(ContainSubstring(expectedOutput))
+				}
+			},
+			Entry("help", []string{"--help"}, "gokeenapi", false),
+			Entry("version", []string{"version"}, "Version:", false),
+			Entry("show-interfaces without config", []string{"show-interfaces"}, "", true),
+		)
+	})
+
+	Context("config mount", func() {
+		var tmpDir string
+
+		BeforeEach(func() {
+			ensureDockerImage(ctx)
+			tmpDir = createDockerAccessibleTempDir(GinkgoT())
+
+			configContent := `keenetic:
   url: http://192.168.1.1
   login: test-user
   password: test-password
@@ -112,294 +71,233 @@ func testConfigMount(t *testing.T, ctx context.Context) {
 logs:
   debug: true
 `
-	configPath := filepath.Join(tmpDir, "config.yaml")
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
-	require.NoError(t, err, "Failed to create test config")
+			err := os.WriteFile(filepath.Join(tmpDir, "config.yaml"), []byte(configContent), 0644)
+			Expect(err).NotTo(HaveOccurred())
+		})
 
-	// Test mounting config directory
-	t.Run("MountConfigDirectory", func(t *testing.T) {
-		cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
-			"-v", fmt.Sprintf("%s:/etc/gokeenapi:ro", tmpDir),
-			testImageName,
-			"--help",
-		)
+		It("should mount config directory", func() {
+			cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
+				"-v", fmt.Sprintf("%s:/etc/gokeenapi:ro", tmpDir),
+				testImageName, "--help",
+			)
+			output, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), "Failed to run with mounted config: %s", string(output))
+		})
 
-		output, err := cmd.CombinedOutput()
-		assert.NoError(t, err, "Failed to run with mounted config: %s", string(output))
+		It("should make config file accessible inside container", func() {
+			_, err := os.Stat(filepath.Join(tmpDir, "config.yaml"))
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
+				"--entrypoint", "sh",
+				"-v", fmt.Sprintf("%s:/etc/gokeenapi:ro", tmpDir),
+				testImageName,
+				"-c", "ls -la /etc/gokeenapi/ && cat /etc/gokeenapi/config.yaml",
+			)
+			output, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), "Config file not accessible: %s", string(output))
+			Expect(string(output)).To(ContainSubstring("config.yaml"))
+			Expect(string(output)).To(ContainSubstring("keenetic:"))
+		})
+
+		It("should load config and fail with connection error (not config error)", func() {
+			cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
+				"-v", fmt.Sprintf("%s:/etc/gokeenapi:ro", tmpDir),
+				testImageName,
+				"--config", "/etc/gokeenapi/config.yaml",
+				"show-interfaces",
+			)
+			output, err := cmd.CombinedOutput()
+			outputStr := string(output)
+
+			Expect(err).To(HaveOccurred(), "Expected connection failure")
+			Expect(outputStr).To(SatisfyAny(
+				ContainSubstring("connection refused"),
+				ContainSubstring("no such host"),
+				ContainSubstring("dial tcp"),
+				ContainSubstring("context deadline exceeded"),
+				ContainSubstring("i/o timeout"),
+			), "Expected connection error, got: %s", outputStr)
+			Expect(outputStr).NotTo(ContainSubstring("failed to load config"))
+			Expect(outputStr).NotTo(ContainSubstring("no such file or directory"))
+			Expect(outputStr).NotTo(ContainSubstring("config path is empty"))
+		})
+
+		It("should load config via GOKEENAPI_CONFIG env var", func() {
+			cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
+				"-v", fmt.Sprintf("%s:/etc/gokeenapi:ro", tmpDir),
+				"-e", "GOKEENAPI_CONFIG=/etc/gokeenapi/config.yaml",
+				testImageName,
+				"show-interfaces",
+			)
+			output, err := cmd.CombinedOutput()
+			outputStr := string(output)
+
+			Expect(err).To(HaveOccurred(), "Expected connection failure")
+			Expect(outputStr).To(SatisfyAny(
+				ContainSubstring("connection refused"),
+				ContainSubstring("no such host"),
+				ContainSubstring("dial tcp"),
+				ContainSubstring("context deadline exceeded"),
+				ContainSubstring("i/o timeout"),
+			), "Expected connection error, got: %s", outputStr)
+			Expect(outputStr).NotTo(ContainSubstring("failed to load config"))
+			Expect(outputStr).NotTo(ContainSubstring("config path is empty"))
+		})
 	})
 
-	// Test config file is accessible
-	t.Run("ConfigFileAccessible", func(t *testing.T) {
-		// First verify the file exists on host
-		_, err := os.Stat(configPath)
-		require.NoError(t, err, "Config file doesn't exist on host")
+	Context("environment variables", func() {
+		BeforeEach(func() {
+			ensureDockerImage(ctx)
+		})
 
-		cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
-			"--entrypoint", "sh",
-			"-v", fmt.Sprintf("%s:/etc/gokeenapi:ro", tmpDir),
-			testImageName,
-			"-c", "ls -la /etc/gokeenapi/ && cat /etc/gokeenapi/config.yaml",
-		)
+		DescribeTable("env vars are passed to container",
+			func(envVars map[string]string) {
+				args := []string{"run", "--rm", "--entrypoint", "sh"}
+				for key, value := range envVars {
+					args = append(args, "-e", fmt.Sprintf("%s=%s", key, value))
+				}
+				args = append(args, testImageName, "-c", "env")
 
-		output, err := cmd.CombinedOutput()
-		assert.NoError(t, err, "Config file not accessible: %s", string(output))
-		assert.Contains(t, string(output), "config.yaml")
-		assert.Contains(t, string(output), "keenetic:")
-	})
+				cmd := exec.CommandContext(ctx, "docker", args...)
+				output, err := cmd.CombinedOutput()
+				Expect(err).NotTo(HaveOccurred(), "Failed to run with env vars: %s", string(output))
 
-	// Test config loads properly and command attempts to connect
-	t.Run("ConfigLoadsAndCommandRuns", func(t *testing.T) {
-		// Use show-interfaces command which will:
-		// 1. Load the config successfully
-		// 2. Attempt to connect to the router
-		// 3. Fail with connection error (expected - no real router)
-		// This proves config parsing works inside Docker
-		cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
-			"-v", fmt.Sprintf("%s:/etc/gokeenapi:ro", tmpDir),
-			testImageName,
-			"--config", "/etc/gokeenapi/config.yaml",
-			"show-interfaces",
-		)
-
-		output, err := cmd.CombinedOutput()
-		outputStr := string(output)
-
-		// Command should fail (no router to connect to)
-		assert.Error(t, err, "Expected connection failure")
-
-		// But the error should be a connection error, not a config error
-		// This proves the config was loaded and parsed successfully
-		assert.True(t,
-			strings.Contains(outputStr, "connection refused") ||
-				strings.Contains(outputStr, "no such host") ||
-				strings.Contains(outputStr, "dial tcp") ||
-				strings.Contains(outputStr, "context deadline exceeded") ||
-				strings.Contains(outputStr, "i/o timeout"),
-			"Expected connection error (not config error), got: %s", outputStr)
-
-		// Should NOT contain config-related errors
-		assert.NotContains(t, outputStr, "failed to load config",
-			"Should not have config loading errors")
-		assert.NotContains(t, outputStr, "no such file or directory",
-			"Should not have file not found errors")
-		assert.NotContains(t, outputStr, "config path is empty",
-			"Should not have config path errors")
-
-		t.Logf("Config loaded successfully, connection failed as expected: %s", outputStr)
-	})
-
-	// Test config loads via environment variable
-	t.Run("ConfigLoadsViaEnvVar", func(t *testing.T) {
-		// Same test but using GOKEENAPI_CONFIG environment variable
-		cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
-			"-v", fmt.Sprintf("%s:/etc/gokeenapi:ro", tmpDir),
-			"-e", "GOKEENAPI_CONFIG=/etc/gokeenapi/config.yaml",
-			testImageName,
-			"show-interfaces",
-		)
-
-		output, err := cmd.CombinedOutput()
-		outputStr := string(output)
-
-		// Command should fail (no router to connect to)
-		assert.Error(t, err, "Expected connection failure")
-
-		// But the error should be a connection error, not a config error
-		assert.True(t,
-			strings.Contains(outputStr, "connection refused") ||
-				strings.Contains(outputStr, "no such host") ||
-				strings.Contains(outputStr, "dial tcp") ||
-				strings.Contains(outputStr, "context deadline exceeded") ||
-				strings.Contains(outputStr, "i/o timeout"),
-			"Expected connection error (not config error), got: %s", outputStr)
-
-		// Should NOT contain config-related errors
-		assert.NotContains(t, outputStr, "failed to load config",
-			"Should not have config loading errors")
-		assert.NotContains(t, outputStr, "config path is empty",
-			"Should not have config path errors")
-
-		t.Logf("Config loaded via env var successfully, connection failed as expected: %s", outputStr)
-	})
-}
-
-// testEnvironmentVariables tests environment variable handling
-func testEnvironmentVariables(t *testing.T, ctx context.Context) {
-	tests := []struct {
-		name     string
-		envVars  map[string]string
-		expected string
-	}{
-		{
-			name: "InsideDockerEnv",
-			envVars: map[string]string{
-				"GOKEENAPI_INSIDE_DOCKER": "true",
+				for key := range envVars {
+					Expect(string(output)).To(ContainSubstring(key))
+				}
 			},
-			expected: "GOKEENAPI_INSIDE_DOCKER",
-		},
-		{
-			name: "CredentialsEnv",
-			envVars: map[string]string{
+			Entry("GOKEENAPI_INSIDE_DOCKER", map[string]string{"GOKEENAPI_INSIDE_DOCKER": "true"}),
+			Entry("credentials env vars", map[string]string{
 				"GOKEENAPI_KEENETIC_LOGIN":    "env-user",
 				"GOKEENAPI_KEENETIC_PASSWORD": "env-password",
-			},
-			expected: "env",
-		},
-	}
+			}),
+		)
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			args := []string{"run", "--rm", "--entrypoint", "sh"}
+	Context("volume permissions", func() {
+		var tmpDir string
 
-			// Add environment variables
-			for key, value := range tt.envVars {
-				args = append(args, "-e", fmt.Sprintf("%s=%s", key, value))
-			}
-
-			args = append(args, testImageName, "-c", "env")
-
-			cmd := exec.CommandContext(ctx, "docker", args...)
-			output, err := cmd.CombinedOutput()
-			assert.NoError(t, err, "Failed to run with env vars: %s", string(output))
-
-			outputStr := string(output)
-			for key := range tt.envVars {
-				assert.Contains(t, outputStr, key,
-					"Environment variable %s not found", key)
-			}
+		BeforeEach(func() {
+			ensureDockerImage(ctx)
+			tmpDir = createDockerAccessibleTempDir(GinkgoT())
 		})
-	}
-}
 
-// testVolumePermissions tests volume mount permissions
-func testVolumePermissions(t *testing.T, ctx context.Context) {
-	tmpDir := createDockerAccessibleTempDir(t)
+		It("should write to writable volume", func() {
+			cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
+				"--entrypoint", "sh",
+				"-v", fmt.Sprintf("%s:/etc/gokeenapi", tmpDir),
+				testImageName,
+				"-c", "echo 'test' > /etc/gokeenapi/test.txt && cat /etc/gokeenapi/test.txt",
+			)
+			output, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), "Failed to write to volume: %s", string(output))
+			Expect(string(output)).To(ContainSubstring("test"))
 
-	t.Run("WriteToVolume", func(t *testing.T) {
-		cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
-			"--entrypoint", "sh",
-			"-v", fmt.Sprintf("%s:/etc/gokeenapi", tmpDir),
-			testImageName,
-			"-c", "echo 'test' > /etc/gokeenapi/test.txt && cat /etc/gokeenapi/test.txt && ls -la /etc/gokeenapi/",
-		)
+			time.Sleep(100 * time.Millisecond)
 
-		output, err := cmd.CombinedOutput()
-		assert.NoError(t, err, "Failed to write to volume: %s", string(output))
-		assert.Contains(t, string(output), "test")
+			content, err := os.ReadFile(filepath.Join(tmpDir, "test.txt"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(content)).To(ContainSubstring("test"))
+		})
 
-		// Give Docker a moment to sync the file
-		time.Sleep(100 * time.Millisecond)
-
-		// Verify file was created on host
-		testFile := filepath.Join(tmpDir, "test.txt")
-		content, err := os.ReadFile(testFile)
-		assert.NoError(t, err, "Failed to read file from host: %s", testFile)
-		assert.Contains(t, string(content), "test")
+		It("should fail to write to read-only volume", func() {
+			cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
+				"--entrypoint", "sh",
+				"-v", fmt.Sprintf("%s:/etc/gokeenapi:ro", tmpDir),
+				testImageName,
+				"-c", "echo 'test' > /etc/gokeenapi/readonly.txt",
+			)
+			output, err := cmd.CombinedOutput()
+			Expect(err).To(HaveOccurred(), "Should fail to write to read-only volume")
+			Expect(string(output)).To(ContainSubstring("Read-only"))
+		})
 	})
 
-	t.Run("ReadOnlyVolume", func(t *testing.T) {
-		cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
-			"--entrypoint", "sh",
-			"-v", fmt.Sprintf("%s:/etc/gokeenapi:ro", tmpDir),
-			testImageName,
-			"-c", "echo 'test' > /etc/gokeenapi/readonly.txt",
-		)
+	Context("multi-platform build", func() {
+		It("should build for multiple platforms", func() {
+			cmd := exec.CommandContext(ctx, "docker", "buildx", "version")
+			if err := cmd.Run(); err != nil {
+				Skip("Docker buildx not available")
+			}
 
-		output, err := cmd.CombinedOutput()
-		assert.Error(t, err, "Should fail to write to read-only volume")
-		assert.Contains(t, string(output), "Read-only")
+			version := "test-multiplatform"
+			buildDate := time.Now().Format(time.RFC3339)
+
+			cmd = exec.CommandContext(ctx, "docker", "buildx", "build",
+				"--platform", "linux/amd64,linux/arm64",
+				"--build-arg", fmt.Sprintf("GOKEENAPI_VERSION=%s", version),
+				"--build-arg", fmt.Sprintf("GOKEENAPI_BUILDDATE=%s", buildDate),
+				"-f", "Dockerfile",
+				".",
+			)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				Skip("Multi-platform build not supported in this environment")
+			}
+			Expect(err).NotTo(HaveOccurred(), "Multi-platform build failed: %s", string(output))
+		})
 	})
-}
+})
 
-// testMultiPlatformBuild tests multi-platform build capability
-func testMultiPlatformBuild(t *testing.T, ctx context.Context) {
-	// Check if buildx is available
-	cmd := exec.CommandContext(ctx, "docker", "buildx", "version")
-	if err := cmd.Run(); err != nil {
-		t.Skip("Docker buildx not available, skipping multi-platform test")
-	}
+var _ = Describe("Dockerfile Validity", func() {
+	var dockerfile string
 
-	t.Run("BuildMultiPlatform", func(t *testing.T) {
-		version := "test-multiplatform"
-		buildDate := time.Now().Format(time.RFC3339)
-
-		// Build for multiple platforms (without push)
-		cmd := exec.CommandContext(ctx, "docker", "buildx", "build",
-			"--platform", "linux/amd64,linux/arm64",
-			"--build-arg", fmt.Sprintf("GOKEENAPI_VERSION=%s", version),
-			"--build-arg", fmt.Sprintf("GOKEENAPI_BUILDDATE=%s", buildDate),
-			"-f", "Dockerfile",
-			".",
-		)
-
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			// Multi-platform build might fail in some CI environments
-			t.Logf("Multi-platform build failed (may be expected in CI): %s", string(output))
-			t.Skip("Skipping multi-platform build test")
-		}
-
-		assert.NoError(t, err, "Multi-platform build failed: %s", string(output))
-	})
-}
-
-// TestDockerfileValidity tests Dockerfile syntax and best practices
-func TestDockerfileValidity(t *testing.T) {
-	content, err := os.ReadFile("Dockerfile")
-	require.NoError(t, err, "Failed to read Dockerfile")
-
-	dockerfile := string(content)
-
-	t.Run("HasMultiStageBuilds", func(t *testing.T) {
-		assert.Contains(t, dockerfile, "as builder", "Should use multi-stage builds")
-		assert.Contains(t, dockerfile, "as final", "Should have final stage")
+	BeforeEach(func() {
+		content, err := os.ReadFile("Dockerfile")
+		Expect(err).NotTo(HaveOccurred(), "Failed to read Dockerfile")
+		dockerfile = string(content)
 	})
 
-	t.Run("UsesBuildCache", func(t *testing.T) {
-		assert.Contains(t, dockerfile, "--mount=type=cache", "Should use build cache")
+	It("should use multi-stage builds", func() {
+		Expect(dockerfile).To(ContainSubstring("as builder"))
+		Expect(dockerfile).To(ContainSubstring("as final"))
 	})
 
-	t.Run("HasVolume", func(t *testing.T) {
-		assert.Contains(t, dockerfile, "VOLUME", "Should declare volume")
+	It("should use build cache", func() {
+		Expect(dockerfile).To(ContainSubstring("--mount=type=cache"))
 	})
 
-	t.Run("HasEntrypoint", func(t *testing.T) {
-		assert.Contains(t, dockerfile, "ENTRYPOINT", "Should have entrypoint")
+	It("should declare a volume", func() {
+		Expect(dockerfile).To(ContainSubstring("VOLUME"))
 	})
 
-	t.Run("UsesAlpine", func(t *testing.T) {
-		assert.Contains(t, dockerfile, "alpine", "Should use Alpine for smaller image")
+	It("should have an entrypoint", func() {
+		Expect(dockerfile).To(ContainSubstring("ENTRYPOINT"))
 	})
 
-	t.Run("HasBuildArgs", func(t *testing.T) {
-		assert.Contains(t, dockerfile, "ARG GOKEENAPI_VERSION", "Should have version build arg")
-		assert.Contains(t, dockerfile, "ARG GOKEENAPI_BUILDDATE", "Should have build date arg")
-	})
-}
-
-// TestDockerIgnore tests .dockerignore configuration
-func TestDockerIgnore(t *testing.T) {
-	content, err := os.ReadFile(".dockerignore")
-	require.NoError(t, err, "Failed to read .dockerignore")
-
-	dockerignore := string(content)
-	lines := strings.Split(dockerignore, "\n")
-
-	t.Run("ExcludesAll", func(t *testing.T) {
-		assert.Contains(t, lines, "**", "Should exclude all by default")
+	It("should use Alpine for smaller image", func() {
+		Expect(dockerfile).To(ContainSubstring("alpine"))
 	})
 
-	t.Run("IncludesNecessaryFiles", func(t *testing.T) {
-		necessaryFiles := []string{"!go.mod", "!go.sum", "!main.go"}
-		for _, file := range necessaryFiles {
-			assert.Contains(t, lines, file, "Should include %s", file)
-		}
+	It("should have build args for version and build date", func() {
+		Expect(dockerfile).To(ContainSubstring("ARG GOKEENAPI_VERSION"))
+		Expect(dockerfile).To(ContainSubstring("ARG GOKEENAPI_BUILDDATE"))
+	})
+})
+
+var _ = Describe("DockerIgnore", func() {
+	var lines []string
+
+	BeforeEach(func() {
+		content, err := os.ReadFile(".dockerignore")
+		Expect(err).NotTo(HaveOccurred(), "Failed to read .dockerignore")
+		lines = strings.Split(string(content), "\n")
 	})
 
-	t.Run("IncludesSourceDirs", func(t *testing.T) {
-		sourceDirs := []string{"!cmd/", "!internal/", "!pkg/"}
-		for _, dir := range sourceDirs {
-			assert.Contains(t, lines, dir, "Should include %s", dir)
-		}
+	It("should exclude all by default", func() {
+		Expect(lines).To(ContainElement("**"))
 	})
-}
+
+	It("should include necessary root files", func() {
+		Expect(lines).To(ContainElement("!go.mod"))
+		Expect(lines).To(ContainElement("!go.sum"))
+		Expect(lines).To(ContainElement("!main.go"))
+	})
+
+	It("should include source directories", func() {
+		Expect(lines).To(ContainElement("!cmd/"))
+		Expect(lines).To(ContainElement("!internal/"))
+		Expect(lines).To(ContainElement("!pkg/"))
+	})
+})

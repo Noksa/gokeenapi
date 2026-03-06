@@ -1,47 +1,46 @@
 package cmd
 
 import (
-	"testing"
+	"net/http/httptest"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-type AddAwgTestSuite struct {
-	CmdTestSuite
-}
+var _ = Describe("AddAwg", func() {
+	var server *httptest.Server
 
-func TestAddAwgTestSuite(t *testing.T) {
-	suite.Run(t, new(AddAwgTestSuite))
-}
+	BeforeEach(func() {
+		server = setupMockRouter()
+	})
 
-func (s *AddAwgTestSuite) TestNewAddAwgCmd() {
-	cmd := newAddAwgCmd()
+	AfterEach(func() {
+		cleanupMockRouter(server)
+	})
 
-	assert.Equal(s.T(), CmdAddAwg, cmd.Use)
-	assert.Equal(s.T(), AliasesAddAwg, cmd.Aliases)
-	assert.NotEmpty(s.T(), cmd.Short)
-	assert.NotNil(s.T(), cmd.RunE)
+	It("should create command with correct attributes and flags", func() {
+		cmd := newAddAwgCmd()
 
-	confFileFlag := cmd.Flags().Lookup("conf-file")
-	assert.NotNil(s.T(), confFileFlag)
+		Expect(cmd.Use).To(Equal(CmdAddAwg))
+		Expect(cmd.Aliases).To(Equal(AliasesAddAwg))
+		Expect(cmd.Short).NotTo(BeEmpty())
+		Expect(cmd.RunE).NotTo(BeNil())
+		Expect(cmd.Flags().Lookup("conf-file")).NotTo(BeNil())
+		Expect(cmd.Flags().Lookup("name")).NotTo(BeNil())
+	})
 
-	nameFlag := cmd.Flags().Lookup("name")
-	assert.NotNil(s.T(), nameFlag)
-}
+	It("should fail when conf-file is missing", func() {
+		cmd := newAddAwgCmd()
 
-func (s *AddAwgTestSuite) TestAddAwgCmd_MissingConfFile() {
-	cmd := newAddAwgCmd()
+		err := cmd.RunE(cmd, []string{})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("conf-file flag is required"))
+	})
 
-	err := cmd.RunE(cmd, []string{})
-	assert.Error(s.T(), err)
-	assert.Contains(s.T(), err.Error(), "conf-file flag is required")
-}
+	It("should fail with invalid path", func() {
+		cmd := newAddAwgCmd()
+		_ = cmd.Flags().Set("conf-file", "/nonexistent/path.conf")
 
-func (s *AddAwgTestSuite) TestAddAwgCmd_InvalidPath() {
-	cmd := newAddAwgCmd()
-	_ = cmd.Flags().Set("conf-file", "/nonexistent/path.conf")
-
-	err := cmd.RunE(cmd, []string{})
-	assert.Error(s.T(), err)
-}
+		Expect(cmd.RunE(cmd, []string{})).To(HaveOccurred())
+	})
+})

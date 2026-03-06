@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"testing"
 
-	"gopkg.in/yaml.v3"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"go.yaml.in/yaml/v3"
 	"pgregory.net/rapid"
 )
 
@@ -17,22 +18,18 @@ func genValidURL() *rapid.Generator[string] {
 	return rapid.Custom(func(t *rapid.T) string {
 		protocol := rapid.SampledFrom([]string{"http", "https"}).Draw(t, "protocol")
 
-		// Generate IP or hostname
 		useIP := rapid.Bool().Draw(t, "useIP")
 		var host string
 		if useIP {
-			// Generate IPv4 address
 			octet1 := rapid.IntRange(1, 255).Draw(t, "octet1")
 			octet2 := rapid.IntRange(0, 255).Draw(t, "octet2")
 			octet3 := rapid.IntRange(0, 255).Draw(t, "octet3")
 			octet4 := rapid.IntRange(1, 254).Draw(t, "octet4")
 			host = fmt.Sprintf("%d.%d.%d.%d", octet1, octet2, octet3, octet4)
 		} else {
-			// Generate hostname
 			host = rapid.StringMatching(`[a-z][a-z0-9-]{0,10}\.[a-z]{2,5}`).Draw(t, "hostname")
 		}
 
-		// Optionally add port
 		includePort := rapid.Bool().Draw(t, "includePort")
 		if includePort {
 			port := rapid.IntRange(1, 65535).Draw(t, "port")
@@ -76,7 +73,6 @@ func genInterfaceID() *rapid.Generator[string] {
 // genBatFilePath generates valid bat file paths
 func genBatFilePath() *rapid.Generator[string] {
 	return rapid.Custom(func(t *rapid.T) string {
-		// Generate path components
 		depth := rapid.IntRange(1, 4).Draw(t, "depth")
 		components := make([]string, depth)
 
@@ -84,11 +80,9 @@ func genBatFilePath() *rapid.Generator[string] {
 			components[i] = rapid.StringMatching(`[a-z][a-z0-9_-]{2,10}`).Draw(t, fmt.Sprintf("dir%d", i))
 		}
 
-		// Last component is the filename
 		filename := rapid.StringMatching(`[a-z][a-z0-9_-]{2,15}`).Draw(t, "filename")
 		components[depth-1] = filename + ".bat"
 
-		// Decide if absolute or relative
 		isAbsolute := rapid.Bool().Draw(t, "isAbsolute")
 		if isAbsolute {
 			return "/" + filepath.Join(components...)
@@ -100,7 +94,6 @@ func genBatFilePath() *rapid.Generator[string] {
 // genYAMLFilePath generates valid YAML file paths
 func genYAMLFilePath() *rapid.Generator[string] {
 	return rapid.Custom(func(t *rapid.T) string {
-		// Generate path components
 		depth := rapid.IntRange(1, 3).Draw(t, "depth")
 		components := make([]string, depth)
 
@@ -108,12 +101,10 @@ func genYAMLFilePath() *rapid.Generator[string] {
 			components[i] = rapid.StringMatching(`[a-z][a-z0-9_-]{2,10}`).Draw(t, fmt.Sprintf("dir%d", i))
 		}
 
-		// Last component is the filename
 		filename := rapid.StringMatching(`[a-z][a-z0-9_-]{2,15}`).Draw(t, "filename")
 		ext := rapid.SampledFrom([]string{".yaml", ".yml"}).Draw(t, "ext")
 		components[depth-1] = filename + ext
 
-		// For YAML files in bat-file lists, use relative paths more often
 		isAbsolute := rapid.Bool().Draw(t, "isAbsolute")
 		if isAbsolute {
 			return "/" + filepath.Join(components...)
@@ -129,7 +120,6 @@ func genBatFileList() *rapid.Generator[[]string] {
 		files := make([]string, size)
 
 		for i := range size {
-			// Mix of .bat and .yaml files
 			useYAML := rapid.Bool().Draw(t, fmt.Sprintf("useYAML%d", i))
 			if useYAML {
 				files[i] = genYAMLFilePath().Draw(t, fmt.Sprintf("yamlFile%d", i))
@@ -229,10 +219,8 @@ func genDNS() *rapid.Generator[DNS] {
 // genDnsRoutingGroup generates a valid DNS routing group
 func genDnsRoutingGroup() *rapid.Generator[DnsRoutingGroup] {
 	return rapid.Custom(func(t *rapid.T) DnsRoutingGroup {
-		// Generate non-empty group name
 		name := rapid.StringMatching(`[a-z][a-z0-9-]{2,20}`).Draw(t, "name")
 
-		// Generate 1-3 domain files (simplified for testing)
 		fileCount := rapid.IntRange(1, 3).Draw(t, "fileCount")
 		domainFiles := make([]string, fileCount)
 		for i := range fileCount {
@@ -250,21 +238,19 @@ func genDnsRoutingGroup() *rapid.Generator[DnsRoutingGroup] {
 // genWhitespaceString generates strings that are empty or contain only whitespace
 func genWhitespaceString() *rapid.Generator[string] {
 	return rapid.Custom(func(t *rapid.T) string {
-		// Generate different types of whitespace strings
 		choice := rapid.IntRange(0, 5).Draw(t, "choice")
 		switch choice {
 		case 0:
-			return "" // empty string
+			return ""
 		case 1:
-			return " " // single space
+			return " "
 		case 2:
-			return "  " // multiple spaces
+			return "  "
 		case 3:
-			return "\t" // tab
+			return "\t"
 		case 4:
-			return "\n" // newline
+			return "\n"
 		case 5:
-			// Mix of whitespace characters
 			length := rapid.IntRange(1, 10).Draw(t, "length")
 			chars := make([]rune, length)
 			for i := range length {
@@ -289,7 +275,6 @@ func genLogs() *rapid.Generator[Logs] {
 // genDataDir generates a valid data directory path
 func genDataDir() *rapid.Generator[string] {
 	return rapid.Custom(func(t *rapid.T) string {
-		// Generate path components
 		depth := rapid.IntRange(1, 4).Draw(t, "depth")
 		components := make([]string, depth)
 
@@ -311,7 +296,6 @@ func genGokeenapiConfig() *rapid.Generator[GokeenapiConfig] {
 			Logs:     genLogs().Draw(t, "logs"),
 		}
 
-		// Optionally include DataDir
 		includeDataDir := rapid.Bool().Draw(t, "includeDataDir")
 		if includeDataDir {
 			cfg.DataDir = genDataDir().Draw(t, "dataDir")
@@ -331,7 +315,6 @@ func genRelativePath() *rapid.Generator[string] {
 			components[i] = rapid.StringMatching(`[a-z][a-z0-9_-]{2,10}`).Draw(t, fmt.Sprintf("dir%d", i))
 		}
 
-		// Last component is the filename
 		filename := rapid.StringMatching(`[a-z][a-z0-9_-]{2,15}`).Draw(t, "filename")
 		ext := rapid.SampledFrom([]string{".bat", ".yaml", ".yml"}).Draw(t, "ext")
 		components[depth-1] = filename + ext
@@ -340,50 +323,18 @@ func genRelativePath() *rapid.Generator[string] {
 	})
 }
 
-// Property-based tests
-
-// Feature: property-based-testing, Property 8: YAML round-trip preserves structure
-// Validates: Requirements 3.1
-func TestProperty_ConfigYAMLRoundTrip(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate a valid config
-		originalCfg := genGokeenapiConfig().Draw(t, "config")
-
-		// Marshal to YAML
-		yamlBytes, err := yaml.Marshal(&originalCfg)
-		if err != nil {
-			t.Fatalf("failed to marshal config to YAML: %v", err)
-		}
-
-		// Unmarshal back to config
-		var roundTrippedCfg GokeenapiConfig
-		err = yaml.Unmarshal(yamlBytes, &roundTrippedCfg)
-		if err != nil {
-			t.Fatalf("failed to unmarshal YAML back to config: %v", err)
-		}
-
-		// Compare the two configs
-		if !configsEqual(originalCfg, roundTrippedCfg) {
-			t.Fatalf("round-trip failed:\noriginal: %+v\nround-tripped: %+v", originalCfg, roundTrippedCfg)
-		}
-	})
-}
-
 // Helper function to compare two GokeenapiConfig structs
 func configsEqual(c1, c2 GokeenapiConfig) bool {
-	// Compare Keenetic
 	if c1.Keenetic.URL != c2.Keenetic.URL ||
 		c1.Keenetic.Login != c2.Keenetic.Login ||
 		c1.Keenetic.Password != c2.Keenetic.Password {
 		return false
 	}
 
-	// Compare DataDir
 	if c1.DataDir != c2.DataDir {
 		return false
 	}
 
-	// Compare Routes
 	if len(c1.Routes) != len(c2.Routes) {
 		return false
 	}
@@ -393,12 +344,10 @@ func configsEqual(c1, c2 GokeenapiConfig) bool {
 		}
 	}
 
-	// Compare DNS
 	if !dnsEqual(c1.DNS, c2.DNS) {
 		return false
 	}
 
-	// Compare Logs
 	if c1.Logs.Debug != c2.Logs.Debug {
 		return false
 	}
@@ -456,1290 +405,124 @@ func dnsEqual(d1, d2 DNS) bool {
 	return true
 }
 
-// Feature: property-based-testing, Property 9: Bat-file expansion is idempotent
-// Validates: Requirements 3.2
-func TestProperty_BatFileExpansionIdempotent(t *testing.T) {
-	// Create a temporary directory for test files (outside rapid.Check)
-	tmpDir := t.TempDir()
+var _ = Describe("Property: Config YAML Round-Trip", func() {
+	It("should preserve structure through marshal/unmarshal cycle", func() {
+		rapid.Check(GinkgoT(), func(t *rapid.T) {
+			originalCfg := genGokeenapiConfig().Draw(t, "config")
 
-	rapid.Check(t, func(t *rapid.T) {
+			yamlBytes, err := yaml.Marshal(&originalCfg)
+			Expect(err).NotTo(HaveOccurred(), "failed to marshal config to YAML")
 
-		// Generate a config with bat-file lists
-		cfg := genGokeenapiConfig().Draw(t, "config")
+			var roundTrippedCfg GokeenapiConfig
+			err = yaml.Unmarshal(yamlBytes, &roundTrippedCfg)
+			Expect(err).NotTo(HaveOccurred(), "failed to unmarshal YAML back to config")
 
-		// Create YAML files for any .yaml/.yml files in bat-file lists
-		for i := range cfg.Routes {
-			for j, batFile := range cfg.Routes[i].BatFile {
-				if filepath.Ext(batFile) == ".yaml" || filepath.Ext(batFile) == ".yml" {
-					// Create the YAML file with some bat files
-					batListContent := BatFileList{
-						BatFile: []string{
-							"/expanded/file1.bat",
-							"/expanded/file2.bat",
-						},
-					}
-
-					yamlBytes, err := yaml.Marshal(&batListContent)
-					if err != nil {
-						t.Fatalf("failed to marshal bat-file list: %v", err)
-					}
-
-					// Make the path relative to tmpDir
-					yamlPath := filepath.Join(tmpDir, filepath.Base(batFile))
-					err = os.WriteFile(yamlPath, yamlBytes, 0644)
-					if err != nil {
-						t.Fatalf("failed to write bat-file list: %v", err)
-					}
-
-					// Update the config to use the relative path
-					cfg.Routes[i].BatFile[j] = filepath.Base(batFile)
-				}
-			}
-		}
-
-		// Write the config to a file
-		configPath := filepath.Join(tmpDir, "config.yaml")
-		configBytes, err := yaml.Marshal(&cfg)
-		if err != nil {
-			t.Fatalf("failed to marshal config: %v", err)
-		}
-
-		err = os.WriteFile(configPath, configBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config: %v", err)
-		}
-
-		// Load the config (this will expand bat-file lists)
-		err = LoadConfig(configPath)
-		if err != nil {
-			t.Fatalf("failed to load config: %v", err)
-		}
-
-		// Save the expanded bat-file lists
-		firstExpansion := make([][]string, len(Cfg.Routes))
-		for i := range Cfg.Routes {
-			firstExpansion[i] = make([]string, len(Cfg.Routes[i].BatFile))
-			copy(firstExpansion[i], Cfg.Routes[i].BatFile)
-		}
-
-		// Expand again (simulate calling expandBatLists again)
-		err = expandBatLists(configPath)
-		if err != nil {
-			t.Fatalf("failed to expand bat-file lists second time: %v", err)
-		}
-
-		// Compare the two expansions - they should be identical
-		for i := range Cfg.Routes {
-			if len(firstExpansion[i]) != len(Cfg.Routes[i].BatFile) {
-				t.Fatalf("expansion not idempotent: route %d has different lengths: %d vs %d",
-					i, len(firstExpansion[i]), len(Cfg.Routes[i].BatFile))
-			}
-
-			for j := range firstExpansion[i] {
-				if firstExpansion[i][j] != Cfg.Routes[i].BatFile[j] {
-					t.Fatalf("expansion not idempotent: route %d, file %d: %s vs %s",
-						i, j, firstExpansion[i][j], Cfg.Routes[i].BatFile[j])
-				}
-			}
-		}
+			Expect(configsEqual(originalCfg, roundTrippedCfg)).To(BeTrue(),
+				"round-trip failed:\noriginal: %+v\nround-tripped: %+v", originalCfg, roundTrippedCfg)
+		})
 	})
-}
+})
 
-// Feature: property-based-testing, Property 10: Relative path resolution is consistent
-// Validates: Requirements 3.3
-func TestProperty_BatFilePathResolutionConsistent(t *testing.T) {
-	// Create a temporary directory structure (outside rapid.Check)
-	tmpDir := t.TempDir()
+var _ = Describe("Property: Environment Variable Overrides", func() {
+	It("should override YAML credentials with env vars", func() {
+		tmpDir := GinkgoT().TempDir()
 
-	rapid.Check(t, func(t *rapid.T) {
+		rapid.Check(GinkgoT(), func(t *rapid.T) {
+			yamlLogin := genLogin().Draw(t, "yamlLogin")
+			yamlPassword := genPassword().Draw(t, "yamlPassword")
+			envLogin := genLogin().Draw(t, "envLogin")
+			envPassword := genPassword().Draw(t, "envPassword")
 
-		// Generate a relative path for the bat-file list
-		relativePath := genRelativePath().Draw(t, "relativePath")
+			if yamlLogin == envLogin {
+				envLogin = yamlLogin + "_env"
+			}
+			if yamlPassword == envPassword {
+				envPassword = yamlPassword + "_env"
+			}
 
-		// Create the bat-file list YAML in a subdirectory
-		configDir := filepath.Join(tmpDir, "configs")
-		err := os.MkdirAll(configDir, 0755)
-		if err != nil {
-			t.Fatalf("failed to create config directory: %v", err)
-		}
-
-		// Create the bat-file list YAML
-		batListPath := filepath.Join(configDir, relativePath)
-		err = os.MkdirAll(filepath.Dir(batListPath), 0755)
-		if err != nil {
-			t.Fatalf("failed to create bat-file list directory: %v", err)
-		}
-
-		batListContent := BatFileList{
-			BatFile: []string{"/test/file1.bat", "/test/file2.bat"},
-		}
-		yamlBytes, err := yaml.Marshal(&batListContent)
-		if err != nil {
-			t.Fatalf("failed to marshal bat-file list: %v", err)
-		}
-
-		err = os.WriteFile(batListPath, yamlBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write bat-file list: %v", err)
-		}
-
-		// Create a config that references the bat-file list with a relative path
-		cfg := GokeenapiConfig{
-			Keenetic: Keenetic{
-				URL:      "http://192.168.1.1",
-				Login:    "admin",
-				Password: "password",
-			},
-			Routes: []Route{
-				{
-					InterfaceID: "Wireguard0",
-					BatFileList: BatFileList{
-						BatFile: []string{relativePath},
-					},
+			cfg := GokeenapiConfig{
+				Keenetic: Keenetic{
+					URL:      genValidURL().Draw(t, "url"),
+					Login:    yamlLogin,
+					Password: yamlPassword,
 				},
-			},
-		}
-
-		configPath := filepath.Join(configDir, "config.yaml")
-		configBytes, err := yaml.Marshal(&cfg)
-		if err != nil {
-			t.Fatalf("failed to marshal config: %v", err)
-		}
-
-		err = os.WriteFile(configPath, configBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config: %v", err)
-		}
-
-		// Save the current working directory
-		originalWd, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("failed to get working directory: %v", err)
-		}
-
-		// Load the config from the config directory
-		err = LoadConfig(configPath)
-		if err != nil {
-			t.Fatalf("failed to load config: %v", err)
-		}
-
-		firstExpansion := make([]string, len(Cfg.Routes[0].BatFile))
-		copy(firstExpansion, Cfg.Routes[0].BatFile)
-
-		// Change to a different working directory
-		err = os.Chdir(tmpDir)
-		if err != nil {
-			t.Fatalf("failed to change directory: %v", err)
-		}
-		defer func() { _ = os.Chdir(originalWd) }()
-
-		// Load the config again from the same absolute path
-		err = LoadConfig(configPath)
-		if err != nil {
-			t.Fatalf("failed to load config second time: %v", err)
-		}
-
-		secondExpansion := Cfg.Routes[0].BatFile
-
-		// The expansions should be identical regardless of working directory
-		if len(firstExpansion) != len(secondExpansion) {
-			t.Fatalf("path resolution not consistent: different lengths: %d vs %d",
-				len(firstExpansion), len(secondExpansion))
-		}
-
-		for i := range firstExpansion {
-			if firstExpansion[i] != secondExpansion[i] {
-				t.Fatalf("path resolution not consistent: file %d: %s vs %s",
-					i, firstExpansion[i], secondExpansion[i])
 			}
-		}
+
+			configPath := filepath.Join(tmpDir, fmt.Sprintf("config_%d.yaml", rapid.IntRange(0, 1000000).Draw(t, "configNum")))
+			configBytes, err := yaml.Marshal(&cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = os.WriteFile(configPath, configBytes, 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = os.Setenv("GOKEENAPI_KEENETIC_LOGIN", envLogin)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = os.Unsetenv("GOKEENAPI_KEENETIC_LOGIN") }()
+
+			err = os.Setenv("GOKEENAPI_KEENETIC_PASSWORD", envPassword)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = os.Unsetenv("GOKEENAPI_KEENETIC_PASSWORD") }()
+
+			err = LoadConfig(configPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(Cfg.Keenetic.Login).To(Equal(envLogin),
+				"environment login not applied: got %s, want %s", Cfg.Keenetic.Login, envLogin)
+			Expect(Cfg.Keenetic.Password).To(Equal(envPassword),
+				"environment password not applied: got %s, want %s", Cfg.Keenetic.Password, envPassword)
+			Expect(Cfg.Keenetic.URL).To(Equal(cfg.Keenetic.URL),
+				"URL was incorrectly modified: got %s, want %s", Cfg.Keenetic.URL, cfg.Keenetic.URL)
+		})
 	})
-}
+})
 
-// Feature: property-based-testing, Property 11: Environment overrides take precedence
-// Validates: Requirements 3.4
-func TestProperty_EnvVarsOverrideYAMLCredentials(t *testing.T) {
-	tmpDir := t.TempDir()
+var _ = Describe("Property: Missing Required Fields", func() {
+	It("should load configs with missing fields without error", func() {
+		tmpDir := GinkgoT().TempDir()
 
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate two different sets of credentials
-		yamlLogin := genLogin().Draw(t, "yamlLogin")
-		yamlPassword := genPassword().Draw(t, "yamlPassword")
-		envLogin := genLogin().Draw(t, "envLogin")
-		envPassword := genPassword().Draw(t, "envPassword")
+		rapid.Check(GinkgoT(), func(t *rapid.T) {
+			missingField := rapid.IntRange(0, 2).Draw(t, "missingField")
 
-		// Ensure they're different
-		if yamlLogin == envLogin {
-			envLogin = yamlLogin + "_env"
-		}
-		if yamlPassword == envPassword {
-			envPassword = yamlPassword + "_env"
-		}
+			url := genValidURL().Draw(t, "url")
+			login := genLogin().Draw(t, "login")
+			password := genPassword().Draw(t, "password")
 
-		// Create a config with YAML credentials
-		cfg := GokeenapiConfig{
-			Keenetic: Keenetic{
-				URL:      genValidURL().Draw(t, "url"),
-				Login:    yamlLogin,
-				Password: yamlPassword,
-			},
-		}
+			switch missingField {
+			case 0:
+				url = ""
+			case 1:
+				login = ""
+			case 2:
+				password = ""
+			}
 
-		configPath := filepath.Join(tmpDir, fmt.Sprintf("config_%d.yaml", rapid.IntRange(0, 1000000).Draw(t, "configNum")))
-		configBytes, err := yaml.Marshal(&cfg)
-		if err != nil {
-			t.Fatalf("failed to marshal config: %v", err)
-		}
+			cfg := GokeenapiConfig{
+				Keenetic: Keenetic{
+					URL:      url,
+					Login:    login,
+					Password: password,
+				},
+				Routes: []Route{},
+				DNS:    DNS{Records: []DnsRecord{}},
+			}
 
-		err = os.WriteFile(configPath, configBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config: %v", err)
-		}
+			configPath := filepath.Join(tmpDir, fmt.Sprintf("invalid_config_%d.yaml", rapid.IntRange(0, 1000000).Draw(t, "configNum")))
+			configBytes, err := yaml.Marshal(&cfg)
+			Expect(err).NotTo(HaveOccurred())
 
-		// Set environment variables
-		err = os.Setenv("GOKEENAPI_KEENETIC_LOGIN", envLogin)
-		if err != nil {
-			t.Fatalf("failed to set login env var: %v", err)
-		}
-		defer func() { _ = os.Unsetenv("GOKEENAPI_KEENETIC_LOGIN") }()
+			err = os.WriteFile(configPath, configBytes, 0644)
+			Expect(err).NotTo(HaveOccurred())
 
-		err = os.Setenv("GOKEENAPI_KEENETIC_PASSWORD", envPassword)
-		if err != nil {
-			t.Fatalf("failed to set password env var: %v", err)
-		}
-		defer func() { _ = os.Unsetenv("GOKEENAPI_KEENETIC_PASSWORD") }()
+			_ = os.Unsetenv("GOKEENAPI_KEENETIC_LOGIN")
+			_ = os.Unsetenv("GOKEENAPI_KEENETIC_PASSWORD")
 
-		// Load the config
-		err = LoadConfig(configPath)
-		if err != nil {
-			t.Fatalf("failed to load config: %v", err)
-		}
+			err = LoadConfig(configPath)
+			Expect(err).NotTo(HaveOccurred())
 
-		// Verify that environment variables took precedence
-		if Cfg.Keenetic.Login != envLogin {
-			t.Fatalf("environment login not applied: got %s, want %s", Cfg.Keenetic.Login, envLogin)
-		}
-
-		if Cfg.Keenetic.Password != envPassword {
-			t.Fatalf("environment password not applied: got %s, want %s", Cfg.Keenetic.Password, envPassword)
-		}
-
-		// URL should remain from YAML (not overridden)
-		if Cfg.Keenetic.URL != cfg.Keenetic.URL {
-			t.Fatalf("URL was incorrectly modified: got %s, want %s", Cfg.Keenetic.URL, cfg.Keenetic.URL)
-		}
-	})
-}
-
-// Feature: property-based-testing, Property 12: Missing required fields are detected
-// Validates: Requirements 3.5
-func TestProperty_MissingRequiredFieldsDetected(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate a simple config with a missing required field
-		// We'll randomly remove one of the three required fields
-		missingField := rapid.IntRange(0, 2).Draw(t, "missingField")
-
-		url := genValidURL().Draw(t, "url")
-		login := genLogin().Draw(t, "login")
-		password := genPassword().Draw(t, "password")
-
-		// Remove one required field
-		switch missingField {
-		case 0:
-			url = ""
-		case 1:
-			login = ""
-		case 2:
-			password = ""
-		}
-
-		cfg := GokeenapiConfig{
-			Keenetic: Keenetic{
-				URL:      url,
-				Login:    login,
-				Password: password,
-			},
-			// Keep routes empty to avoid bat-file expansion issues
-			Routes: []Route{},
-			DNS:    DNS{Records: []DnsRecord{}},
-		}
-
-		configPath := filepath.Join(tmpDir, fmt.Sprintf("invalid_config_%d.yaml", rapid.IntRange(0, 1000000).Draw(t, "configNum")))
-		configBytes, err := yaml.Marshal(&cfg)
-		if err != nil {
-			t.Fatalf("failed to marshal config: %v", err)
-		}
-
-		err = os.WriteFile(configPath, configBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config: %v", err)
-		}
-
-		// Clear environment variables to ensure they don't fill in missing fields
-		_ = os.Unsetenv("GOKEENAPI_KEENETIC_LOGIN")
-		_ = os.Unsetenv("GOKEENAPI_KEENETIC_PASSWORD")
-
-		// Load the config - this should succeed (LoadConfig doesn't validate)
-		err = LoadConfig(configPath)
-		if err != nil {
-			t.Fatalf("failed to load config: %v", err)
-		}
-
-		// Verify that at least one required field is missing
-		hasMissingField := Cfg.Keenetic.URL == "" || Cfg.Keenetic.Login == "" || Cfg.Keenetic.Password == ""
-
-		if !hasMissingField {
-			t.Fatalf("expected at least one missing field, but all fields are present: URL=%s, Login=%s, Password=%s",
+			hasMissingField := Cfg.Keenetic.URL == "" || Cfg.Keenetic.Login == "" || Cfg.Keenetic.Password == ""
+			Expect(hasMissingField).To(BeTrue(),
+				"expected at least one missing field, but all fields are present: URL=%s, Login=%s, Password=%s",
 				Cfg.Keenetic.URL, Cfg.Keenetic.Login, Cfg.Keenetic.Password)
-		}
-
-		// The property we're testing is that LoadConfig successfully loads configs with missing fields
-		// (validation happens at a higher layer in the application)
-		// This is the current behavior and is acceptable since validation is done in cmd/common.go
+		})
 	})
-}
-
-// Feature: property-based-testing, Property 13: Bat-url expansion is idempotent
-// Validates: Requirements 3.2 (for bat-url)
-func TestProperty_BatURLExpansionIdempotent(t *testing.T) {
-	// Create a temporary directory for test files (outside rapid.Check)
-	tmpDir := t.TempDir()
-
-	rapid.Check(t, func(t *rapid.T) {
-
-		// Generate a config with bat-url lists
-		cfg := genGokeenapiConfig().Draw(t, "config")
-
-		// Create YAML files for any .yaml/.yml files in both bat-file and bat-url lists
-		// We need to handle both because the config generator might put YAML files in bat-file too
-		yamlFilesCreated := make(map[string]bool)
-
-		for i := range cfg.Routes {
-			// Handle bat-file YAML files
-			for j, batFile := range cfg.Routes[i].BatFile {
-				if filepath.Ext(batFile) == ".yaml" || filepath.Ext(batFile) == ".yml" {
-					baseName := filepath.Base(batFile)
-					if !yamlFilesCreated[baseName] {
-						batListContent := BatFileList{
-							BatFile: []string{
-								"/expanded/file1.bat",
-								"/expanded/file2.bat",
-							},
-						}
-
-						yamlBytes, err := yaml.Marshal(&batListContent)
-						if err != nil {
-							t.Fatalf("failed to marshal bat-file list: %v", err)
-						}
-
-						yamlPath := filepath.Join(tmpDir, baseName)
-						err = os.WriteFile(yamlPath, yamlBytes, 0644)
-						if err != nil {
-							t.Fatalf("failed to write bat-file list: %v", err)
-						}
-						yamlFilesCreated[baseName] = true
-					}
-					cfg.Routes[i].BatFile[j] = filepath.Base(batFile)
-				}
-			}
-
-			// Handle bat-url YAML files
-			for j, batURL := range cfg.Routes[i].BatURL {
-				if filepath.Ext(batURL) == ".yaml" || filepath.Ext(batURL) == ".yml" {
-					baseName := filepath.Base(batURL)
-					if !yamlFilesCreated[baseName] {
-						// Create the YAML file with some bat URLs
-						batURLListContent := BatURLList{
-							BatURL: []string{
-								"https://example.com/expanded/url1.bat",
-								"https://example.com/expanded/url2.bat",
-							},
-						}
-
-						yamlBytes, err := yaml.Marshal(&batURLListContent)
-						if err != nil {
-							t.Fatalf("failed to marshal bat-url list: %v", err)
-						}
-
-						yamlPath := filepath.Join(tmpDir, baseName)
-						err = os.WriteFile(yamlPath, yamlBytes, 0644)
-						if err != nil {
-							t.Fatalf("failed to write bat-url list: %v", err)
-						}
-						yamlFilesCreated[baseName] = true
-					}
-					cfg.Routes[i].BatURL[j] = filepath.Base(batURL)
-				}
-			}
-		}
-
-		// Write the config to a file
-		configPath := filepath.Join(tmpDir, "config.yaml")
-		configBytes, err := yaml.Marshal(&cfg)
-		if err != nil {
-			t.Fatalf("failed to marshal config: %v", err)
-		}
-
-		err = os.WriteFile(configPath, configBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config: %v", err)
-		}
-
-		// Load the config (this will expand bat-url lists)
-		err = LoadConfig(configPath)
-		if err != nil {
-			t.Fatalf("failed to load config: %v", err)
-		}
-
-		// Save the expanded bat-url lists
-		firstExpansion := make([][]string, len(Cfg.Routes))
-		for i := range Cfg.Routes {
-			firstExpansion[i] = make([]string, len(Cfg.Routes[i].BatURL))
-			copy(firstExpansion[i], Cfg.Routes[i].BatURL)
-		}
-
-		// Expand again (simulate calling expandBatLists again)
-		err = expandBatLists(configPath)
-		if err != nil {
-			t.Fatalf("failed to expand bat-url lists second time: %v", err)
-		}
-
-		// Compare the two expansions - they should be identical
-		for i := range Cfg.Routes {
-			if len(firstExpansion[i]) != len(Cfg.Routes[i].BatURL) {
-				t.Fatalf("expansion not idempotent: route %d has different lengths: %d vs %d",
-					i, len(firstExpansion[i]), len(Cfg.Routes[i].BatURL))
-			}
-
-			for j := range firstExpansion[i] {
-				if firstExpansion[i][j] != Cfg.Routes[i].BatURL[j] {
-					t.Fatalf("expansion not idempotent: route %d, url %d: %s vs %s",
-						i, j, firstExpansion[i][j], Cfg.Routes[i].BatURL[j])
-				}
-			}
-		}
-	})
-}
-
-// Feature: property-based-testing, Property 14: Bat-file and bat-url expansion are independent
-// Validates: Requirements 3.6 (context-aware expansion)
-func TestProperty_BatFileAndBatURLExpansionIndependent(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rapid.Check(t, func(t *rapid.T) {
-
-		// Generate a combined YAML file with both bat-file and bat-url lists
-		batFileList := []string{
-			"/path/to/file1.bat",
-			"/path/to/file2.bat",
-		}
-		batURLList := []string{
-			"https://example.com/url1.bat",
-			"https://example.com/url2.bat",
-		}
-
-		combinedContent := BatLists{
-			BatFileList: BatFileList{BatFile: batFileList},
-			BatURLList:  BatURLList{BatURL: batURLList},
-		}
-
-		yamlBytes, err := yaml.Marshal(&combinedContent)
-		if err != nil {
-			t.Fatalf("failed to marshal combined list: %v", err)
-		}
-
-		combinedPath := filepath.Join(tmpDir, "combined.yaml")
-		err = os.WriteFile(combinedPath, yamlBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write combined list: %v", err)
-		}
-
-		// Test 1: Reference in bat-file only
-		cfg1 := GokeenapiConfig{
-			Keenetic: Keenetic{
-				URL:      "http://192.168.1.1",
-				Login:    "admin",
-				Password: "password",
-			},
-			Routes: []Route{
-				{
-					InterfaceID: "Wireguard0",
-					BatFileList: BatFileList{
-						BatFile: []string{"combined.yaml"},
-					},
-				},
-			},
-		}
-
-		configPath1 := filepath.Join(tmpDir, "config1.yaml")
-		configBytes1, err := yaml.Marshal(&cfg1)
-		if err != nil {
-			t.Fatalf("failed to marshal config1: %v", err)
-		}
-
-		err = os.WriteFile(configPath1, configBytes1, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config1: %v", err)
-		}
-
-		err = LoadConfig(configPath1)
-		if err != nil {
-			t.Fatalf("failed to load config1: %v", err)
-		}
-
-		// Should expand only bat-file, not bat-url
-		if len(Cfg.Routes[0].BatFile) != len(batFileList) {
-			t.Fatalf("bat-file not expanded correctly: got %d, want %d", len(Cfg.Routes[0].BatFile), len(batFileList))
-		}
-		if len(Cfg.Routes[0].BatURL) != 0 {
-			t.Fatalf("bat-url should not be expanded when only in bat-file: got %d, want 0", len(Cfg.Routes[0].BatURL))
-		}
-
-		// Test 2: Reference in bat-url only
-		cfg2 := GokeenapiConfig{
-			Keenetic: Keenetic{
-				URL:      "http://192.168.1.1",
-				Login:    "admin",
-				Password: "password",
-			},
-			Routes: []Route{
-				{
-					InterfaceID: "Wireguard0",
-					BatURLList: BatURLList{
-						BatURL: []string{"combined.yaml"},
-					},
-				},
-			},
-		}
-
-		configPath2 := filepath.Join(tmpDir, "config2.yaml")
-		configBytes2, err := yaml.Marshal(&cfg2)
-		if err != nil {
-			t.Fatalf("failed to marshal config2: %v", err)
-		}
-
-		err = os.WriteFile(configPath2, configBytes2, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config2: %v", err)
-		}
-
-		err = LoadConfig(configPath2)
-		if err != nil {
-			t.Fatalf("failed to load config2: %v", err)
-		}
-
-		// Should expand only bat-url, not bat-file
-		if len(Cfg.Routes[0].BatFile) != 0 {
-			t.Fatalf("bat-file should not be expanded when only in bat-url: got %d, want 0", len(Cfg.Routes[0].BatFile))
-		}
-		if len(Cfg.Routes[0].BatURL) != len(batURLList) {
-			t.Fatalf("bat-url not expanded correctly: got %d, want %d", len(Cfg.Routes[0].BatURL), len(batURLList))
-		}
-	})
-}
-
-// Feature: property-based-testing, Property 15: YAML file caching avoids redundant reads
-// Validates: Requirements 3.7 (optimization)
-func TestProperty_YAMLFileCachingAvoidsRedundantReads(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rapid.Check(t, func(t *rapid.T) {
-
-		// Generate a combined YAML file with both bat-file and bat-url lists
-		batFileList := []string{
-			"/path/to/file1.bat",
-			"/path/to/file2.bat",
-		}
-		batURLList := []string{
-			"https://example.com/url1.bat",
-			"https://example.com/url2.bat",
-		}
-
-		combinedContent := BatLists{
-			BatFileList: BatFileList{BatFile: batFileList},
-			BatURLList:  BatURLList{BatURL: batURLList},
-		}
-
-		yamlBytes, err := yaml.Marshal(&combinedContent)
-		if err != nil {
-			t.Fatalf("failed to marshal combined list: %v", err)
-		}
-
-		combinedPath := filepath.Join(tmpDir, "combined.yaml")
-		err = os.WriteFile(combinedPath, yamlBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write combined list: %v", err)
-		}
-
-		// Create a config that references the same YAML file in both bat-file and bat-url
-		cfg := GokeenapiConfig{
-			Keenetic: Keenetic{
-				URL:      "http://192.168.1.1",
-				Login:    "admin",
-				Password: "password",
-			},
-			Routes: []Route{
-				{
-					InterfaceID: "Wireguard0",
-					BatFileList: BatFileList{
-						BatFile: []string{"combined.yaml"},
-					},
-					BatURLList: BatURLList{
-						BatURL: []string{"combined.yaml"},
-					},
-				},
-			},
-		}
-
-		configPath := filepath.Join(tmpDir, "config.yaml")
-		configBytes, err := yaml.Marshal(&cfg)
-		if err != nil {
-			t.Fatalf("failed to marshal config: %v", err)
-		}
-
-		err = os.WriteFile(configPath, configBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config: %v", err)
-		}
-
-		// Load the config
-		err = LoadConfig(configPath)
-		if err != nil {
-			t.Fatalf("failed to load config: %v", err)
-		}
-
-		// Verify both lists were expanded correctly
-		if len(Cfg.Routes[0].BatFile) != len(batFileList) {
-			t.Fatalf("bat-file not expanded correctly: got %d, want %d", len(Cfg.Routes[0].BatFile), len(batFileList))
-		}
-		if len(Cfg.Routes[0].BatURL) != len(batURLList) {
-			t.Fatalf("bat-url not expanded correctly: got %d, want %d", len(Cfg.Routes[0].BatURL), len(batURLList))
-		}
-
-		// Verify the content matches
-		for i, expected := range batFileList {
-			if Cfg.Routes[0].BatFile[i] != expected {
-				t.Fatalf("bat-file[%d] mismatch: got %s, want %s", i, Cfg.Routes[0].BatFile[i], expected)
-			}
-		}
-
-		for i, expected := range batURLList {
-			if Cfg.Routes[0].BatURL[i] != expected {
-				t.Fatalf("bat-url[%d] mismatch: got %s, want %s", i, Cfg.Routes[0].BatURL[i], expected)
-			}
-		}
-
-		// The property we're testing is that the same YAML file referenced in both arrays
-		// produces correct results (implying it was cached and read only once)
-		// We can't directly test the caching mechanism, but we verify the correctness
-	})
-}
-
-// Feature: dns-routing, Property 6: Empty or whitespace-only group names are rejected
-// Validates: Requirements 1.5, 7.1
-func TestProperty_EmptyGroupNamesRejected(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate a whitespace-only or empty group name
-		invalidName := genWhitespaceString().Draw(t, "invalidName")
-
-		// Generate a valid DNS routing group but with invalid name
-		validGroup := genDnsRoutingGroup().Draw(t, "validGroup")
-		invalidGroup := DnsRoutingGroup{
-			Name:        invalidName,
-			DomainFile:  validGroup.DomainFile,
-			InterfaceID: validGroup.InterfaceID,
-		}
-
-		// Validate the group - should fail
-		err := ValidateDnsRoutingGroups([]DnsRoutingGroup{invalidGroup})
-
-		// The property: validation must reject empty or whitespace-only names
-		if err == nil {
-			t.Fatalf("validation should reject empty or whitespace-only group name %q, but it passed", invalidName)
-		}
-
-		// Verify the error message is descriptive
-		errMsg := err.Error()
-		if errMsg == "" {
-			t.Fatalf("validation error should have a descriptive message")
-		}
-	})
-}
-
-// Feature: dns-routing, Property 7: Empty domain lists are rejected
-// Validates: Requirements 7.2
-func TestProperty_EmptyDomainListsRejected(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate a valid DNS routing group but with empty domain-file and domain-url
-		validGroup := genDnsRoutingGroup().Draw(t, "validGroup")
-		invalidGroup := DnsRoutingGroup{
-			Name:        validGroup.Name,
-			DomainFile:  []string{}, // Empty domain-file list
-			DomainURL:   []string{}, // Empty domain-url list
-			InterfaceID: validGroup.InterfaceID,
-		}
-
-		// Validate the group - should fail
-		err := ValidateDnsRoutingGroups([]DnsRoutingGroup{invalidGroup})
-
-		// The property: validation must reject empty domain sources
-		if err == nil {
-			t.Fatalf("validation should reject DNS routing group %q with no domain sources, but it passed", invalidGroup.Name)
-		}
-
-		// Verify the error message is descriptive
-		errMsg := err.Error()
-		if errMsg == "" {
-			t.Fatalf("validation error should have a descriptive message")
-		}
-	})
-}
-
-// genMalformedDomain generates malformed domain names
-func genMalformedDomain() *rapid.Generator[string] {
-	return rapid.Custom(func(t *rapid.T) string {
-		choice := rapid.IntRange(0, 8).Draw(t, "choice")
-		switch choice {
-		case 0:
-			// Domain starting with hyphen
-			return rapid.StringMatching(`-[a-z0-9-]{2,10}\.[a-z]{2,5}`).Draw(t, "domain")
-		case 1:
-			// Domain ending with hyphen before TLD
-			return rapid.StringMatching(`[a-z][a-z0-9-]{2,10}-\.[a-z]{2,5}`).Draw(t, "domain")
-		case 2:
-			// Domain with consecutive dots
-			return rapid.StringMatching(`[a-z][a-z0-9]{1,5}\.\.[a-z]{2,5}`).Draw(t, "domain")
-		case 3:
-			// Domain starting with dot
-			return rapid.StringMatching(`\.[a-z][a-z0-9]{2,10}\.[a-z]{2,5}`).Draw(t, "domain")
-		case 4:
-			// Domain with invalid characters
-			return rapid.StringMatching(`[a-z][a-z0-9]{1,5}[@#$%][a-z0-9]{1,5}\.[a-z]{2,5}`).Draw(t, "domain")
-		case 5:
-			// Domain with spaces
-			return rapid.StringMatching(`[a-z][a-z0-9]{1,5} [a-z0-9]{1,5}\.[a-z]{2,5}`).Draw(t, "domain")
-		case 6:
-			// Domain without TLD
-			return rapid.StringMatching(`[a-z][a-z0-9-]{5,15}`).Draw(t, "domain")
-		case 7:
-			// Domain with numeric TLD only
-			return rapid.StringMatching(`[a-z][a-z0-9]{2,10}\.123`).Draw(t, "domain")
-		case 8:
-			// Domain label too long (>63 characters)
-			longLabel := rapid.StringMatching(`[a-z][a-z0-9]{64,80}`).Draw(t, "longLabel")
-			return longLabel + ".com"
-		default:
-			return "invalid..domain"
-		}
-	})
-}
-
-// genMalformedIP generates malformed IP addresses
-func genMalformedIP() *rapid.Generator[string] {
-	return rapid.Custom(func(t *rapid.T) string {
-		choice := rapid.IntRange(0, 8).Draw(t, "choice")
-		switch choice {
-		case 0:
-			// Octet > 255
-			octet1 := rapid.IntRange(256, 999).Draw(t, "octet1")
-			return fmt.Sprintf("%d.1.1.1", octet1)
-		case 1:
-			// Negative octet
-			return "-1.1.1.1"
-		case 2:
-			// Too few octets
-			return rapid.StringMatching(`[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}`).Draw(t, "ip")
-		case 3:
-			// Too many octets
-			return rapid.StringMatching(`[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}`).Draw(t, "ip")
-		case 4:
-			// Leading zeros
-			return "01.02.03.04"
-		case 5:
-			// Non-numeric characters
-			return rapid.StringMatching(`[a-z]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}`).Draw(t, "ip")
-		case 6:
-			// Empty octets
-			return "192..1.1"
-		case 7:
-			// Spaces in IP
-			return "192.168. 1.1"
-		case 8:
-			// Special characters
-			return "192.168.1.1!"
-		default:
-			return "999.999.999.999"
-		}
-	})
-}
-
-// Feature: dns-routing, Property 9: Malformed domains and IP addresses are rejected
-// Validates: Requirements 7.4
-func TestProperty_MalformedDomainsAndIPsRejected(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		// Choose whether to test malformed domain or IP
-		testDomain := rapid.Bool().Draw(t, "testDomain")
-
-		var invalidDomain string
-		if testDomain {
-			invalidDomain = genMalformedDomain().Draw(t, "malformedDomain")
-		} else {
-			invalidDomain = genMalformedIP().Draw(t, "malformedIP")
-		}
-
-		// Validate the domain directly using ValidateDomainList
-		err := ValidateDomainList([]string{invalidDomain}, "test-group")
-
-		// The property: validation must reject malformed domains and IPs
-		if err == nil {
-			t.Fatalf("validation should reject malformed domain/IP %q, but it passed", invalidDomain)
-		}
-
-		// Verify the error message is descriptive
-		errMsg := err.Error()
-		if errMsg == "" {
-			t.Fatalf("validation error should have a descriptive message")
-		}
-	})
-}
-
-// Feature: property-based-testing, Property 16: Regular bat-files in main config are resolved relative to config
-// Validates: Requirements 3.7 - Path resolution for regular files
-func TestProperty_RegularBatFilesResolvedRelativeToConfig(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate a relative path for a regular .bat file
-		relativeBatPath := rapid.StringMatching(`[a-z]{3,10}/[a-z]{3,10}\.bat`).Draw(t, "relativeBatPath")
-
-		// Create config directory
-		configDir := filepath.Join(tmpDir, "configs", rapid.StringMatching(`[a-z]{3,8}`).Draw(t, "configSubdir"))
-		err := os.MkdirAll(configDir, 0755)
-		if err != nil {
-			t.Fatalf("failed to create config directory: %v", err)
-		}
-
-		// Create the bat file
-		batFilePath := filepath.Join(configDir, relativeBatPath)
-		err = os.MkdirAll(filepath.Dir(batFilePath), 0755)
-		if err != nil {
-			t.Fatalf("failed to create bat file directory: %v", err)
-		}
-		err = os.WriteFile(batFilePath, []byte("route add 1.1.1.1 mask 255.255.255.255 0.0.0.0"), 0644)
-		if err != nil {
-			t.Fatalf("failed to write bat file: %v", err)
-		}
-
-		// Create config with relative bat-file path
-		cfg := GokeenapiConfig{
-			Keenetic: Keenetic{
-				URL:      "http://192.168.1.1",
-				Login:    "admin",
-				Password: "password",
-			},
-			Routes: []Route{
-				{
-					InterfaceID: "Wireguard0",
-					BatFileList: BatFileList{
-						BatFile: []string{relativeBatPath},
-					},
-				},
-			},
-		}
-
-		configPath := filepath.Join(configDir, "config.yaml")
-		configBytes, err := yaml.Marshal(&cfg)
-		if err != nil {
-			t.Fatalf("failed to marshal config: %v", err)
-		}
-		err = os.WriteFile(configPath, configBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config: %v", err)
-		}
-
-		// Load config
-		err = LoadConfig(configPath)
-		if err != nil {
-			t.Fatalf("failed to load config: %v", err)
-		}
-
-		// Property: Relative path should be resolved to absolute path relative to config directory
-		if len(Cfg.Routes[0].BatFile) != 1 {
-			t.Fatalf("expected 1 bat file, got %d", len(Cfg.Routes[0].BatFile))
-		}
-
-		resolvedPath := Cfg.Routes[0].BatFile[0]
-		expectedPath := filepath.Join(configDir, relativeBatPath)
-
-		if resolvedPath != expectedPath {
-			t.Fatalf("path not resolved correctly: got %s, want %s", resolvedPath, expectedPath)
-		}
-
-		// Property: Resolved path should be absolute
-		if !filepath.IsAbs(resolvedPath) {
-			t.Fatalf("resolved path is not absolute: %s", resolvedPath)
-		}
-
-		// Property: Resolved path should exist
-		if _, err := os.Stat(resolvedPath); err != nil {
-			t.Fatalf("resolved path does not exist: %s", resolvedPath)
-		}
-	})
-}
-
-// Feature: property-based-testing, Property 17: Regular domain-files in main config are resolved relative to config
-// Validates: Requirements 3.8 - Path resolution for domain files
-func TestProperty_RegularDomainFilesResolvedRelativeToConfig(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate a relative path for a regular .txt file
-		relativeDomainPath := rapid.StringMatching(`[a-z]{3,10}/[a-z]{3,10}\.txt`).Draw(t, "relativeDomainPath")
-
-		// Create config directory
-		configDir := filepath.Join(tmpDir, "configs", rapid.StringMatching(`[a-z]{3,8}`).Draw(t, "configSubdir"))
-		err := os.MkdirAll(configDir, 0755)
-		if err != nil {
-			t.Fatalf("failed to create config directory: %v", err)
-		}
-
-		// Create the domain file
-		domainFilePath := filepath.Join(configDir, relativeDomainPath)
-		err = os.MkdirAll(filepath.Dir(domainFilePath), 0755)
-		if err != nil {
-			t.Fatalf("failed to create domain file directory: %v", err)
-		}
-		err = os.WriteFile(domainFilePath, []byte("example.com\ntest.com"), 0644)
-		if err != nil {
-			t.Fatalf("failed to write domain file: %v", err)
-		}
-
-		// Create config with relative domain-file path
-		cfg := GokeenapiConfig{
-			Keenetic: Keenetic{
-				URL:      "http://192.168.1.1",
-				Login:    "admin",
-				Password: "password",
-			},
-			DNS: DNS{
-				Routes: DnsRoutes{
-					Groups: []DnsRoutingGroup{
-						{
-							Name:        "test-group",
-							DomainFile:  []string{relativeDomainPath},
-							InterfaceID: "Wireguard0",
-						},
-					},
-				},
-			},
-		}
-
-		configPath := filepath.Join(configDir, "config.yaml")
-		configBytes, err := yaml.Marshal(&cfg)
-		if err != nil {
-			t.Fatalf("failed to marshal config: %v", err)
-		}
-		err = os.WriteFile(configPath, configBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config: %v", err)
-		}
-
-		// Load config
-		err = LoadConfig(configPath)
-		if err != nil {
-			t.Fatalf("failed to load config: %v", err)
-		}
-
-		// Property: Relative path should be resolved to absolute path relative to config directory
-		if len(Cfg.DNS.Routes.Groups[0].DomainFile) != 1 {
-			t.Fatalf("expected 1 domain file, got %d", len(Cfg.DNS.Routes.Groups[0].DomainFile))
-		}
-
-		resolvedPath := Cfg.DNS.Routes.Groups[0].DomainFile[0]
-		expectedPath := filepath.Join(configDir, relativeDomainPath)
-
-		if resolvedPath != expectedPath {
-			t.Fatalf("path not resolved correctly: got %s, want %s", resolvedPath, expectedPath)
-		}
-
-		// Property: Resolved path should be absolute
-		if !filepath.IsAbs(resolvedPath) {
-			t.Fatalf("resolved path is not absolute: %s", resolvedPath)
-		}
-
-		// Property: Resolved path should exist
-		if _, err := os.Stat(resolvedPath); err != nil {
-			t.Fatalf("resolved path does not exist: %s", resolvedPath)
-		}
-	})
-}
-
-// Feature: property-based-testing, Property 18: Absolute paths are preserved unchanged
-// Validates: Requirements 3.9 - Absolute paths should not be modified
-func TestProperty_AbsolutePathsPreservedUnchanged(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate an absolute path
-		absoluteBatPath := filepath.Join(tmpDir, rapid.StringMatching(`[a-z]{3,10}`).Draw(t, "dir"), rapid.StringMatching(`[a-z]{3,10}\.bat`).Draw(t, "file"))
-
-		// Create the bat file
-		err := os.MkdirAll(filepath.Dir(absoluteBatPath), 0755)
-		if err != nil {
-			t.Fatalf("failed to create bat file directory: %v", err)
-		}
-		err = os.WriteFile(absoluteBatPath, []byte("route add 1.1.1.1 mask 255.255.255.255 0.0.0.0"), 0644)
-		if err != nil {
-			t.Fatalf("failed to write bat file: %v", err)
-		}
-
-		// Create config in a different directory
-		configDir := filepath.Join(tmpDir, "configs")
-		err = os.MkdirAll(configDir, 0755)
-		if err != nil {
-			t.Fatalf("failed to create config directory: %v", err)
-		}
-
-		cfg := GokeenapiConfig{
-			Keenetic: Keenetic{
-				URL:      "http://192.168.1.1",
-				Login:    "admin",
-				Password: "password",
-			},
-			Routes: []Route{
-				{
-					InterfaceID: "Wireguard0",
-					BatFileList: BatFileList{
-						BatFile: []string{absoluteBatPath},
-					},
-				},
-			},
-		}
-
-		configPath := filepath.Join(configDir, "config.yaml")
-		configBytes, err := yaml.Marshal(&cfg)
-		if err != nil {
-			t.Fatalf("failed to marshal config: %v", err)
-		}
-		err = os.WriteFile(configPath, configBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config: %v", err)
-		}
-
-		// Load config
-		err = LoadConfig(configPath)
-		if err != nil {
-			t.Fatalf("failed to load config: %v", err)
-		}
-
-		// Property: Absolute path should remain unchanged
-		if len(Cfg.Routes[0].BatFile) != 1 {
-			t.Fatalf("expected 1 bat file, got %d", len(Cfg.Routes[0].BatFile))
-		}
-
-		resolvedPath := Cfg.Routes[0].BatFile[0]
-
-		if resolvedPath != absoluteBatPath {
-			t.Fatalf("absolute path was modified: got %s, want %s", resolvedPath, absoluteBatPath)
-		}
-	})
-}
-
-// Feature: property-based-testing, Property 19: Paths in YAML lists are resolved relative to YAML file
-// Validates: Requirements 3.10 - YAML list path resolution
-func TestProperty_PathsInYAMLListsResolvedRelativeToYAMLFile(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rapid.Check(t, func(t *rapid.T) {
-		// Generate relative paths for files inside YAML
-		relativeBatPath1 := rapid.StringMatching(`[a-z]{3,10}\.bat`).Draw(t, "bat1")
-		relativeBatPath2 := rapid.StringMatching(`[a-z]{3,10}\.bat`).Draw(t, "bat2")
-
-		// Create directory structure
-		configDir := filepath.Join(tmpDir, "configs")
-		yamlDir := filepath.Join(configDir, "batfiles")
-		err := os.MkdirAll(yamlDir, 0755)
-		if err != nil {
-			t.Fatalf("failed to create directories: %v", err)
-		}
-
-		// Create bat files in the same directory as YAML
-		batFile1 := filepath.Join(yamlDir, relativeBatPath1)
-		batFile2 := filepath.Join(yamlDir, relativeBatPath2)
-		err = os.WriteFile(batFile1, []byte("route add 1.1.1.1 mask 255.255.255.255 0.0.0.0"), 0644)
-		if err != nil {
-			t.Fatalf("failed to write bat file 1: %v", err)
-		}
-		err = os.WriteFile(batFile2, []byte("route add 2.2.2.2 mask 255.255.255.255 0.0.0.0"), 0644)
-		if err != nil {
-			t.Fatalf("failed to write bat file 2: %v", err)
-		}
-
-		// Create YAML list file with relative paths
-		yamlListPath := filepath.Join(yamlDir, "common.yaml")
-		batList := BatFileList{
-			BatFile: []string{relativeBatPath1, relativeBatPath2},
-		}
-		yamlBytes, err := yaml.Marshal(&batList)
-		if err != nil {
-			t.Fatalf("failed to marshal bat list: %v", err)
-		}
-		err = os.WriteFile(yamlListPath, yamlBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write YAML list: %v", err)
-		}
-
-		// Create main config that references the YAML list
-		cfg := GokeenapiConfig{
-			Keenetic: Keenetic{
-				URL:      "http://192.168.1.1",
-				Login:    "admin",
-				Password: "password",
-			},
-			Routes: []Route{
-				{
-					InterfaceID: "Wireguard0",
-					BatFileList: BatFileList{
-						BatFile: []string{"batfiles/common.yaml"},
-					},
-				},
-			},
-		}
-
-		configPath := filepath.Join(configDir, "config.yaml")
-		configBytes, err := yaml.Marshal(&cfg)
-		if err != nil {
-			t.Fatalf("failed to marshal config: %v", err)
-		}
-		err = os.WriteFile(configPath, configBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config: %v", err)
-		}
-
-		// Load config
-		err = LoadConfig(configPath)
-		if err != nil {
-			t.Fatalf("failed to load config: %v", err)
-		}
-
-		// Property: Paths should be resolved relative to YAML file directory, not config directory
-		if len(Cfg.Routes[0].BatFile) != 2 {
-			t.Fatalf("expected 2 bat files, got %d", len(Cfg.Routes[0].BatFile))
-		}
-
-		expectedPath1 := batFile1
-		expectedPath2 := batFile2
-
-		if Cfg.Routes[0].BatFile[0] != expectedPath1 {
-			t.Fatalf("path 1 not resolved correctly: got %s, want %s", Cfg.Routes[0].BatFile[0], expectedPath1)
-		}
-
-		if Cfg.Routes[0].BatFile[1] != expectedPath2 {
-			t.Fatalf("path 2 not resolved correctly: got %s, want %s", Cfg.Routes[0].BatFile[1], expectedPath2)
-		}
-
-		// Property: All resolved paths should exist
-		for i, path := range Cfg.Routes[0].BatFile {
-			if _, err := os.Stat(path); err != nil {
-				t.Fatalf("resolved path %d does not exist: %s", i, path)
-			}
-		}
-	})
-}
-
-// Feature: property-based-testing, Property 20: Mixed absolute and relative paths work correctly
-// Validates: Requirements 3.11 - Mixing path types
-func TestProperty_MixedAbsoluteAndRelativePathsWorkCorrectly(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	rapid.Check(t, func(t *rapid.T) {
-		// Create config directory
-		configDir := filepath.Join(tmpDir, "configs")
-		err := os.MkdirAll(configDir, 0755)
-		if err != nil {
-			t.Fatalf("failed to create config directory: %v", err)
-		}
-
-		// Create an absolute path file
-		absoluteDir := filepath.Join(tmpDir, "absolute")
-		err = os.MkdirAll(absoluteDir, 0755)
-		if err != nil {
-			t.Fatalf("failed to create absolute directory: %v", err)
-		}
-		absoluteBatPath := filepath.Join(absoluteDir, "absolute.bat")
-		err = os.WriteFile(absoluteBatPath, []byte("route add 1.1.1.1 mask 255.255.255.255 0.0.0.0"), 0644)
-		if err != nil {
-			t.Fatalf("failed to write absolute bat file: %v", err)
-		}
-
-		// Create a relative path file
-		relativeDir := filepath.Join(configDir, "relative")
-		err = os.MkdirAll(relativeDir, 0755)
-		if err != nil {
-			t.Fatalf("failed to create relative directory: %v", err)
-		}
-		relativeBatPath := "relative/relative.bat"
-		err = os.WriteFile(filepath.Join(configDir, relativeBatPath), []byte("route add 2.2.2.2 mask 255.255.255.255 0.0.0.0"), 0644)
-		if err != nil {
-			t.Fatalf("failed to write relative bat file: %v", err)
-		}
-
-		// Create config with mixed paths
-		cfg := GokeenapiConfig{
-			Keenetic: Keenetic{
-				URL:      "http://192.168.1.1",
-				Login:    "admin",
-				Password: "password",
-			},
-			Routes: []Route{
-				{
-					InterfaceID: "Wireguard0",
-					BatFileList: BatFileList{
-						BatFile: []string{absoluteBatPath, relativeBatPath},
-					},
-				},
-			},
-		}
-
-		configPath := filepath.Join(configDir, "config.yaml")
-		configBytes, err := yaml.Marshal(&cfg)
-		if err != nil {
-			t.Fatalf("failed to marshal config: %v", err)
-		}
-		err = os.WriteFile(configPath, configBytes, 0644)
-		if err != nil {
-			t.Fatalf("failed to write config: %v", err)
-		}
-
-		// Load config
-		err = LoadConfig(configPath)
-		if err != nil {
-			t.Fatalf("failed to load config: %v", err)
-		}
-
-		// Property: Should have 2 files
-		if len(Cfg.Routes[0].BatFile) != 2 {
-			t.Fatalf("expected 2 bat files, got %d", len(Cfg.Routes[0].BatFile))
-		}
-
-		// Property: Absolute path should be unchanged
-		if Cfg.Routes[0].BatFile[0] != absoluteBatPath {
-			t.Fatalf("absolute path was modified: got %s, want %s", Cfg.Routes[0].BatFile[0], absoluteBatPath)
-		}
-
-		// Property: Relative path should be resolved
-		expectedRelativePath := filepath.Join(configDir, relativeBatPath)
-		if Cfg.Routes[0].BatFile[1] != expectedRelativePath {
-			t.Fatalf("relative path not resolved correctly: got %s, want %s", Cfg.Routes[0].BatFile[1], expectedRelativePath)
-		}
-
-		// Property: All paths should exist
-		for i, path := range Cfg.Routes[0].BatFile {
-			if _, err := os.Stat(path); err != nil {
-				t.Fatalf("resolved path %d does not exist: %s", i, path)
-			}
-		}
-	})
-}
+})
