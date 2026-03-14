@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"time"
 
 	"github.com/noksa/gokeenapi/pkg/config"
@@ -243,7 +244,12 @@ var _ = Describe("Scheduler", func() {
 		var tmpDir string
 
 		BeforeEach(func() {
-			tmpDir = GinkgoT().TempDir()
+			var err error
+			tmpDir, err = os.MkdirTemp("", "scheduler-test-*")
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(func() {
+				os.RemoveAll(tmpDir)
+			})
 		})
 
 		It("should load valid config", func() {

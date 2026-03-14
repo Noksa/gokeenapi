@@ -12,7 +12,19 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 GINKGO_BIN   := $(GOBIN)/ginkgo
-GINKGO_FLAGS ?= --silence-skips
+GINKGO_PROCS ?= 3
+GINKGO_FLAGS ?= --silence-skips --procs=$(GINKGO_PROCS)
+
+# Ginkgo test runner macro — auto-installs ginkgo if missing
+# Usage: $(call run_ginkgo)              — run all tests
+#        $(call run_ginkgo,--cover ...)  — run with extra flags
+define run_ginkgo
+	@if [ ! -f $(GINKGO_BIN) ]; then \
+		echo "-> installing ginkgo CLI..."; \
+		go install github.com/onsi/ginkgo/v2/ginkgo@latest; \
+	fi
+	@$(GINKGO_BIN) $(GINKGO_FLAGS) $(1) ./...
+endef
 
 # Cyberpunk DevOps Theme - cache library locally for performance
 CYBER_CACHE := .cyber.sh
@@ -61,11 +73,7 @@ test: $(CYBER_CACHE) ## Run tests
 		echo -e "$${CYBER_D}╚═══════════════════════════════════════════════════════════════╝$${CYBER_X}"; \
 		cyber_step "Executing test suite..."; \
 	}
-	@if [ ! -f $(GINKGO_BIN) ]; then \
-		echo "-> installing ginkgo CLI..."; \
-		go install github.com/onsi/ginkgo/v2/ginkgo@latest; \
-	fi
-	@$(GINKGO_BIN) $(GINKGO_FLAGS) ./...
+	$(call run_ginkgo)
 	@source $(CYBER_CACHE) && cyber_ok "All tests passed"
 
 .PHONY: test-coverage
@@ -77,11 +85,7 @@ test-coverage: $(CYBER_CACHE) ## Run tests with coverage
 		echo -e "$${CYBER_D}╚═══════════════════════════════════════════════════════════════╝$${CYBER_X}"; \
 		cyber_step "Running tests with coverage..."; \
 	}
-	@if [ ! -f $(GINKGO_BIN) ]; then \
-		echo "-> installing ginkgo CLI..."; \
-		go install github.com/onsi/ginkgo/v2/ginkgo@latest; \
-	fi
-	@$(GINKGO_BIN) $(GINKGO_FLAGS) --cover --coverprofile=coverage.out ./...
+	$(call run_ginkgo,--cover --coverprofile=coverage.out)
 	@go tool cover -html=coverage.out -o coverage.html
 	@source $(CYBER_CACHE) && cyber_ok "Coverage report generated: coverage.html"
 

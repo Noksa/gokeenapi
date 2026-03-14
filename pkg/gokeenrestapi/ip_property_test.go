@@ -154,7 +154,7 @@ var _ = Describe("Property: IP Routes", func() {
 			cidr1, err1 := maskToCIDRSafe(route1.Mask)
 			cidr2, err2 := maskToCIDRSafe(route2.Mask)
 			if err1 != nil || err2 != nil {
-				return // skip
+				t.Skip("invalid mask generated")
 			}
 
 			dest1 := fmt.Sprintf("%s/%d", route1.IP, cidr1)
@@ -175,7 +175,7 @@ var _ = Describe("Property: IP Routes", func() {
 			containerCIDR, err1 := maskToCIDRSafe(containerRoute.Mask)
 			containedCIDR, err2 := maskToCIDRSafe(containedRoute.Mask)
 			if err1 != nil || err2 != nil {
-				return // skip
+				t.Skip("invalid mask generated")
 			}
 
 			containerNetStr := fmt.Sprintf("%s/%d", containerRoute.IP, containerCIDR)
@@ -184,7 +184,7 @@ var _ = Describe("Property: IP Routes", func() {
 			_, containerNet, err1 := net.ParseCIDR(containerNetStr)
 			_, containedNet, err2 := net.ParseCIDR(containedNetStr)
 			if err1 != nil || err2 != nil {
-				return // skip
+				t.Skip("invalid CIDR generated")
 			}
 
 			existingRoutes := []gokeenrestapimodels.RciShowIpRoute{
@@ -242,14 +242,14 @@ var _ = Describe("Property: IP Routes", func() {
 			for _, route := range routes {
 				exists, err := checkInterfaceContainsRoute(route.IP, route.Mask, route.Interface, existingRoutes)
 				if err != nil {
-					return // skip
+					t.Skip("checkInterfaceContainsRoute error")
 				}
 				pass1 = append(pass1, exists)
 			}
 			for _, route := range routes {
 				exists, err := checkInterfaceContainsRoute(route.IP, route.Mask, route.Interface, existingRoutes)
 				if err != nil {
-					return // skip
+					t.Skip("checkInterfaceContainsRoute error")
 				}
 				pass2 = append(pass2, exists)
 			}
@@ -270,7 +270,7 @@ var _ = Describe("Property: IP Routes", func() {
 
 			cidr, err := maskToCIDRSafe(mask)
 			if err != nil {
-				return // skip
+				t.Skip("invalid mask generated")
 			}
 			dest := fmt.Sprintf("%s/%d", ip, cidr)
 
