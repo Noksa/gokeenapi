@@ -16,14 +16,15 @@ GINKGO_PROCS ?= 3
 GINKGO_FLAGS ?= --silence-skips --procs=$(GINKGO_PROCS) $(if $(RACE),--race --trace,)
 
 # Ginkgo test runner macro — auto-installs ginkgo if missing
-# Usage: $(call run_ginkgo)              — run all tests
-#        $(call run_ginkgo,--cover ...)  — run with extra flags
+# Usage: $(call run_ginkgo,./...)                  — run all tests
+#        $(call run_ginkgo,./...,MyPattern)        — run with focus
+#        $(call run_ginkgo,--cover ./...)           — run with extra flags
 define run_ginkgo
 	@if [ ! -f $(GINKGO_BIN) ]; then \
 		echo "-> installing ginkgo CLI..."; \
 		go install github.com/onsi/ginkgo/v2/ginkgo@latest; \
 	fi
-	@$(GINKGO_BIN) $(GINKGO_FLAGS) $(1) ./...
+	@$(GINKGO_BIN) $(GINKGO_FLAGS) $(if $(2),--focus "$(2)",) $(1)
 endef
 
 # Cyberpunk DevOps Theme - cache library locally for performance
@@ -73,7 +74,7 @@ test: $(CYBER_CACHE) ## Run tests
 		echo -e "$${CYBER_D}╚═══════════════════════════════════════════════════════════════╝$${CYBER_X}"; \
 		cyber_step "Executing test suite..."; \
 	}
-	$(call run_ginkgo)
+	$(call run_ginkgo,./...)
 	@source $(CYBER_CACHE) && cyber_ok "All tests passed"
 
 .PHONY: test-short
@@ -85,7 +86,7 @@ test-short: $(CYBER_CACHE) ## Run tests (short mode, skip slow tests)
 		echo -e "${CYBER_D}╚═══════════════════════════════════════════════════════════════╝${CYBER_X}"; \
 		cyber_step "Executing short test suite..."; \
 	}
-	$(call run_ginkgo,--short)
+	$(call run_ginkgo,--short ./...)
 	@source $(CYBER_CACHE) && cyber_ok "Short tests passed"
 
 .PHONY: test-focus
@@ -97,7 +98,7 @@ test-focus: $(CYBER_CACHE) ## Run focused tests (FOCUS="pattern")
 		echo -e "${CYBER_D}╚═══════════════════════════════════════════════════════════════╝${CYBER_X}"; \
 		cyber_step "Focus: $(FOCUS)"; \
 	}
-	$(call run_ginkgo,--focus "$(FOCUS)")
+	$(call run_ginkgo,./...,$(FOCUS))
 	@source $(CYBER_CACHE) && cyber_ok "Focused tests passed"
 
 .PHONY: test-coverage
@@ -109,7 +110,7 @@ test-coverage: $(CYBER_CACHE) ## Run tests with coverage
 		echo -e "$${CYBER_D}╚═══════════════════════════════════════════════════════════════╝$${CYBER_X}"; \
 		cyber_step "Running tests with coverage..."; \
 	}
-	$(call run_ginkgo,--cover --coverprofile=coverage.out)
+	$(call run_ginkgo,--cover --coverprofile=coverage.out ./...)
 	@go tool cover -html=coverage.out -o coverage.html
 	@source $(CYBER_CACHE) && cyber_ok "Coverage report generated: coverage.html"
 
@@ -177,6 +178,12 @@ docker-build-test: $(CYBER_CACHE) ## Build Docker image for testing (no push)
 	@source $(CYBER_CACHE) && cyber_ok "Docker image built successfully"
 
 ##@ Maintenance
+
+.PHONY: tidy
+tidy: $(CYBER_CACHE) ## Run go mod tidy
+	@source $(CYBER_CACHE) && cyber_step "Running go mod tidy..."
+	@go mod tidy
+	@source $(CYBER_CACHE) && cyber_ok "Tidy complete"
 
 .PHONY: cyber-update
 cyber-update: ## Update cached cyberpunk theme library
