@@ -1,8 +1,10 @@
 package gokeencache
 
 import (
+	"os"
 	"time"
 
+	"github.com/noksa/gokeenapi/pkg/config"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -40,6 +42,14 @@ var _ = Describe("URLContentWithChecksum", func() {
 	)
 
 	BeforeEach(func() {
+		tmpDir, err := os.MkdirTemp("", "gokeencache-test-*")
+		Expect(err).NotTo(HaveOccurred())
+		config.Cfg.DataDir = tmpDir
+		DeferCleanup(func() {
+			os.RemoveAll(tmpDir)
+			config.Cfg.DataDir = ""
+		})
+
 		url = "https://example.com/domains.txt"
 		content = "example.com\ntest.com\n"
 		ttl = 5 * time.Minute
