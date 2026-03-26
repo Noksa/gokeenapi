@@ -7,64 +7,64 @@ inclusion: always
 ## Language & Runtime
 
 - Go 1.25+ with standard project layout (`cmd/`, `pkg/`, `internal/`)
-- `go.mod` is the source of truth for module version and dependencies
 - Never modify `go.mod` manually — use `go get` or `go mod tidy`
 
 ## Key Dependencies
 
 | Package | Import Path | Purpose |
 |---------|-------------|---------|
-| cobra | `github.com/spf13/cobra` | CLI commands — always use `RunE`, never `Run` |
-| resty | `github.com/go-resty/resty/v2` | All HTTP calls — never use `net/http` directly |
+| cobra | `github.com/spf13/cobra` | CLI — always `RunE`, never `Run` |
+| resty | `github.com/go-resty/resty/v2` | HTTP — never use `net/http` directly |
 | yaml.v3 | `gopkg.in/yaml.v3` | YAML parsing via `yaml.Unmarshal()` |
-| testify | `github.com/stretchr/testify` | Test assertions: `assert.NoError()`, `assert.Equal()` |
-| rapid | `pgregory.net/rapid` | Property-based tests in `*_property_test.go` files |
+| ginkgo/v2 | `github.com/onsi/ginkgo/v2` | Test framework — all tests use Ginkgo `Describe`/`It` |
+| gomega | `github.com/onsi/gomega` | Matchers — `Expect(x).To(Equal(y))`, never testify |
+| rapid | `pgregory.net/rapid` | Property-based tests in `*_property_test.go` |
 | multierr | `go.uber.org/multierr` | Error aggregation: `multierr.Append(errs, err)` |
-| go-version | `github.com/hashicorp/go-version` | Version comparison via `version.NewVersion()` |
+| go-version | `github.com/hashicorp/go-version` | Version comparison |
 
-Request/response structs live in `pkg/gokeenrestapimodels/` — use those types when calling API singletons.
+Request/response structs live in `pkg/gokeenrestapimodels/` — always use those types with API singletons.
 
-## Build & Test Commands
+## Build & Test
 
 ```bash
 make lint           # REQUIRED before committing (tidy → fmt → vet → modernize → golangci-lint)
-make test           # REQUIRED — all tests must pass
-make test-coverage  # Use when adding new functionality
+make test           # REQUIRED — all tests must pass (RACE=1 for race detection)
+make test-short     # Run short tests only, skip slow tests
+make test-focus     # Run focused tests (FOCUS="pattern")
+make test-coverage  # Run when adding new functionality
+make test-ci        # CI: race + randomized + json report (uses go run for version pinning)
 ```
 
 ## Code Style
 
 ### Error Handling
-- Use `multierr.Append()` when iterating lists so all errors are collected, not just the first
-- Return errors from `RunE` — never call `os.Exit()` in command functions
+- Use `multierr.Append()` when iterating lists — collect all errors, not just the first
+- Return errors from `RunE` — never `os.Exit()` in command functions
 - Validate inputs (IPs, domains, interface IDs) before any API call — fail fast
 
 ### Logging
-- Always use `internal/gokeenlog` for all output — never `fmt.Println()`, `log.Println()`, or `print()`
-- Available functions: `Info(msg)`, `Infof(msg, args...)`, `InfoSubStepf(msg, args...)`, `InfoSubStep(msg)`, `HorizontalLine()`, `PrintParseResponse(resp)`
+- Always use `internal/gokeenlog` — never `fmt.Println()`, `log.Println()`, or `print()`
+- Available: `Info(msg)`, `Infof(msg, args...)`, `InfoSubStepf(msg, args...)`, `InfoSubStep(msg)`, `HorizontalLine()`, `PrintParseResponse(resp)`
 
 ### API Singletons (`pkg/gokeenrestapi/`)
-Four singletons cover all router operations — never instantiate them yourself:
+Never instantiate these — use the package-level singletons:
 - `gokeenrestapi.Common` — auth, RCI execution, config save
 - `gokeenrestapi.Ip` — IP route management
 - `gokeenrestapi.DnsRouting` — DNS-routing management
 - `gokeenrestapi.Checks` — input validation (`CheckInterfaceId`, `CheckInterfaceExists`, `CheckComponentInstalled`)
 - `gokeenrestapi.Interface` — interface listing
 
-Authentication is handled automatically in `root.go` `PersistentPreRunE`. Commands never call `Auth()` directly.
+Authentication is automatic via `root.go` `PersistentPreRunE`. Commands never call `Auth()` directly.
 
-## Command Implementation Pattern
+## Adding a Command (3 steps)
 
-### 1. `cmd/constants.go` — register name and aliases
+**1. `cmd/constants.go`** — name and aliases
 ```go
-const CmdMyCommand = "my-command"
-var AliasesMyCommand = []string{"mycommand", "mc"}
+const CmdMyCommand = "my-command"           // kebab-case
+var AliasesMyCommand = []string{"mycommand", "mc"} // compact, no hyphens
 ```
-- Command names: kebab-case
-- Constants: `Cmd` prefix, PascalCase
-- Alias vars: `Aliases` prefix; aliases are compact (no hyphens)
 
-### 2. `cmd/my_command.go` — implement the command
+**2. `cmd/my_command.go`** — implementation
 ```go
 func newMyCommandCmd() *cobra.Command {
     cmd := &cobra.Command{
@@ -83,77 +83,56 @@ func newMyCommandCmd() *cobra.Command {
 }
 ```
 - Never access `config.Cfg` or API singletons in the constructor — only inside `RunE`
-- Never use `fmt.Println` — always `gokeenlog`
 
-### 3. `cmd/root.go` — register the command
+**3. `cmd/root.go`** — register
 ```go
 rootCmd.AddCommand(newMyCommandCmd())
 ```
 
-`PersistentPreRunE` skips initialization for `completion`, `help`, `scheduler`, and `version` commands.
+`PersistentPreRunE` skips init for `completion`, `help`, `scheduler`, and `version` commands.
 
 ## Configuration
 
-- Config is loaded once in `root.go` `PersistentPreRunE` via `config.LoadConfig()`
-- Access globally via `config.Cfg` — never reload it in commands
-- Environment variables override YAML values:
-  - `GOKEENAPI_KEENETIC_LOGIN` — router username
-  - `GOKEENAPI_KEENETIC_PASSWORD` — router password
-  - `GOKEENAPI_CONFIG` — config file path
-- YAML expansion: config files can reference other YAML files; paths resolve relative to the referencing file
+- Loaded once in `root.go` via `config.LoadConfig()`; access globally as `config.Cfg` — never reload in commands
+- Env vars override YAML: `GOKEENAPI_KEENETIC_LOGIN`, `GOKEENAPI_KEENETIC_PASSWORD`, `GOKEENAPI_CONFIG`
+- YAML expansion: configs can reference other YAML files; paths resolve relative to the referencing file
 
 ## Testing
 
-### File placement
-- Unit tests: `*_test.go` — same directory as source
-- Property tests: `*_property_test.go` — same directory as source
-- Integration tests: `docker_*_test.go` — repository root
+> **IMPORTANT:** Activate the `golang-testing` skill before creating or modifying any test file.
+> The skill contains the authoritative patterns for Ginkgo/Gomega, property-based tests, suite bootstrapping, and Makefile targets.
 
-### Any test touching the API must set up the mock router
-```go
-func TestMyFunction(t *testing.T) {
-    cleanup := gokeenrestapi.SetupMockRouterForTest()
-    defer cleanup()
-    // ...
-}
-```
+| Test type | File pattern | Location |
+|-----------|-------------|----------|
+| Unit | `*_test.go` | Same dir as source |
+| Property-based | `*_property_test.go` | Same dir as source |
+| Integration | `docker_*_test.go` | Repository root |
 
-### Property test naming and structure
-```go
-func TestProperty_MyInvariant(t *testing.T) {
-    rapid.Check(t, func(t *rapid.T) {
-        input := rapid.String().Draw(t, "input")
-        result := MyFunction(input)
-        if !invariantHolds(result) {
-            t.Fatalf("invariant violated for input: %v", input)
-        }
-    })
-}
-```
-
-### Test suite pattern
-```go
-type MyTestSuite struct{ suite.Suite }
-
-func (s *MyTestSuite) TestSomething() { s.NoError(err) }
-
-func TestMyTestSuite(t *testing.T) { suite.Run(t, new(MyTestSuite)) }
-```
+Key rules (see `golang-testing` skill for full details):
+- All tests use Ginkgo v2 (`Describe`/`Context`/`It`) + Gomega (`Expect`) — never testify
+- Property tests use `rapid.Check(GinkgoT(), ...)` inside Ginkgo `It` blocks
+- Every test package has a `suite_test.go` with `RegisterFailHandler(Fail)` + `RunSpecs()`
+- Any test touching the API must call `gokeenrestapi.SetupMockRouterForTest()`
+- Use `Eventually(...).WithTimeout(...).WithPolling(...).Should(...)` fluent API — never positional args
+- Mock testing follows `mock-testing-guidelines.md` steering
 
 ## Docker
 
-- Multi-arch: `linux/amd64`, `linux/arm64`
-- Image: `noksa/gokeenapi:stable`
-- Build via BuildKit: `docker buildx build`
-- Dockerfile at repository root
+- Multi-arch: `linux/amd64`, `linux/arm64`; image: `noksa/gokeenapi:stable`
+- Build via BuildKit: `docker buildx build`; Dockerfile at repository root
 
-## Anti-Patterns (never do these)
+## Anti-Patterns
 
-- `fmt.Println()` / `log.Println()` / `print()` — use `gokeenlog`
-- `net/http` directly — use `resty`
-- `os.Exit()` in command functions — return errors
-- `Run` instead of `RunE` in cobra commands
-- Skipping `multierr` when iterating lists
-- Editing `go.mod` manually — use `go get` / `go mod tidy`
-- Omitting `SetupMockRouterForTest()` in API tests
-- Accessing `config.Cfg` or singletons in command constructors
+| Never do this | Do this instead |
+|---------------|----------------|
+| `fmt.Println()` / `log.Println()` / `print()` | `gokeenlog` |
+| `net/http` directly | `resty` |
+| `os.Exit()` in command functions | return errors |
+| `Run` in cobra commands | `RunE` |
+| Skip `multierr` when iterating lists | `multierr.Append()` |
+| Edit `go.mod` manually | `go get` / `go mod tidy` |
+| Omit `SetupMockRouterForTest()` in API tests | always call it |
+| Access `config.Cfg` or singletons in constructors | access only inside `RunE` |
+| `testify` assertions (`assert.Equal`, `suite.Suite`) | Ginkgo/Gomega (`Expect(x).To(Equal(y))`) |
+| `go test` in Makefile or CI | `ginkgo` CLI or `go run ginkgo` |
+| `Eventually(fn, timeout, polling)` positional args | `.WithTimeout().WithPolling()` fluent API |

@@ -4,7 +4,7 @@ inclusion: always
 
 # Product Overview
 
-gokeenapi is a Go CLI tool for automating Keenetic (Netcraze) router management via REST API. It manages routes, DNS records, DNS-based routing policies, WireGuard VPN, and executes custom router commands programmatically.
+`gokeenapi` is a Go CLI tool for automating Keenetic (Netcraze) router management via REST API. It manages IP routes, DNS records, DNS-based routing policies, WireGuard VPN, and executes arbitrary router RCI commands.
 
 ## Commands Reference
 
@@ -23,56 +23,56 @@ gokeenapi is a Go CLI tool for automating Keenetic (Netcraze) router management 
 | `scheduler` | `s`, `sch` | Run automated scheduled tasks |
 | `show-interfaces` | `si`, `showi` | List all router interfaces |
 
-All command names and aliases are defined in `cmd/constants.go`. When adding a new command, always define both `CmdXxx` (constant) and `AliasesXxx` (slice) there.
+All command names and aliases are defined in `cmd/constants.go`. Always define both `CmdXxx` (constant) and `AliasesXxx` (slice) when adding a command.
 
 ## Input File Formats
 
-**Bat-files** (`batfiles/` directory) — IP routes source:
+**Bat-files** (`batfiles/`) — IP route sources:
 - One IPv4 CIDR or address per line: `192.168.1.0/24`, `10.0.0.1`
-- Lines starting with `#` are comments; empty lines are ignored
+- `#`-prefixed lines and empty lines are ignored
 
-**Domain-files** (`custom/domains/` directory) — DNS-routing source:
+**Domain-files** (`custom/domains/`) — DNS-routing sources:
 - One domain per line: `example.com`, `*.example.com`
-- Lines starting with `#` are comments; empty lines are ignored
-- Supports wildcard and IDNA-encoded internationalized domains
+- `#`-prefixed lines and empty lines are ignored
+- Supports wildcards and IDNA-encoded internationalized domains
 
 ## YAML Configuration
 
 - Each router has its own config YAML (see `custom/config_*.yaml` for examples)
-- Config files support **expansion**: they can reference other YAML files for lists
-  - Supported list types: `bat-file`, `bat-url`, `domain-file`, `domain-url`
-  - Referenced file paths resolve relative to the referencing file's directory
+- Configs support **expansion**: reference other YAML files for lists via `bat-file`, `bat-url`, `domain-file`, `domain-url` list types; paths resolve relative to the referencing file
 - Scheduler config (`custom/scheduler.yaml`) references per-router configs for multi-router automation
-- Required fields: `keenetic-url`; credentials prefer env vars over YAML
+- Only required field: `keenetic-url`; credentials should use env vars, not YAML
 
 ## Authentication
 
-Credentials are resolved in this order (env vars take precedence):
-- `GOKEENAPI_KEENETIC_LOGIN` / `GOKEENAPI_KEENETIC_PASSWORD`
-- `keenetic-login` / `keenetic-password` fields in config YAML
+Resolved in priority order (env vars win):
+1. `GOKEENAPI_KEENETIC_LOGIN` / `GOKEENAPI_KEENETIC_PASSWORD`
+2. `keenetic-login` / `keenetic-password` in config YAML
 
-Authentication is automatic — handled in `root.go` PersistentPreRunE. Commands never call `Auth()` directly.
+Auth is automatic via `root.go` `PersistentPreRunE`. Commands never call `Auth()` directly.
 
 ## Interface Names
 
-Keenetic interface names are case-sensitive: `Wireguard0`, `Wireguard1`, `ISP`, `HomeNetwork`. Use `show-interfaces` to discover available names. Interface name is a required argument for route and DNS-routing commands.
+Interface names are case-sensitive: `Wireguard0`, `Wireguard1`, `ISP`, `HomeNetwork`. Use `show-interfaces` to discover available names. Interface name is a required argument for route and DNS-routing commands.
 
 ## Behavioral Contracts
 
 - **Idempotency**: add/delete operations are safe to repeat — no duplicates created, no errors on missing items
-- **Fail-fast validation**: inputs (IPs, domains, interface existence) are validated before any API call
-- **Error aggregation**: use `multierr.Append()` when processing lists so all errors are collected, not just the first
-- **DNS-routing firmware requirement**: requires Keenetic firmware 5.0.1+
+- **Fail-fast validation**: validate inputs (IPs, domains, interface existence) before any API call
+- **Error aggregation**: always use `multierr.Append()` when iterating lists — collect all errors, not just the first
+- **DNS-routing firmware**: requires Keenetic firmware 5.0.1+
 
-## Adding New Commands — Checklist
+## Adding a New Command — Checklist
 
-1. Add `CmdXxx` constant and `AliasesXxx` slice in `cmd/constants.go`
-2. Create `cmd/<command_name>.go` with `newXxxCmd()` returning `*cobra.Command`
-   - Use `RunE`, not `Run`
-   - Use `gokeenlog` for all output — never `fmt.Println`
-   - Call API singletons (`gokeenrestapi.Ip`, `gokeenrestapi.DnsRouting`, etc.) inside `RunE`, not in the constructor
-3. Register with `rootCmd.AddCommand(newXxxCmd())` in `cmd/root.go`
-4. Write unit tests (`*_test.go`) and property tests (`*_property_test.go`)
+1. `cmd/constants.go` — add `CmdXxx` constant (kebab-case) and `AliasesXxx` slice (compact, no hyphens)
+2. `cmd/<command_name>.go` — implement `newXxxCmd() *cobra.Command`
+   - Use `RunE`, never `Run`
+   - Access `config.Cfg` and API singletons only inside `RunE`, never in the constructor
+   - Use `gokeenlog` for all output — never `fmt.Println` or `log.Println`
+   - Return errors from `RunE` — never `os.Exit()`
+   - Validate inputs via `gokeenrestapi.Checks` before calling other API singletons
+3. `cmd/root.go` — register with `rootCmd.AddCommand(newXxxCmd())`
+4. Write `*_test.go` (unit) and `*_property_test.go` (property-based) tests — activate `golang-testing` skill for patterns
 5. Update `custom/` example configs and `README.md` if the feature affects configuration
 
 ## Target Use Cases

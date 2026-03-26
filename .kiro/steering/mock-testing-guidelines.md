@@ -5,6 +5,9 @@ fileMatchPattern: ['**/*_test.go', '**/mock_*.go']
 
 # Mock Testing Guidelines
 
+> **IMPORTANT:** This steering covers mock router patterns only.
+> For general test structure (Ginkgo/Gomega, suites, property tests, Makefile targets), activate the `golang-testing` skill.
+
 ## Critical Rule: Single Unified Mock Router
 
 This project uses ONE centralized mock router at `pkg/gokeenrestapi/mock_router.go` that simulates the Keenetic REST API for all tests.
@@ -20,41 +23,37 @@ This project uses ONE centralized mock router at `pkg/gokeenrestapi/mock_router.
 
 ## Standard Setup Pattern
 
-### Basic Setup (Default State)
+### Basic Setup (Ginkgo BeforeEach/AfterEach)
 ```go
-func TestMyFunction(t *testing.T) {
-    cleanup := gokeenrestapi.SetupMockRouterForTest()
-    defer cleanup()
-    
-    // Test code here - mock is ready with default state
-}
-```
+var _ = Describe("MyFeature", func() {
+    var server *httptest.Server
 
-### Test Suite Setup
-```go
-type MyTestSuite struct {
-    suite.Suite
-    server *httptest.Server
-}
+    BeforeEach(func() {
+        server = gokeenrestapi.SetupMockRouterForTest()
+    })
 
-func (s *MyTestSuite) SetupSuite() {
-    s.server = gokeenrestapi.SetupMockRouterForTest()
-}
+    AfterEach(func() {
+        if server != nil {
+            server.Close()
+        }
+        gokeenrestapi.CleanupTestConfig()
+    })
 
-func (s *MyTestSuite) TearDownSuite() {
-    s.server.Close()
-}
+    It("should do something", func() {
+        // Test code here - mock is ready with default state
+    })
+})
 ```
 
 ### Custom Initial State
 ```go
-func (s *MyTestSuite) SetupSuite() {
-    s.server = gokeenrestapi.SetupMockRouterForTest(
+BeforeEach(func() {
+    server = gokeenrestapi.SetupMockRouterForTest(
         gokeenrestapi.WithInterfaces(customInterfaces),
         gokeenrestapi.WithRoutes(customRoutes),
         gokeenrestapi.WithDNSRecords(customDNS),
     )
-}
+})
 ```
 
 ## Adding New Mock Endpoints
@@ -159,7 +158,7 @@ type MockRouterState struct {
 ```go
 // Get current state
 state := server.GetState()
-assert.Len(t, state.Routes, expectedCount)
+Expect(state.Routes).To(HaveLen(expectedCount))
 
 // Reset to default state
 server.ResetState()
@@ -172,43 +171,46 @@ server.SetState(customState)
 
 ### Testing Add Operations
 ```go
-func TestAddRoute(t *testing.T) {
-    cleanup := gokeenrestapi.SetupMockRouterForTest()
-    defer cleanup()
-    
-    // Perform operation
-    err := gokeenrestapi.Ip.AddRoute("192.168.1.0/24", "Wireguard0")
-    assert.NoError(t, err)
-    
-    // Verify state changed (if needed for test)
-    // Usually not necessary - trust the API client
-}
+var _ = Describe("AddRoute", func() {
+    var server *httptest.Server
+
+    BeforeEach(func() {
+        server = gokeenrestapi.SetupMockRouterForTest()
+    })
+
+    AfterEach(func() {
+        if server != nil {
+            server.Close()
+        }
+        gokeenrestapi.CleanupTestConfig()
+    })
+
+    It("should add a route", func() {
+        Expect(gokeenrestapi.Ip.AddRoute("192.168.1.0/24", "Wireguard0")).To(Succeed())
+    })
+})
 ```
 
 ### Testing Delete Operations
 ```go
-func TestDeleteRoute(t *testing.T) {
-    // Setup with existing route
-    cleanup := gokeenrestapi.SetupMockRouterForTest(
+BeforeEach(func() {
+    server = gokeenrestapi.SetupMockRouterForTest(
         gokeenrestapi.WithRoutes([]Route{{IP: "192.168.1.0/24"}}),
     )
-    defer cleanup()
-    
-    err := gokeenrestapi.Ip.DeleteRoute("192.168.1.0/24", "Wireguard0")
-    assert.NoError(t, err)
-}
+})
+
+It("should delete a route", func() {
+    Expect(gokeenrestapi.Ip.DeleteRoute("192.168.1.0/24", "Wireguard0")).To(Succeed())
+})
 ```
 
 ### Testing Error Conditions
 ```go
-func TestInvalidInterface(t *testing.T) {
-    cleanup := gokeenrestapi.SetupMockRouterForTest()
-    defer cleanup()
-    
+It("should reject invalid interface", func() {
     err := gokeenrestapi.Ip.AddRoute("192.168.1.0/24", "NonExistent")
-    assert.Error(t, err)
-    assert.Contains(t, err.Error(), "interface not found")
-}
+    Expect(err).To(HaveOccurred())
+    Expect(err.Error()).To(ContainSubstring("interface not found"))
+})
 ```
 
 ## File Organization
@@ -264,27 +266,18 @@ mux.HandleFunc("/api/dns/record", server.handleDeleteDnsRecord)
 
 3. **Add to smoke test in `mock_router_test.go`**:
 ```go
-func TestMockRouterEndpoints(t *testing.T) {
-    // ... existing tests ...
-    
-    // Test DNS record deletion endpoint exists
+It("should respond to DNS record deletion endpoint", func() {
     resp, err := http.Delete(server.URL + "/api/dns/record")
-    assert.NoError(t, err)
-    assert.NotEqual(t, http.StatusNotFound, resp.StatusCode)
-}
+    Expect(err).NotTo(HaveOccurred())
+    Expect(resp.StatusCode).NotTo(Equal(http.StatusNotFound))
+})
 ```
 
 4. **Write API client test in `dns_routing_test.go`**:
 ```go
-func TestDeleteDnsRecord(t *testing.T) {
-    cleanup := SetupMockRouterForTest(
-        WithDNSRecords([]DNSRecord{{Domain: "test.local", IP: "192.168.1.1"}}),
-    )
-    defer cleanup()
-    
-    err := DnsRouting.DeleteRecord("test.local")
-    assert.NoError(t, err)
-}
+It("should delete a DNS record", func() {
+    Expect(DnsRouting.DeleteRecord("test.local")).To(Succeed())
+})
 ```
 
 5. **Done** - No need for mock unit test since API client test covers the behavior
@@ -309,10 +302,9 @@ func TestMockHandlesRouteAddition(t *testing.T) {
 ❌ **Not using the cleanup pattern**
 ```go
 // DON'T DO THIS
-func TestSomething(t *testing.T) {
-    SetupMockRouterForTest() // Missing defer cleanup()
-    // Test code
-}
+BeforeEach(func() {
+    SetupMockRouterForTest() // Missing AfterEach cleanup
+})
 ```
 
 ❌ **Manually managing mock server lifecycle**
@@ -325,25 +317,36 @@ defer server.Close()
 
 ## Integration with Property-Based Tests
 
-The mock router works seamlessly with property-based tests using `rapid`:
+The mock router works seamlessly with property-based tests using `rapid` + Ginkgo:
 
 ```go
-func TestProperty_RouteOperationsIdempotent(t *testing.T) {
-    cleanup := SetupMockRouterForTest()
-    defer cleanup()
-    
-    rapid.Check(t, func(t *rapid.T) {
-        route := rapid.String().Draw(t, "route")
-        iface := rapid.String().Draw(t, "interface")
-        
-        // Add twice - should be idempotent
-        err1 := gokeenrestapi.Ip.AddRoute(route, iface)
-        err2 := gokeenrestapi.Ip.AddRoute(route, iface)
-        
-        // Both should succeed or both should fail
-        assert.Equal(t, err1 == nil, err2 == nil)
+var _ = Describe("Property: Route Operations", func() {
+    var server *httptest.Server
+
+    BeforeEach(func() {
+        server = SetupMockRouterForTest()
     })
-}
+
+    AfterEach(func() {
+        if server != nil {
+            server.Close()
+        }
+        CleanupTestConfig()
+    })
+
+    It("should be idempotent when adding routes", func() {
+        rapid.Check(GinkgoT(), func(t *rapid.T) {
+            route := rapid.String().Draw(t, "route")
+            iface := rapid.String().Draw(t, "interface")
+
+            err1 := gokeenrestapi.Ip.AddRoute(route, iface)
+            err2 := gokeenrestapi.Ip.AddRoute(route, iface)
+
+            // Both should succeed or both should fail
+            Expect(err1 == nil).To(Equal(err2 == nil))
+        })
+    })
+})
 ```
 
 ## Summary

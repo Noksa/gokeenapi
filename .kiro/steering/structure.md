@@ -16,11 +16,11 @@ gokeenapi/
 │   ├── <command>.go             # One file per command
 │   └── *_test.go / *_property_test.go
 ├── pkg/
-│   ├── config/                  # YAML config loading + expansion (main_config.go, scheduler_config.go)
+│   ├── config/                  # YAML config loading + expansion
 │   ├── gokeenrestapi/           # Keenetic REST API singletons + mock router
-│   └── gokeenrestapimodels/     # API request/response structs
+│   └── gokeenrestapimodels/     # API request/response structs — always use these types
 ├── internal/
-│   ├── gokeenlog/               # Structured logging — ONLY logging package to use
+│   ├── gokeenlog/               # Structured logging — the ONLY logging package allowed
 │   ├── gokeencache/             # In-memory API response cache
 │   ├── gokeenspinner/           # CLI progress indicators
 │   └── gokeenversion/           # Build-time version info
@@ -29,35 +29,35 @@ gokeenapi/
 └── Makefile                     # lint, test, build, coverage targets
 ```
 
-## Core Architecture Patterns
+## API Singletons (`pkg/gokeenrestapi`)
 
-### Singleton API Clients (`pkg/gokeenrestapi`)
-Four singletons cover all router operations — never instantiate them yourself:
-- `gokeenrestapi.Common` — auth, RCI execution
-- `gokeenrestapi.Ip` — IP route management
-- `gokeenrestapi.DnsRouting` — DNS-routing management
-- `gokeenrestapi.Checks` — input validation (interface existence, etc.)
+Never instantiate these — use the package-level singletons only:
 
-Authentication is automatic via `root.go` PersistentPreRunE. Commands never call `Auth()`.
+| Singleton | Responsibility |
+|---|---|
+| `gokeenrestapi.Common` | Auth, raw RCI execution |
+| `gokeenrestapi.Ip` | IP route management |
+| `gokeenrestapi.DnsRouting` | DNS-routing management |
+| `gokeenrestapi.Checks` | Input validation (`CheckInterfaceId`, `CheckInterfaceExists`, `CheckComponentInstalled`) |
+| `gokeenrestapi.Interface` | Interface listing |
 
-### Global Config (`config.Cfg`)
-Loaded once in `root.go` PersistentPreRunE via `config.LoadConfig()`. Commands read it directly — never reload or validate it themselves.
+Authentication is handled automatically by `PersistentPreRunE` in `root.go`. Commands must never call `Auth()` directly.
 
-### Command Registration (3-step)
-1. Add `CmdXxx` constant + `AliasesXxx` slice in `cmd/constants.go`
-2. Implement `newXxxCmd() *cobra.Command` in `cmd/<command>.go`
-3. Register via `rootCmd.AddCommand(newXxxCmd())` in `cmd/root.go`
+`PersistentPreRunE` skips init for `completion`, `help`, `scheduler`, and `version` commands.
 
-## Adding a New Command
+## Global Config
 
-### `cmd/constants.go`
+`config.Cfg` is loaded once in `root.go` via `config.LoadConfig()`. Access it directly inside `RunE` — never reload it in commands, and never access it in command constructors.
+
+## Adding a New Command (3 steps)
+
+**Step 1 — `cmd/constants.go`**: define name and aliases
 ```go
-const CmdMyCommand = "my-command"
-var AliasesMyCommand = []string{"mycommand", "mc"}
+const CmdMyCommand = "my-command"           // kebab-case
+var AliasesMyCommand = []string{"mycommand", "mc"} // compact, no hyphens
 ```
-Naming: command names are kebab-case; constants use `Cmd` prefix (PascalCase); alias vars use `Aliases` prefix; aliases are compact/no-hyphens.
 
-### `cmd/my_command.go`
+**Step 2 — `cmd/my_command.go`**: implement the command
 ```go
 func newMyCommandCmd() *cobra.Command {
     cmd := &cobra.Command{
@@ -69,7 +69,7 @@ func newMyCommandCmd() *cobra.Command {
     cmd.Flags().StringP("interface", "i", "", "Interface name")
     cmd.RunE = func(cmd *cobra.Command, args []string) error {
         // 1. Parse flags
-        // 2. Validate inputs (use cmd/common.go helpers)
+        // 2. Validate inputs via gokeenrestapi.Checks
         // 3. Call API singletons
         // 4. Log with gokeenlog
         return nil
@@ -78,18 +78,18 @@ func newMyCommandCmd() *cobra.Command {
 }
 ```
 
-Critical rules:
-- Always `RunE`, never `Run`
-- Never access `config.Cfg` or API singletons in the constructor — only inside `RunE`
-- Never use `fmt.Println` — always `gokeenlog`
-- Never call `os.Exit()` — return errors
-
-### `cmd/root.go`
+**Step 3 — `cmd/root.go`**: register
 ```go
 rootCmd.AddCommand(newMyCommandCmd())
 ```
 
-## API Usage
+### Command Rules (enforced)
+- Always `RunE`, never `Run`
+- Never access `config.Cfg` or API singletons in the constructor — only inside `RunE`
+- Never use `fmt.Println` / `log.Println` / `print` — always `gokeenlog`
+- Never call `os.Exit()` — return errors
+
+## API Usage Patterns
 
 ```go
 // Routes
@@ -107,7 +107,7 @@ exists, err := gokeenrestapi.Checks.InterfaceExists(interfaceName)
 output, err := gokeenrestapi.Common.ExecutePostParse(command)
 ```
 
-Multi-operation error aggregation — always use `multierr`:
+Multi-operation error aggregation — always collect all errors, not just the first:
 ```go
 var errs error
 for _, item := range items {
@@ -118,71 +118,38 @@ for _, item := range items {
 return errs
 ```
 
-## Configuration
-
-Config fields accessed via `config.Cfg`:
-```go
-config.Cfg.KeeneticURL
-config.Cfg.KeeneticLogin   // prefer env vars
-config.Cfg.KeeneticPassword
-config.Cfg.BatFiles
-config.Cfg.DomainFiles
-```
-
-YAML expansion: config files can reference other YAML files by path. `LoadConfig()` resolves them relative to the referencing file's directory.
-
 ## Testing
 
-### Unit tests — mock router required for any API test
-```go
-func TestMyCommand(t *testing.T) {
-    cleanup := gokeenrestapi.SetupMockRouterForTest()
-    defer cleanup()
-    // ...
-}
-```
+> **IMPORTANT:** Activate the `golang-testing` skill before creating or modifying any test file.
+> The skill is the single source of truth for test patterns, structure, and conventions.
 
-### Property-based tests (`*_property_test.go`)
-```go
-func TestProperty_MyInvariant(t *testing.T) {
-    rapid.Check(t, func(t *rapid.T) {
-        input := rapid.String().Draw(t, "input")
-        result := MyFunction(input)
-        if !invariantHolds(result) {
-            t.Fatalf("violated for: %v", input)
-        }
-    })
-}
-```
+| Test type | File pattern | Location |
+|---|---|---|
+| Unit | `*_test.go` | Same dir as source |
+| Property-based | `*_property_test.go` | Same dir as source |
+| Integration | `docker_*_test.go` | Repository root |
 
-### Test suite pattern
-```go
-type MyTestSuite struct{ suite.Suite }
-
-func (s *MyTestSuite) TestSomething() { s.NoError(err) }
-
-func TestMyTestSuite(t *testing.T) { suite.Run(t, new(MyTestSuite)) }
-```
-
-Test file placement:
-- `*_test.go` — same directory as source
-- `*_property_test.go` — same directory as source
-- `docker_*_test.go` — repository root (integration tests)
+Key rules (see `golang-testing` skill for full details):
+- All tests use Ginkgo v2 + Gomega — never testify
+- Every test package has `suite_test.go` with `RegisterFailHandler(Fail)` + `RunSpecs()`
+- Property tests use `rapid.Check(GinkgoT(), ...)` inside Ginkgo `It` blocks
+- Any test touching the API must call `gokeenrestapi.SetupMockRouterForTest()`
+- Mock testing follows `mock-testing-guidelines.md` steering
 
 ## Logging
 
-Always use `gokeenlog`. Never `fmt.Println`, `log.Println`, or `print`.
+Always use `gokeenlog`. Available functions:
 
 ```go
 gokeenlog.Info("done")
 gokeenlog.Infof("processed %d items", n)
 gokeenlog.InfoSubStepf("  - item %s", name)
-gokeenlog.Debug("detail")
-gokeenlog.Error("failed: %v", err)
+gokeenlog.InfoSubStep("  - item")
 gokeenlog.HorizontalLine()
+gokeenlog.PrintParseResponse(resp)
 ```
 
-## File & Package Conventions
+## File & Package Naming Conventions
 
 | Concern | Location |
 |---|---|
@@ -192,8 +159,7 @@ gokeenlog.HorizontalLine()
 | Internal-only utilities | `internal/` |
 | Integration tests | repo root `docker_*_test.go` |
 
-Naming:
-- Files: `add_routes.go`, `add_routes_test.go`, `add_routes_property_test.go`
+- Files: `snake_case` — e.g. `add_routes.go`, `add_routes_test.go`, `add_routes_property_test.go`
 - Command constructors: `newXxxCmd()` (lowercase `new`)
-- Exported: PascalCase; unexported: camelCase
-- Packages: single lowercase word, no underscores
+- Exported symbols: PascalCase; unexported: camelCase
+- Package names: single lowercase word, no underscores

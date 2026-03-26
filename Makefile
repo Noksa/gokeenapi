@@ -13,7 +13,7 @@ endif
 
 GINKGO_BIN   := $(GOBIN)/ginkgo
 GINKGO_PROCS ?= 3
-GINKGO_FLAGS ?= --silence-skips --procs=$(GINKGO_PROCS)
+GINKGO_FLAGS ?= --silence-skips --procs=$(GINKGO_PROCS) $(if $(RACE),--race --trace,)
 
 # Ginkgo test runner macro — auto-installs ginkgo if missing
 # Usage: $(call run_ginkgo)              — run all tests
@@ -76,6 +76,30 @@ test: $(CYBER_CACHE) ## Run tests
 	$(call run_ginkgo)
 	@source $(CYBER_CACHE) && cyber_ok "All tests passed"
 
+.PHONY: test-short
+test-short: $(CYBER_CACHE) ## Run tests (short mode, skip slow tests)
+	@source $(CYBER_CACHE) && { \
+		echo ""; \
+		echo -e "${CYBER_D}╔═══════════════════════════════════════════════════════════════╗${CYBER_X}"; \
+		echo -e "${CYBER_D}║${CYBER_X}  ${CYBER_M}🧪${CYBER_X} ${CYBER_B}${CYBER_C}RUNNING TESTS (SHORT)${CYBER_X}"; \
+		echo -e "${CYBER_D}╚═══════════════════════════════════════════════════════════════╝${CYBER_X}"; \
+		cyber_step "Executing short test suite..."; \
+	}
+	$(call run_ginkgo,--short)
+	@source $(CYBER_CACHE) && cyber_ok "Short tests passed"
+
+.PHONY: test-focus
+test-focus: $(CYBER_CACHE) ## Run focused tests (FOCUS="pattern")
+	@source $(CYBER_CACHE) && { \
+		echo ""; \
+		echo -e "${CYBER_D}╔═══════════════════════════════════════════════════════════════╗${CYBER_X}"; \
+		echo -e "${CYBER_D}║${CYBER_X}  ${CYBER_M}🔎${CYBER_X} ${CYBER_B}${CYBER_C}RUNNING FOCUSED TESTS${CYBER_X}"; \
+		echo -e "${CYBER_D}╚═══════════════════════════════════════════════════════════════╝${CYBER_X}"; \
+		cyber_step "Focus: $(FOCUS)"; \
+	}
+	$(call run_ginkgo,--focus "$(FOCUS)")
+	@source $(CYBER_CACHE) && cyber_ok "Focused tests passed"
+
 .PHONY: test-coverage
 test-coverage: $(CYBER_CACHE) ## Run tests with coverage
 	@source $(CYBER_CACHE) && { \
@@ -88,6 +112,20 @@ test-coverage: $(CYBER_CACHE) ## Run tests with coverage
 	$(call run_ginkgo,--cover --coverprofile=coverage.out)
 	@go tool cover -html=coverage.out -o coverage.html
 	@source $(CYBER_CACHE) && cyber_ok "Coverage report generated: coverage.html"
+
+.PHONY: test-ci
+test-ci: $(CYBER_CACHE) ## Run tests in CI (race + randomized + reports)
+	@source $(CYBER_CACHE) && { \
+		echo ""; \
+		echo -e "${CYBER_D}╔═══════════════════════════════════════════════════════════════╗${CYBER_X}"; \
+		echo -e "${CYBER_D}║${CYBER_X}  ${CYBER_M}🏗️${CYBER_X} ${CYBER_B}${CYBER_C}CI TEST SUITE${CYBER_X}"; \
+		echo -e "${CYBER_D}╚═══════════════════════════════════════════════════════════════╝${CYBER_X}"; \
+		cyber_step "Running CI tests (race + randomized)..."; \
+	}
+	@go run github.com/onsi/ginkgo/v2/ginkgo -r --race --trace \
+		--randomize-all --keep-going --cover --coverprofile=cover.out \
+		--json-report=report.json ./...
+	@source $(CYBER_CACHE) && cyber_ok "CI tests passed"
 
 ##@ Build
 

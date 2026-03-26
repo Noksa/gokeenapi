@@ -194,11 +194,16 @@ logs:
 			Expect(err).NotTo(HaveOccurred(), "Failed to write to volume: %s", string(output))
 			Expect(string(output)).To(ContainSubstring("test"))
 
-			time.Sleep(100 * time.Millisecond)
-
-			content, err := os.ReadFile(filepath.Join(tmpDir, "test.txt"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(string(content)).To(ContainSubstring("test"))
+			Eventually(func() string {
+				content, err := os.ReadFile(filepath.Join(tmpDir, "test.txt"))
+				if err != nil {
+					return ""
+				}
+				return string(content)
+			}).
+				WithTimeout(2 * time.Second).
+				WithPolling(100 * time.Millisecond).
+				Should(ContainSubstring("test"))
 		})
 
 		It("should fail to write to read-only volume", func() {
