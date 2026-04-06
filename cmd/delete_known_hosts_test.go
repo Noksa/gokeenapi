@@ -3,6 +3,7 @@ package cmd
 import (
 	"net/http/httptest"
 
+	"github.com/noksa/gokeenapi/pkg/gokeenrestapi"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -59,19 +60,55 @@ var _ = Describe("DeleteKnownHosts", func() {
 		Expect(cmd.RunE(cmd, []string{})).To(HaveOccurred())
 	})
 
-	It("should execute with name-pattern and force", func() {
+	It("should delete hosts matching name pattern and verify state", func() {
+		// Mock has: test-device-1 (aa:bb:cc:dd:ee:ff), test-device-2 (11:22:33:44:55:66)
+		hotspotBefore, err := gokeenrestapi.Ip.GetAllHotspots()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(hotspotBefore.Host).To(HaveLen(2))
+
+		cmd := newDeleteKnownHostsCmd()
+		_ = cmd.Flags().Set("name-pattern", "test-device-1")
+		_ = cmd.Flags().Set("force", "true")
+		Expect(cmd.RunE(cmd, []string{})).To(Succeed())
+
+		hotspotAfter, err := gokeenrestapi.Ip.GetAllHotspots()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(hotspotAfter.Host).To(HaveLen(1))
+		Expect(hotspotAfter.Host[0].Name).To(Equal("test-device-2"))
+	})
+
+	It("should delete hosts matching mac pattern and verify state", func() {
+		cmd := newDeleteKnownHostsCmd()
+		_ = cmd.Flags().Set("mac-pattern", "^11:22")
+		_ = cmd.Flags().Set("force", "true")
+		Expect(cmd.RunE(cmd, []string{})).To(Succeed())
+
+		hotspotAfter, err := gokeenrestapi.Ip.GetAllHotspots()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(hotspotAfter.Host).To(HaveLen(1))
+		Expect(hotspotAfter.Host[0].Mac).To(Equal("aa:bb:cc:dd:ee:ff"))
+	})
+
+	It("should delete all hosts matching wildcard pattern", func() {
+		cmd := newDeleteKnownHostsCmd()
+		_ = cmd.Flags().Set("name-pattern", "test-device-.*")
+		_ = cmd.Flags().Set("force", "true")
+		Expect(cmd.RunE(cmd, []string{})).To(Succeed())
+
+		hotspotAfter, err := gokeenrestapi.Ip.GetAllHotspots()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(hotspotAfter.Host).To(BeEmpty())
+	})
+
+	It("should handle no matching hosts gracefully", func() {
 		cmd := newDeleteKnownHostsCmd()
 		_ = cmd.Flags().Set("name-pattern", "nonexistent")
 		_ = cmd.Flags().Set("force", "true")
-
 		Expect(cmd.RunE(cmd, []string{})).To(Succeed())
-	})
 
-	It("should execute with mac-pattern and force", func() {
-		cmd := newDeleteKnownHostsCmd()
-		_ = cmd.Flags().Set("mac-pattern", "nonexistent")
-		_ = cmd.Flags().Set("force", "true")
-
-		Expect(cmd.RunE(cmd, []string{})).To(Succeed())
+		// All hosts should remain
+		hotspot, err := gokeenrestapi.Ip.GetAllHotspots()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(hotspot.Host).To(HaveLen(2))
 	})
 })

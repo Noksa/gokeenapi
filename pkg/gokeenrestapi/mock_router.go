@@ -448,6 +448,7 @@ func NewMockRouterServer(opts ...MockRouterOption) *httptest.Server {
 
 	// Route endpoints
 	mux.HandleFunc("/rci/ip/route", m.handleRoutes)
+	mux.HandleFunc("/rci/show/ip/route", m.handleShowIpRoute)
 
 	// DNS endpoints
 	mux.HandleFunc("/rci/show/ip/name-server", m.handleDnsRecords)
@@ -790,6 +791,30 @@ func (m *MockRouter) handleRoutes(w http.ResponseWriter, r *http.Request) {
 			Mask:      route.Mask,
 			Interface: route.Interface,
 			Auto:      route.Auto,
+		})
+	}
+	m.encodeJSON(w, routes)
+}
+
+func (m *MockRouter) handleShowIpRoute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	routes := make([]gokeenrestapimodels.RciShowIpRoute, 0, len(m.routes))
+	for _, route := range m.routes {
+		ip := route.Network
+		if route.Host != "" {
+			ip = route.Host
+		}
+		cidr := maskToCIDRString(route.Mask)
+		routes = append(routes, gokeenrestapimodels.RciShowIpRoute{
+			Destination: fmt.Sprintf("%s/%s", ip, cidr),
+			Interface:   route.Interface,
 		})
 	}
 	m.encodeJSON(w, routes)
@@ -1693,4 +1718,23 @@ func (m *MockRouter) encodeJSON(w http.ResponseWriter, data any) {
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to encode JSON: %v", err), http.StatusInternalServerError)
 	}
+}
+
+// maskToCIDRString converts a dotted subnet mask to a CIDR prefix length string.
+// e.g. "255.255.255.0" -> "24", "255.255.0.0" -> "16"
+func maskToCIDRString(mask string) string {
+	parts := strings.Split(mask, ".")
+	if len(parts) != 4 {
+		return "32"
+	}
+	bits := 0
+	for _, p := range parts {
+		var b int
+		fmt.Sscanf(p, "%d", &b) //nolint:errcheck // best-effort parse
+		for b > 0 {
+			bits += b & 1
+			b >>= 1
+		}
+	}
+	return fmt.Sprintf("%d", bits)
 }

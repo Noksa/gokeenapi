@@ -46,7 +46,7 @@ var _ = Describe("URLContentWithChecksum", func() {
 		Expect(err).NotTo(HaveOccurred())
 		config.Cfg.DataDir = tmpDir
 		DeferCleanup(func() {
-			os.RemoveAll(tmpDir)
+			_ = os.RemoveAll(tmpDir)
 			config.Cfg.DataDir = ""
 		})
 

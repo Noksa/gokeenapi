@@ -248,7 +248,7 @@ var _ = Describe("Scheduler", func() {
 			tmpDir, err = os.MkdirTemp("", "scheduler-test-*")
 			Expect(err).NotTo(HaveOccurred())
 			DeferCleanup(func() {
-				os.RemoveAll(tmpDir)
+				_ = os.RemoveAll(tmpDir)
 			})
 		})
 

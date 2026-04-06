@@ -61,7 +61,6 @@ lint: $(CYBER_CACHE) ## Run linter via scripts/check.sh
 	}
 	@chmod +x ./scripts/check.sh
 	@./scripts/check.sh
-	@source $(CYBER_CACHE) && cyber_ok "Lint passed"
 
 ##@ Testing
 
@@ -141,7 +140,6 @@ build: $(CYBER_CACHE) lint ## Build (includes linting)
 	}
 	@chmod +x ./scripts/build.sh
 	@./scripts/build.sh
-	@source $(CYBER_CACHE) && cyber_ok "Build complete"
 
 .PHONY: binaries
 binaries: $(CYBER_CACHE) lint ## Build release binaries (VERSION=<version>)
@@ -156,7 +154,6 @@ binaries: $(CYBER_CACHE) lint ## Build release binaries (VERSION=<version>)
 	}
 	@chmod +x ./scripts/create_binaries.sh
 	@cd ./scripts && ./create_binaries.sh --version $(VERSION)
-	@source $(CYBER_CACHE) && cyber_ok "Binaries created"
 
 ##@ Docker
 
