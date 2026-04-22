@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="logo.png" alt="gokeenapi logo" width="1024">
+
 # 🚀 gokeenapi
 
 **Automate your Keenetic (Netcraze) router management with ease**
