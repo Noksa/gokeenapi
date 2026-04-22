@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="logo.png" alt="gokeenapi logo" width="704">
+<img src="logo.png" alt="gokeenapi logo" width="256">
 
 # 🚀 gokeenapi
 
