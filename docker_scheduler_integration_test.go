@@ -126,7 +126,7 @@ logs:
 			tmpDir = createDockerAccessibleTempDir(GinkgoT())
 
 			batDir := filepath.Join(tmpDir, "batfiles")
-			err := os.MkdirAll(batDir, 0755)
+			err := os.MkdirAll(batDir, 0777)
 			Expect(err).NotTo(HaveOccurred())
 
 			batContent := `route add 1.1.1.0 mask 255.255.255.0 0.0.0.0

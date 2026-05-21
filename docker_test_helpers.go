@@ -38,6 +38,11 @@ func createDockerAccessibleTempDir(t cleanupRegistrar) string {
 		return fallbackTempDir(t)
 	}
 
+	// Allow the non-root container user (different UID) to read/write the mounted directory.
+	if err = os.Chmod(tmpDir, 0777); err != nil {
+		return fallbackTempDir(t)
+	}
+
 	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 	return tmpDir
 }
@@ -45,6 +50,8 @@ func createDockerAccessibleTempDir(t cleanupRegistrar) string {
 func fallbackTempDir(t cleanupRegistrar) string {
 	tmpDir, err := os.MkdirTemp("", "gokeenapi-docker-test-*")
 	Expect(err).NotTo(HaveOccurred())
+	// Allow the non-root container user (different UID) to read/write the mounted directory.
+	Expect(os.Chmod(tmpDir, 0777)).NotTo(HaveOccurred())
 	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 	return tmpDir
 }
