@@ -166,10 +166,16 @@ This allows you to maintain both local files and remote URLs in a single reusabl
 
 ### Environment Variables
 
-For security, you can store sensitive credentials as environment variables instead of in the config file:
+All configuration options can be set via environment variables:
 
-- `GOKEENAPI_KEENETIC_LOGIN` - Router admin login
-- `GOKEENAPI_KEENETIC_PASSWORD` - Router admin password
+| Variable | Description |
+|---|---|
+| `GOKEENAPI_CONFIG` | Path to config file (alternative to `--config`) |
+| `GOKEENAPI_KEENETIC_LOGIN` | Router admin login |
+| `GOKEENAPI_KEENETIC_PASSWORD` | Router admin password |
+| `GOKEENAPI_INSIDE_DOCKER` | When set, uses `/etc/gokeenapi` as the data directory |
+
+`GOKEENAPI_KEENETIC_LOGIN` and `GOKEENAPI_KEENETIC_PASSWORD` are particularly useful for keeping sensitive credentials out of config files. `GOKEENAPI_INSIDE_DOCKER` is set automatically in the official Docker image.
 
 ---
 
