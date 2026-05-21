@@ -373,6 +373,7 @@ func LoadConfig(configPath string) error {
 	if err != nil {
 		return err
 	}
+	Cfg = GokeenapiConfig{}
 	err = yaml.Unmarshal(b, &Cfg)
 	if err != nil {
 		return err
