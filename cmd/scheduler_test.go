@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"time"
 
@@ -306,6 +307,75 @@ var _ = Describe("Scheduler", func() {
 			cfg, err := config.LoadSchedulerConfig(configPath)
 			Expect(err).To(HaveOccurred())
 			Expect(cfg.Tasks).To(BeEmpty())
+		})
+	})
+
+	Describe("sendTask", func() {
+		It("should send task to queue when space available", func() {
+			ctx := context.Background()
+			queue := make(chan config.ScheduledTask, 1)
+			task := config.ScheduledTask{Name: "t1"}
+
+			ok := sendTask(ctx, task, queue)
+
+			Expect(ok).To(BeTrue())
+			Expect(queue).To(HaveLen(1))
+			Expect(<-queue).To(Equal(task))
+		})
+
+		It("should return false immediately when context is already cancelled", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			// unbuffered: send would block forever without ctx cancellation
+			queue := make(chan config.ScheduledTask)
+			task := config.ScheduledTask{Name: "t1"}
+
+			ok := sendTask(ctx, task, queue)
+
+			Expect(ok).To(BeFalse())
+			Expect(queue).To(HaveLen(0))
+		})
+
+		It("should return false when context is cancelled while queue is full", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			queue := make(chan config.ScheduledTask) // unbuffered, always blocks
+
+			done := make(chan bool, 1)
+			go func() {
+				done <- sendTask(ctx, config.ScheduledTask{Name: "t1"}, queue)
+			}()
+
+			// cancel while sendTask is blocked waiting for a receiver
+			time.Sleep(10 * time.Millisecond)
+			cancel()
+
+			Eventually(done, "1s").Should(Receive(BeFalse()))
+		})
+	})
+
+	Describe("runIntervalTask cancellation", func() {
+		It("should exit promptly on context cancellation even when queue is full", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			// queue size 1: first immediate send fills it; subsequent tick sends block
+			queue := make(chan config.ScheduledTask, 1)
+			task := config.ScheduledTask{
+				Name:     "interval-task",
+				Commands: []string{"add-routes"},
+				Configs:  []string{"/cfg.yaml"},
+				Interval: "10ms",
+			}
+
+			done := make(chan struct{})
+			go func() {
+				runIntervalTask(ctx, task, queue)
+				close(done)
+			}()
+
+			// let the goroutine start and the first send land
+			time.Sleep(20 * time.Millisecond)
+			cancel()
+
+			Eventually(done, "500ms").Should(BeClosed())
 		})
 	})
 })

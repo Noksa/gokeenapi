@@ -183,6 +183,17 @@ func runTask(ctx context.Context, task config.ScheduledTask, queue chan<- config
 	}
 }
 
+// sendTask sends a task to the queue, respecting context cancellation.
+// Returns false if the context was cancelled before the send completed.
+func sendTask(ctx context.Context, task config.ScheduledTask, queue chan<- config.ScheduledTask) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case queue <- task:
+		return true
+	}
+}
+
 // runIntervalTask runs task at specified intervals
 func runIntervalTask(ctx context.Context, task config.ScheduledTask, queue chan<- config.ScheduledTask) {
 	interval, _ := time.ParseDuration(task.Interval)
@@ -191,14 +202,18 @@ func runIntervalTask(ctx context.Context, task config.ScheduledTask, queue chan<
 
 	gokeenlog.InfoSubStepf("Task '%v': running every %s", color.CyanString(task.Name), color.BlueString("%v", interval))
 
-	queue <- task
+	if !sendTask(ctx, task, queue) {
+		return
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			queue <- task
+			if !sendTask(ctx, task, queue) {
+				return
+			}
 		}
 	}
 }
@@ -215,7 +230,9 @@ func runTimedTask(ctx context.Context, task config.ScheduledTask, queue chan<- c
 		case <-ctx.Done():
 			return
 		case <-time.After(waitDuration):
-			queue <- task
+			if !sendTask(ctx, task, queue) {
+				return
+			}
 		}
 	}
 }
