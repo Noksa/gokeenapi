@@ -9,6 +9,25 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+var _ = Describe("GetGokeenDir", func() {
+	It("should create directory with restricted permissions", func() {
+		tmpDir, err := os.MkdirTemp("", "gokeencache-perm-test-*")
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() {
+			_ = os.RemoveAll(tmpDir)
+			config.Cfg.DataDir = ""
+		})
+		config.Cfg.DataDir = tmpDir
+
+		gokeenDir, err := GetGokeenDir()
+		Expect(err).NotTo(HaveOccurred())
+
+		info, err := os.Stat(gokeenDir)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(info.Mode().Perm()).To(Equal(os.FileMode(0700)))
+	})
+})
+
 var _ = Describe("DomainValidationCache", func() {
 	It("should return not cached for unknown domain", func() {
 		_, cached := GetDomainValidation("example.com")
@@ -56,7 +75,7 @@ var _ = Describe("URLContentWithChecksum", func() {
 	})
 
 	It("should store and retrieve content", func() {
-		SetURLContent(url, content, ttl)
+		Expect(SetURLContent(url, content, ttl)).To(Succeed())
 
 		retrieved, ok := GetURLContent(url)
 		Expect(ok).To(BeTrue())
@@ -64,21 +83,33 @@ var _ = Describe("URLContentWithChecksum", func() {
 	})
 
 	It("should compute checksum", func() {
-		SetURLContent(url, content, ttl)
+		Expect(SetURLContent(url, content, ttl)).To(Succeed())
 
 		checksum := GetURLChecksum(url)
 		Expect(checksum).NotTo(BeEmpty())
 	})
 
 	It("should change checksum when content changes", func() {
-		SetURLContent(url, content, ttl)
+		Expect(SetURLContent(url, content, ttl)).To(Succeed())
 		checksum1 := GetURLChecksum(url)
 
 		newContent := "example.com\ntest.com\nnew.com\n"
-		SetURLContent(url, newContent, ttl)
+		Expect(SetURLContent(url, newContent, ttl)).To(Succeed())
 		checksum2 := GetURLChecksum(url)
 
 		Expect(checksum2).NotTo(Equal(checksum1))
+	})
+
+	It("should return error when directory is not writable", func() {
+		// Make the data dir read-only so writes fail
+		Expect(os.Chmod(config.Cfg.DataDir, 0500)).To(Succeed())
+		DeferCleanup(func() {
+			_ = os.Chmod(config.Cfg.DataDir, 0700)
+		})
+
+		// GetGokeenDir will try to MkdirAll .gokeenapi inside a read-only dir
+		err := SetURLContent(url, content, ttl)
+		Expect(err).To(HaveOccurred())
 	})
 })
 
