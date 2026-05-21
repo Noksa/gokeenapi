@@ -1,6 +1,7 @@
 package gokeenrestapi
 
 import (
+	"context"
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
@@ -362,9 +363,18 @@ func (c *keeneticCommon) ExecutePostSubPath(path string, body any) ([]byte, erro
 	return []byte{}, errors.New("no response from keenetic api")
 }
 
-// authRetryMiddleware handles 401 responses by re-authenticating and retrying the request
+// authRetried is the context key used to prevent infinite retry loops in authRetryMiddleware.
+type authRetriedKey struct{}
+
+// authRetryMiddleware handles 401 responses by re-authenticating and retrying the request.
+// It uses a context flag to ensure the retry is performed at most once per request.
 func (c *keeneticCommon) authRetryMiddleware(client *resty.Client, resp *resty.Response) error {
 	if resp.StatusCode() == http.StatusUnauthorized && resp.Request.RawRequest.URL.Path != "/auth" {
+		// Prevent infinite loop: if this request is already a retry, do not retry again.
+		if resp.Request.Context().Value(authRetriedKey{}) != nil {
+			return nil
+		}
+
 		// Clear the current cookie and perform direct authentication
 		client.Header.Del("Cookie")
 
@@ -372,9 +382,8 @@ func (c *keeneticCommon) authRetryMiddleware(client *resty.Client, resp *resty.R
 			return err
 		}
 
-		// Retry the original request with new authentication
-
-		retryReq := resp.Request
+		// Retry the original request with new authentication, marking it as already retried.
+		retryReq := resp.Request.SetContext(context.WithValue(resp.Request.Context(), authRetriedKey{}, true))
 		retryReq.Header.Del("Cookie")
 		retryReq.Header.Set("Cookie", client.Header.Get("Cookie"))
 
