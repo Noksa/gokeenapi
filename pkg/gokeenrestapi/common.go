@@ -238,7 +238,11 @@ func (c *keeneticCommon) Auth() error {
 	var version gokeenrestapimodels.Version
 
 	err = gokeenspinner.WrapWithSpinnerAndOptions(fmt.Sprintf("Authorizing in %v", color.CyanString("Keenetic")), func(opts *gokeenspinner.SpinnerOptions) error {
-		if err := c.performAuth(c.GetApiClient()); err != nil {
+		client, err := c.GetApiClient()
+		if err != nil {
+			return err
+		}
+		if err := c.performAuth(client); err != nil {
 			return err
 		}
 		if _, _, err := c.CheckRouterMode(); err != nil {
@@ -285,7 +289,11 @@ func (c *keeneticCommon) ExecutePostParse(parse ...gokeenrestapimodels.ParseRequ
 	var parseResponses []gokeenrestapimodels.ParseResponse
 	var mErr error
 	for len(parseCopy) > 0 {
-		request := c.GetApiClient().R()
+		apiClient, err := c.GetApiClient()
+		if err != nil {
+			return parseResponses, err
+		}
+		request := apiClient.R()
 		maxParse := maxParseRequests
 		currentLen := len(parseCopy)
 		if currentLen < maxParse {
@@ -324,7 +332,11 @@ func (c *keeneticCommon) ExecutePostParse(parse ...gokeenrestapimodels.ParseRequ
 
 // ExecuteGetSubPath performs a GET request to the specified API endpoint
 func (c *keeneticCommon) ExecuteGetSubPath(path string) ([]byte, error) {
-	response, err := c.GetApiClient().R().Get(path)
+	apiClient, err := c.GetApiClient()
+	if err != nil {
+		return nil, err
+	}
+	response, err := apiClient.R().Get(path)
 	if err != nil {
 		return nil, err
 	}
@@ -336,7 +348,11 @@ func (c *keeneticCommon) ExecuteGetSubPath(path string) ([]byte, error) {
 
 // ExecutePostSubPath performs a POST request to the specified API endpoint with a request body
 func (c *keeneticCommon) ExecutePostSubPath(path string, body any) ([]byte, error) {
-	response, err := c.GetApiClient().R().SetBody(body).Post(path)
+	apiClient, err := c.GetApiClient()
+	if err != nil {
+		return nil, err
+	}
+	response, err := apiClient.R().SetBody(body).Post(path)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +390,7 @@ func (c *keeneticCommon) authRetryMiddleware(client *resty.Client, resp *resty.R
 }
 
 // GetApiClient returns a configured HTTP client for API requests with authentication
-func (c *keeneticCommon) GetApiClient() *resty.Client {
+func (c *keeneticCommon) GetApiClient() (*resty.Client, error) {
 	if restyClient == nil {
 		restyClient = resty.New()
 		restyClient.SetDisableWarn(true)
@@ -388,13 +404,13 @@ func (c *keeneticCommon) GetApiClient() *resty.Client {
 	if restyClient.Header.Get("Cookie") == "" {
 		cookie, err := c.getAuthCookie()
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		if cookie != "" {
 			restyClient.Header.Set("Cookie", cookie)
 		}
 	}
-	return restyClient
+	return restyClient, nil
 }
 
 // ShowRunningConfig retrieves the current running configuration from the router
