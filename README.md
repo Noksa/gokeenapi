@@ -260,7 +260,7 @@ Here are some of the things you can do with `gokeenapi`. For a full list of comm
 
 #### `show-interfaces`
 
-*Aliases: `showinterfaces`, `showifaces`, `si`*
+*Aliases: `showinterfaces`, `si`, `showinterface`, `show-interface`*
 
 Displays all available interfaces on your Keenetic (Netcraze) router.
 
@@ -321,7 +321,7 @@ Deletes static DNS records based on your configuration file.
 
 #### `add-dns-routing`
 
-*Aliases: `adddnsrouting`, `adnsr`*
+*Aliases: `adddnsrouting`, `adnsr`, `adddnsroutes`, `add-dns-routes`*
 
 Adds DNS-routing rules (policy-based routing by domain) to your router. This feature allows you to route traffic for specific domains through designated network interfaces.
 
@@ -387,7 +387,7 @@ This allows you to maintain common DNS routing rules in one place and share them
 
 #### `delete-dns-routing`
 
-*Aliases: `deletednsrouting`, `ddnsr`*
+*Aliases: `deletednsrouting`, `ddnsr`, `deletednsroutes`, `delete-dns-routes`*
 
 Deletes DNS-routing rules that match your configuration file.
 
@@ -440,6 +440,16 @@ Deletes known hosts by name or MAC using regex pattern.
 
 # Delete hosts without confirmation prompt
 ./gokeenapi delete-known-hosts --config my_config.yaml --name-pattern "pattern" --force
+```
+
+#### `scheduler`
+
+*Aliases: `schedule`, `sched`*
+
+Runs automated tasks at specified intervals or fixed times. See [Scheduler documentation](SCHEDULER.md) for the full configuration reference.
+
+```shell
+./gokeenapi scheduler --config scheduler.yaml
 ```
 
 #### `exec`
