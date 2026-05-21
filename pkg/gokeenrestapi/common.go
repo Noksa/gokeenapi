@@ -432,18 +432,19 @@ func (c *keeneticCommon) SaveConfigParseRequest() gokeenrestapimodels.ParseReque
 	return gokeenrestapimodels.ParseRequest{Parse: "system configuration save"}
 }
 
-// EnsureSaveConfigAtEnd ensures SaveConfigParseRequest is at the end of parseSlice if not already present
+// EnsureSaveConfigAtEnd ensures SaveConfigParseRequest is at the end of parseSlice exactly once.
+// Any existing occurrences of the save command are removed before appending it at the end.
 func (c *keeneticCommon) EnsureSaveConfigAtEnd(parseSlice []gokeenrestapimodels.ParseRequest) []gokeenrestapimodels.ParseRequest {
 	saveConfig := c.SaveConfigParseRequest()
 
-	for i, req := range parseSlice {
-		if req.Parse == saveConfig.Parse {
-			parseSlice = append(parseSlice[:i], parseSlice[i+1:]...)
-			break
+	filtered := parseSlice[:0]
+	for _, req := range parseSlice {
+		if req.Parse != saveConfig.Parse {
+			filtered = append(filtered, req)
 		}
 	}
 
-	return append(parseSlice, saveConfig)
+	return append(filtered, saveConfig)
 }
 
 func (c *keeneticCommon) SaveConfig() error {
