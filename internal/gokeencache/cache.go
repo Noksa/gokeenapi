@@ -47,7 +47,7 @@ func GetGokeenDir() (string, error) {
 		}
 	}
 	gokeenDir := path.Join(dataDir, ".gokeenapi")
-	err = os.MkdirAll(gokeenDir, os.ModePerm)
+	err = os.MkdirAll(gokeenDir, 0700)
 	return gokeenDir, err
 }
 
@@ -112,7 +112,8 @@ func GetRciShowInterfaces() map[string]gokeenrestapimodels.RciShowInterface {
 
 // SetURLContent caches URL content to disk with TTL and checksum for change detection.
 // The cache file is stored in the .gokeenapi directory.
-func SetURLContent(url string, content string, ttl time.Duration) {
+// Returns an error if the cache file could not be written.
+func SetURLContent(url string, content string, ttl time.Duration) error {
 	checksum := fmt.Sprintf("%x", md5.Sum([]byte(content)))
 	entry := urlCacheEntry{
 		Content:   content,
@@ -122,7 +123,7 @@ func SetURLContent(url string, content string, ttl time.Duration) {
 
 	gokeenDir, err := GetGokeenDir()
 	if err != nil {
-		return
+		return err
 	}
 
 	filename := urlToCacheFilename(url)
@@ -130,10 +131,10 @@ func SetURLContent(url string, content string, ttl time.Duration) {
 
 	data, err := json.Marshal(entry)
 	if err != nil {
-		return
+		return err
 	}
 
-	_ = os.WriteFile(filepath, data, 0600)
+	return os.WriteFile(filepath, data, 0600)
 }
 
 // GetURLContent retrieves cached URL content if not expired.
