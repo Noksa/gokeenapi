@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -33,8 +34,12 @@ const (
 )
 
 var (
-	restyClient          *resty.Client
-	cleanedOldCacheFiles bool
+	restyClient     *resty.Client
+	restyClientOnce sync.Once
+
+	cacheCleanMu    sync.Mutex
+	cleanedOldCache bool
+
 	// Common provides core API functionality for authentication and router communication
 	Common keeneticCommon
 )
@@ -66,7 +71,13 @@ func (c *keeneticCommon) getKeeneticCacheFile() (keeneticCacheFile, error) {
 		return keeneticCacheFile{}, err
 	}
 
-	if !cleanedOldCacheFiles {
+	cacheCleanMu.Lock()
+	needClean := !cleanedOldCache
+	if needClean {
+		cleanedOldCache = true
+	}
+	cacheCleanMu.Unlock()
+	if needClean {
 		err = filepath.WalkDir(gokeenDir, func(path string, d fs.DirEntry, err error) error {
 			if d.IsDir() {
 				return nil
@@ -84,9 +95,11 @@ func (c *keeneticCommon) getKeeneticCacheFile() (keeneticCacheFile, error) {
 			return nil
 		})
 		if err != nil {
+			cacheCleanMu.Lock()
+			cleanedOldCache = false // allow retry on next call
+			cacheCleanMu.Unlock()
 			return keeneticCacheFile{}, err
 		}
-		cleanedOldCacheFiles = true
 	}
 	bHash := sha256.Sum256(fmt.Appendf(nil, "%v-%v", config.Cfg.Keenetic.URL, config.Cfg.Keenetic.Login))
 	hashString := fmt.Sprintf("%x", bHash)
@@ -400,14 +413,14 @@ func (c *keeneticCommon) authRetryMiddleware(client *resty.Client, resp *resty.R
 
 // GetApiClient returns a configured HTTP client for API requests with authentication
 func (c *keeneticCommon) GetApiClient() (*resty.Client, error) {
-	if restyClient == nil {
+	restyClientOnce.Do(func() {
 		restyClient = resty.New()
 		restyClient.SetDisableWarn(true)
 		restyClient.SetCookieJar(nil)
 		restyClient.SetTimeout(defaultTimeout)
 		restyClient.OnAfterResponse(c.authRetryMiddleware)
 		restyClient.RetryCount = 3
-	}
+	})
 	// do it each time to have clean client
 	restyClient.SetBaseURL(config.Cfg.Keenetic.URL)
 	if restyClient.Header.Get("Cookie") == "" {

@@ -2,6 +2,7 @@ package gokeenrestapi
 
 import (
 	"os"
+	"sync"
 
 	"github.com/noksa/gokeenapi/pkg/config"
 	. "github.com/onsi/ginkgo/v2"
@@ -50,7 +51,8 @@ var _ = Describe("GetApiClient", func() {
 	AfterEach(func() {
 		CleanupTestConfig()
 		restyClient = nil
-		cleanedOldCacheFiles = false
+		restyClientOnce = sync.Once{}
+		cleanedOldCache = false
 	})
 
 	It("should return error instead of panicking when auth cache directory is unreadable", func() {
@@ -68,7 +70,8 @@ var _ = Describe("GetApiClient", func() {
 			DataDir:  tmpDir,
 		}
 		restyClient = nil
-		cleanedOldCacheFiles = false
+		restyClientOnce = sync.Once{}
+		cleanedOldCache = false
 
 		client, getErr := Common.GetApiClient()
 		Expect(getErr).To(HaveOccurred())

@@ -1,6 +1,8 @@
 package gokeenrestapi
 
 import (
+	"sync"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -74,6 +76,7 @@ var _ = Describe("SaveConfig", func() {
 	AfterEach(func() {
 		CleanupTestConfig()
 		restyClient = nil
+		restyClientOnce = sync.Once{}
 	})
 
 	It("executes the save config command against the router", func() {
