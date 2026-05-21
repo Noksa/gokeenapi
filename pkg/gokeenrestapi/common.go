@@ -56,7 +56,7 @@ func (f *keeneticCacheFile) Save() error {
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(f.path, b, 0700)
+	err = os.WriteFile(f.path, b, 0600)
 	return err
 }
 
@@ -88,7 +88,7 @@ func (c *keeneticCommon) getKeeneticCacheFile() (keeneticCacheFile, error) {
 		}
 		cleanedOldCacheFiles = true
 	}
-	bHash := md5.Sum(fmt.Appendf(nil, "%v-%v-%v", config.Cfg.Keenetic.URL, config.Cfg.Keenetic.Login, config.Cfg.Keenetic.Password))
+	bHash := sha256.Sum256(fmt.Appendf(nil, "%v-%v", config.Cfg.Keenetic.URL, config.Cfg.Keenetic.Login))
 	hashString := fmt.Sprintf("%x", bHash)
 	keeeticFile := path.Join(gokeenDir, fmt.Sprintf("%v.json", hashString))
 	_, statErr := os.Stat(keeeticFile)
@@ -96,7 +96,7 @@ func (c *keeneticCommon) getKeeneticCacheFile() (keeneticCacheFile, error) {
 		if !errors.Is(statErr, os.ErrNotExist) {
 			return keeneticCacheFile{}, statErr
 		}
-		err = os.WriteFile(keeeticFile, []byte("{}"), os.ModePerm)
+		err = os.WriteFile(keeeticFile, []byte("{}"), 0600)
 		if err != nil {
 			return keeneticCacheFile{}, err
 		}
@@ -441,18 +441,19 @@ func (c *keeneticCommon) SaveConfigParseRequest() gokeenrestapimodels.ParseReque
 	return gokeenrestapimodels.ParseRequest{Parse: "system configuration save"}
 }
 
-// EnsureSaveConfigAtEnd ensures SaveConfigParseRequest is at the end of parseSlice if not already present
+// EnsureSaveConfigAtEnd ensures SaveConfigParseRequest is at the end of parseSlice exactly once.
+// Any existing occurrences of the save command are removed before appending it at the end.
 func (c *keeneticCommon) EnsureSaveConfigAtEnd(parseSlice []gokeenrestapimodels.ParseRequest) []gokeenrestapimodels.ParseRequest {
 	saveConfig := c.SaveConfigParseRequest()
 
-	for i, req := range parseSlice {
-		if req.Parse == saveConfig.Parse {
-			parseSlice = append(parseSlice[:i], parseSlice[i+1:]...)
-			break
+	filtered := parseSlice[:0]
+	for _, req := range parseSlice {
+		if req.Parse != saveConfig.Parse {
+			filtered = append(filtered, req)
 		}
 	}
 
-	return append(parseSlice, saveConfig)
+	return append(filtered, saveConfig)
 }
 
 func (c *keeneticCommon) SaveConfig() error {
