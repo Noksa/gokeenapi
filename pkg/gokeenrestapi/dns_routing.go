@@ -289,7 +289,9 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 			}
 
 			// Cache with configured TTL
-			gokeencache.SetURLContent(url, content, config.GetURLCacheTTL())
+			if err := gokeencache.SetURLContent(url, content, config.GetURLCacheTTL()); err != nil {
+				gokeenlog.InfoSubStepf("Warning: failed to cache URL content for %v: %v", url, err)
+			}
 
 			lines := strings.Split(content, "\n")
 			domains, skipped = parseDomainLines(lines, "URL")

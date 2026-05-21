@@ -275,7 +275,9 @@ func (*keeneticIp) AddRoutesFromBatUrl(url string, interfaceId string) error {
 		}
 		str = string(response.Body())
 		// Cache with configured TTL
-		gokeencache.SetURLContent(url, str, config.GetURLCacheTTL())
+		if err := gokeencache.SetURLContent(url, str, config.GetURLCacheTTL()); err != nil {
+			gokeenlog.InfoSubStepf("Warning: failed to cache URL content for %v: %v", url, err)
+		}
 	}
 
 	var mErr error
