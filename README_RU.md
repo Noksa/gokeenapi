@@ -252,7 +252,7 @@ tasks:
 
 #### `show-interfaces`
 
-*Псевдонимы: `showinterfaces`, `showifaces`, `si`*
+*Псевдонимы: `showinterfaces`, `si`, `showinterface`, `show-interface`*
 
 Отображает все доступные интерфейсы на вашем роутере Keenetic (Netcraze).
 
@@ -313,7 +313,7 @@ tasks:
 
 #### `add-dns-routing`
 
-*Псевдонимы: `adddnsrouting`, `adnsr`*
+*Псевдонимы: `adddnsrouting`, `adnsr`, `adddnsroutes`, `add-dns-routes`*
 
 Добавляет правила DNS-маршрутизации (маршрутизация по доменам) в ваш роутер. Эта функция позволяет направлять трафик для определенных доменов через указанные сетевые интерфейсы.
 
@@ -379,7 +379,7 @@ dns:
 
 #### `delete-dns-routing`
 
-*Псевдонимы: `deletednsrouting`, `ddnsr`*
+*Псевдонимы: `deletednsrouting`, `ddnsr`, `deletednsroutes`, `delete-dns-routes`*
 
 Удаляет правила DNS-маршрутизации, соответствующие вашему конфигурационному файлу.
 
@@ -432,6 +432,16 @@ dns:
 
 # Удалить хосты без подтверждения
 ./gokeenapi delete-known-hosts --config my_config.yaml --name-pattern "паттерн" --force
+```
+
+#### `scheduler`
+
+*Псевдонимы: `schedule`, `sched`*
+
+Запускает автоматизированные задачи по расписанию или через заданные интервалы. Полную документацию см. в [документации Scheduler](SCHEDULER_RU.md).
+
+```shell
+./gokeenapi scheduler --config scheduler.yaml
 ```
 
 #### `exec`
