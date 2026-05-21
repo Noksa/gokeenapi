@@ -26,8 +26,11 @@ WORKDIR /opt/gokeenapi
 COPY --from=builder /workspace/gokeenapi ./gokeenapi
 ENV PATH="${PATH}:/opt/gokeenapi"
 ENV GOKEENAPI_INSIDE_DOCKER=true
-RUN mkdir -p /etc/gokeenapi && echo "{}" > /etc/gokeenapi/.gokeenapi
+RUN addgroup -S gokeenapi && adduser -S gokeenapi -G gokeenapi && \
+    mkdir -p /etc/gokeenapi && echo "{}" > /etc/gokeenapi/.gokeenapi && \
+    chown -R gokeenapi:gokeenapi /etc/gokeenapi /opt/gokeenapi
 VOLUME [ "/etc/gokeenapi" ]
+USER gokeenapi
 ENTRYPOINT [ "gokeenapi" ]
 CMD [ "--help" ]
 
