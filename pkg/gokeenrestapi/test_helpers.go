@@ -2,6 +2,7 @@ package gokeenrestapi
 
 import (
 	"os"
+	"sync"
 
 	"github.com/noksa/gokeenapi/pkg/config"
 )
@@ -26,8 +27,9 @@ func SetupTestConfig(serverURL string) {
 		},
 		DataDir: tmpDir,
 	}
-	// Reset client to use new config
+	// Reset client and its Once guard so the next call re-initializes with the new config.
 	restyClient = nil
+	restyClientOnce = sync.Once{}
 }
 
 // CleanupTestConfig removes the temporary test cache directory
