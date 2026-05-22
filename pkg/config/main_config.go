@@ -379,7 +379,7 @@ func LoadConfig(configPath string) error {
 		return err
 	}
 	if info.Mode().Perm()&0o004 != 0 {
-		fmt.Fprintf(warnOutput, "WARNING: config file %q is world-readable (permissions %s). "+
+		_, _ = fmt.Fprintf(warnOutput, "WARNING: config file %q is world-readable (permissions %s). "+
 			"Use environment variables GOKEENAPI_KEENETIC_LOGIN and GOKEENAPI_KEENETIC_PASSWORD "+
 			"instead of storing credentials in the config file.\n",
 			configPath, info.Mode().Perm())

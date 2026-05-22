@@ -177,7 +177,7 @@ dns:
 			Expect(buf.String()).To(BeEmpty())
 		})
 
-		It("should warn for group-readable but not world-readable (0640)", func() {
+		It("should not warn for group-readable but not world-readable (0640)", func() {
 			tmpDir := GinkgoT().TempDir()
 			configPath := filepath.Join(tmpDir, "config.yaml")
 			Expect(os.WriteFile(configPath, []byte(`keenetic:
