@@ -3,6 +3,7 @@ package gokeenrestapi
 import (
 	"os"
 	"sync"
+	"time"
 
 	"github.com/noksa/gokeenapi/pkg/config"
 	. "github.com/onsi/ginkgo/v2"
@@ -76,5 +77,75 @@ var _ = Describe("GetApiClient", func() {
 		client, getErr := Common.GetApiClient()
 		Expect(getErr).To(HaveOccurred())
 		Expect(client).To(BeNil())
+	})
+})
+
+var _ = Describe("cache cleanup", func() {
+	var tmpDir string
+	var gokeenDir string
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "gokeenapi-cache-test-*")
+		Expect(err).NotTo(HaveOccurred())
+		config.Cfg = config.GokeenapiConfig{
+			Keenetic: config.Keenetic{URL: "http://127.0.0.1:9999", Login: "admin", Password: "pass"},
+			DataDir:  tmpDir,
+		}
+		// GetGokeenDir creates tmpDir/.gokeenapi
+		gokeenDir = tmpDir + "/.gokeenapi"
+		Expect(os.MkdirAll(gokeenDir, 0700)).To(Succeed())
+		restyClient = nil
+		restyClientOnce = sync.Once{}
+		cleanedOldCache = false
+	})
+
+	AfterEach(func() {
+		_ = os.RemoveAll(tmpDir)
+		cleanedOldCache = false
+	})
+
+	It("should not error when a stale file is already deleted by a concurrent process", func() {
+		// Create a stale file (modified > cacheCleanupPeriod ago)
+		staleFile, err := os.CreateTemp(gokeenDir, "stale-*.json")
+		Expect(err).NotTo(HaveOccurred())
+		stalePath := staleFile.Name()
+		Expect(staleFile.Close()).To(Succeed())
+
+		// Back-date modification time past the cleanup period
+		oldTime := time.Now().Add(-(cacheCleanupPeriod + time.Hour))
+		Expect(os.Chtimes(stalePath, oldTime, oldTime)).To(Succeed())
+
+		// Simulate concurrent deletion before our WalkDir removes it
+		Expect(os.Remove(stalePath)).To(Succeed())
+
+		// getKeeneticCacheFile should succeed even though the file is already gone
+		_, err = Common.getKeeneticCacheFile()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should remove stale files that still exist", func() {
+		staleFile, err := os.CreateTemp(gokeenDir, "stale-*.json")
+		Expect(err).NotTo(HaveOccurred())
+		stalePath := staleFile.Name()
+		Expect(staleFile.Close()).To(Succeed())
+
+		oldTime := time.Now().Add(-(cacheCleanupPeriod + time.Hour))
+		Expect(os.Chtimes(stalePath, oldTime, oldTime)).To(Succeed())
+
+		_, err = Common.getKeeneticCacheFile()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(stalePath).NotTo(BeAnExistingFile())
+	})
+
+	It("should not remove fresh files", func() {
+		freshFile, err := os.CreateTemp(gokeenDir, "fresh-*.json")
+		Expect(err).NotTo(HaveOccurred())
+		freshPath := freshFile.Name()
+		Expect(freshFile.Close()).To(Succeed())
+
+		_, err = Common.getKeeneticCacheFile()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(freshPath).To(BeAnExistingFile())
 	})
 })
