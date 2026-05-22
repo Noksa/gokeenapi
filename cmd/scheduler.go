@@ -13,6 +13,7 @@ import (
 	"github.com/noksa/gokeenapi/internal/gokeenlog"
 	"github.com/noksa/gokeenapi/pkg/config"
 	"github.com/spf13/cobra"
+	"go.uber.org/multierr"
 )
 
 func newSchedulerCmd() *cobra.Command {
@@ -270,23 +271,34 @@ func executeTask(task config.ScheduledTask) {
 	gokeenlog.Infof("▶ Executing task: %v", color.BlueString(task.Name))
 
 	if task.Strategy == StrategyParallel {
-		var wg sync.WaitGroup
+		var (
+			wg   sync.WaitGroup
+			mu   sync.Mutex
+			mErr error
+		)
 		for _, configPath := range task.Configs {
 			wg.Add(1)
 			go func(cfg string) {
 				defer wg.Done()
-				executeCommandsForConfig(task, cfg)
+				if err := executeCommandsForConfig(task, cfg); err != nil {
+					mu.Lock()
+					mErr = multierr.Append(mErr, err)
+					mu.Unlock()
+				}
 			}(configPath)
 		}
 		wg.Wait()
+		if mErr != nil {
+			gokeenlog.InfoSubStepf("%s Task %q finished with errors: %v", color.RedString("✗"), task.Name, mErr)
+		}
 	} else {
 		for _, configPath := range task.Configs {
-			executeCommandsForConfig(task, configPath)
+			_ = executeCommandsForConfig(task, configPath)
 		}
 	}
 }
 
-func executeCommandsForConfig(task config.ScheduledTask, configPath string) {
+func executeCommandsForConfig(task config.ScheduledTask, configPath string) error {
 	retryDelay := 1 * time.Minute
 	if task.RetryDelay != "" {
 		if d, err := time.ParseDuration(task.RetryDelay); err == nil {
@@ -297,7 +309,7 @@ func executeCommandsForConfig(task config.ScheduledTask, configPath string) {
 		executable, err := os.Executable()
 		if err != nil {
 			gokeenlog.InfoSubStepf("%s Failed to get executable path: %v", color.RedString("✗"), err)
-			continue
+			return err
 		}
 
 		maxAttempts := max(task.Retry+1, 1)
@@ -329,7 +341,8 @@ func executeCommandsForConfig(task config.ScheduledTask, configPath string) {
 		}
 
 		if lastErr != nil {
-			break
+			return fmt.Errorf("command %q for config %q failed: %w", command, configPath, lastErr)
 		}
 	}
+	return nil
 }

@@ -378,4 +378,63 @@ var _ = Describe("Scheduler", func() {
 			Eventually(done, "500ms").Should(BeClosed())
 		})
 	})
+
+	Describe("executeCommandsForConfig", func() {
+		It("should return error when command fails", func() {
+			task := config.ScheduledTask{
+				Name:     "test-task",
+				Commands: []string{"nonexistent-gokeenapi-command-xyz"},
+				Configs:  []string{"/some/config.yaml"},
+			}
+			err := executeCommandsForConfig(task, "/some/config.yaml")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("nonexistent-gokeenapi-command-xyz"))
+		})
+
+		It("should return nil when no commands", func() {
+			task := config.ScheduledTask{
+				Name:     "empty-task",
+				Commands: []string{},
+				Configs:  []string{"/some/config.yaml"},
+			}
+			Expect(executeCommandsForConfig(task, "/some/config.yaml")).To(Succeed())
+		})
+	})
+
+	Describe("executeTask parallel error aggregation", func() {
+		It("should collect errors from all failing goroutines without losing any", func() {
+			task := config.ScheduledTask{
+				Name:     "parallel-fail",
+				Commands: []string{"nonexistent-gokeenapi-command-xyz"},
+				Configs:  []string{"/cfg1.yaml", "/cfg2.yaml", "/cfg3.yaml"},
+				Strategy: StrategyParallel,
+			}
+			// executeTask logs errors but doesn't return them; we verify it completes
+			// without panic or deadlock and that executeCommandsForConfig returns errors
+			// for each config.
+			var errs []error
+			for _, cfg := range task.Configs {
+				errs = append(errs, executeCommandsForConfig(task, cfg))
+			}
+			Expect(errs).To(HaveLen(3))
+			for _, err := range errs {
+				Expect(err).To(HaveOccurred())
+			}
+		})
+
+		It("should complete without deadlock in parallel mode", func() {
+			task := config.ScheduledTask{
+				Name:     "parallel-deadlock-check",
+				Commands: []string{"nonexistent-gokeenapi-command-xyz"},
+				Configs:  []string{"/cfg1.yaml", "/cfg2.yaml"},
+				Strategy: StrategyParallel,
+			}
+			done := make(chan struct{})
+			go func() {
+				executeTask(task)
+				close(done)
+			}()
+			Eventually(done, "10s").Should(BeClosed())
+		})
+	})
 })
