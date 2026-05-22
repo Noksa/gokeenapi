@@ -16,6 +16,11 @@ keenetic:
   # Can be overridden with GOKEENAPI_KEENETIC_PASSWORD environment variable
   password: super-password
 
+  # Skip TLS certificate verification when connecting to the router over HTTPS.
+  # Enable this when the router uses a self-signed certificate (common with HTTPS on local routers).
+  # Default: false — certificate verification is enabled (secure)
+  # tls_skip_verify: true
+
 # Optional: Custom data directory for application files
 # Default: system-specific directory
 # Docker: automatically set to /etc/gokeenapi when GOKEENAPI_INSIDE_DOCKER is set
