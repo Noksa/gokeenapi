@@ -49,6 +49,10 @@ type Keenetic struct {
 	Login string `yaml:"login"`
 	// Password for router admin access (can be overridden by GOKEENAPI_KEENETIC_PASSWORD env var)
 	Password string `yaml:"password"`
+	// TLSSkipVerify disables TLS certificate verification when connecting to the router over HTTPS.
+	// Enable this when the router uses a self-signed certificate.
+	// Default: false (verification enabled, secure)
+	TLSSkipVerify bool `yaml:"tls_skip_verify,omitempty"`
 }
 
 // BatFileList represents the structure of a YAML file containing bat-file paths
