@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -227,6 +228,9 @@ func (c *keeneticCommon) Ping() error {
 	client.SetCookieJar(nil)
 	client.SetTimeout(time.Second * 5) // Short timeout for ping
 	client.SetBaseURL(config.Cfg.Keenetic.URL)
+	if config.Cfg.Keenetic.TLSSkipVerify {
+		client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec
+	}
 
 	response, err := client.R().Get("/rci/show/version")
 	if err != nil {
@@ -431,6 +435,9 @@ func (c *keeneticCommon) GetApiClient() (*resty.Client, error) {
 	})
 	// do it each time to have clean client
 	restyClient.SetBaseURL(config.Cfg.Keenetic.URL)
+	if config.Cfg.Keenetic.TLSSkipVerify {
+		restyClient.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec
+	}
 	if restyClient.Header.Get("Cookie") == "" {
 		cookie, err := c.getAuthCookie()
 		if err != nil {
