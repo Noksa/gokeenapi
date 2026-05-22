@@ -459,7 +459,7 @@ func (c *keeneticCommon) SaveConfigParseRequest() gokeenrestapimodels.ParseReque
 func (c *keeneticCommon) EnsureSaveConfigAtEnd(parseSlice []gokeenrestapimodels.ParseRequest) []gokeenrestapimodels.ParseRequest {
 	saveConfig := c.SaveConfigParseRequest()
 
-	filtered := parseSlice[:0]
+	filtered := make([]gokeenrestapimodels.ParseRequest, 0, len(parseSlice))
 	for _, req := range parseSlice {
 		if req.Parse != saveConfig.Parse {
 			filtered = append(filtered, req)
