@@ -1,6 +1,7 @@
 package gokeenrestapi
 
 import (
+	"net/http"
 	"net/http/httptest"
 
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
@@ -62,5 +63,19 @@ var _ = Describe("Ip", func() {
 
 	It("should delete DNS records", func() {
 		Expect(Ip.DeleteDnsRecords([]string{"example.com", "test.local"})).To(Succeed())
+	})
+
+	Describe("AddRoutesFromBatUrl", func() {
+		It("should return an error on non-200 response", func() {
+			for _, statusCode := range []int{http.StatusNotFound, http.StatusInternalServerError, http.StatusForbidden} {
+				batServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(statusCode)
+				}))
+				err := Ip.AddRoutesFromBatUrl(batServer.URL, "Wireguard0")
+				batServer.Close()
+				Expect(err).To(HaveOccurred(), "expected error for status %d", statusCode)
+				Expect(err.Error()).To(ContainSubstring("unexpected status code"))
+			}
+		})
 	})
 })
