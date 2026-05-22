@@ -14,7 +14,8 @@ import (
 func main() {
 	rootCmd := cmd.NewRootCmd()
 	ctx := context.Background()
-	cmdCtx, _ := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	cmdCtx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 	var err error
 	errChan := make(chan error)
 	go func() {
