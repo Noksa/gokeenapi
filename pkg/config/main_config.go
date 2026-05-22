@@ -2,6 +2,8 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -13,6 +15,9 @@ import (
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
 	"gopkg.in/yaml.v3"
 )
+
+// warnOutput is the destination for security warnings; replaced in tests.
+var warnOutput io.Writer = os.Stderr
 
 var (
 	Cfg = GokeenapiConfig{}
@@ -372,6 +377,16 @@ func LoadConfig(configPath string) error {
 		} else {
 			return errors.New("config path is empty. Specify it via --config flag or GOKEENAPI_CONFIG environment variable")
 		}
+	}
+	info, err := os.Stat(configPath)
+	if err != nil {
+		return err
+	}
+	if info.Mode().Perm()&0o004 != 0 {
+		_, _ = fmt.Fprintf(warnOutput, "WARNING: config file %q is world-readable (permissions %s). "+
+			"Use environment variables GOKEENAPI_KEENETIC_LOGIN and GOKEENAPI_KEENETIC_PASSWORD "+
+			"instead of storing credentials in the config file.\n",
+			configPath, info.Mode().Perm())
 	}
 	b, err := os.ReadFile(configPath)
 	if err != nil {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 
@@ -138,6 +139,54 @@ dns:
 			Expect(Cfg.Routes[0].BatURL).To(BeEmpty())
 			Expect(Cfg.Routes[1].BatFile).To(BeEmpty())
 			Expect(Cfg.Routes[1].BatURL).To(BeEmpty())
+		})
+	})
+
+	Context("permission warnings", func() {
+		var buf bytes.Buffer
+
+		BeforeEach(func() {
+			buf.Reset()
+			warnOutput = &buf
+			DeferCleanup(func() { warnOutput = os.Stderr })
+		})
+
+		It("should warn when config file is world-readable", func() {
+			tmpDir := GinkgoT().TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+			Expect(os.WriteFile(configPath, []byte(`keenetic:
+  url: "http://192.168.1.1"
+  login: "admin"
+  password: "password"`), 0o644)).To(Succeed())
+
+			Expect(LoadConfig(configPath)).To(Succeed())
+			Expect(buf.String()).To(ContainSubstring("WARNING"))
+			Expect(buf.String()).To(ContainSubstring("world-readable"))
+			Expect(buf.String()).To(ContainSubstring("GOKEENAPI_KEENETIC_PASSWORD"))
+		})
+
+		It("should not warn when config file is not world-readable", func() {
+			tmpDir := GinkgoT().TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+			Expect(os.WriteFile(configPath, []byte(`keenetic:
+  url: "http://192.168.1.1"
+  login: "admin"
+  password: "password"`), 0o600)).To(Succeed())
+
+			Expect(LoadConfig(configPath)).To(Succeed())
+			Expect(buf.String()).To(BeEmpty())
+		})
+
+		It("should not warn for group-readable but not world-readable (0640)", func() {
+			tmpDir := GinkgoT().TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+			Expect(os.WriteFile(configPath, []byte(`keenetic:
+  url: "http://192.168.1.1"
+  login: "admin"
+  password: "password"`), 0o640)).To(Succeed())
+
+			Expect(LoadConfig(configPath)).To(Succeed())
+			Expect(buf.String()).To(BeEmpty())
 		})
 	})
 })
