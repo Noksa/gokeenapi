@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -79,17 +80,25 @@ func (c *keeneticCommon) getKeeneticCacheFile() (keeneticCacheFile, error) {
 	cacheCleanMu.Unlock()
 	if needClean {
 		err = filepath.WalkDir(gokeenDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					return nil
+				}
+				return err
+			}
 			if d.IsDir() {
 				return nil
 			}
 			info, err := d.Info()
 			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					return nil
+				}
 				return err
 			}
 			if time.Since(info.ModTime()) >= cacheCleanupPeriod {
-				err = os.Remove(path)
-				if err != nil {
-					return err
+				if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+					return removeErr
 				}
 			}
 			return nil
@@ -219,6 +228,9 @@ func (c *keeneticCommon) Ping() error {
 	client.SetCookieJar(nil)
 	client.SetTimeout(time.Second * 5) // Short timeout for ping
 	client.SetBaseURL(config.Cfg.Keenetic.URL)
+	if config.Cfg.Keenetic.TLSSkipVerify {
+		client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec
+	}
 
 	response, err := client.R().Get("/rci/show/version")
 	if err != nil {
@@ -326,7 +338,10 @@ func (c *keeneticCommon) ExecutePostParse(parse ...gokeenrestapimodels.ParseRequ
 			}
 			var parseResponse []gokeenrestapimodels.ParseResponse
 			decodeErr := json.Unmarshal(response.Body(), &parseResponse)
-			mErr = multierr.Append(mErr, decodeErr)
+			if decodeErr != nil {
+				mErr = multierr.Append(mErr, decodeErr)
+				continue
+			}
 			for i, myParse := range parseResponse {
 				if i == 0 {
 					parseResponse[i].Parse.DynamicData = string(response.Body())
@@ -423,6 +438,9 @@ func (c *keeneticCommon) GetApiClient() (*resty.Client, error) {
 	})
 	// do it each time to have clean client
 	restyClient.SetBaseURL(config.Cfg.Keenetic.URL)
+	if config.Cfg.Keenetic.TLSSkipVerify {
+		restyClient.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec
+	}
 	if restyClient.Header.Get("Cookie") == "" {
 		cookie, err := c.getAuthCookie()
 		if err != nil {
