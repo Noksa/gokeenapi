@@ -113,6 +113,20 @@ All configuration options can be set via environment variables:
 
 > **Security recommendation**: Store credentials using environment variables instead of writing them directly into the config file. Config files stored with world-readable permissions (e.g. `0644`) will trigger a runtime warning. Restrict permissions with `chmod 600 config.yaml` and use `GOKEENAPI_KEENETIC_LOGIN` / `GOKEENAPI_KEENETIC_PASSWORD` to pass credentials. Add `config.yaml` and `config_*.yaml` to your `.gitignore` to prevent accidental commits (the project's default `.gitignore` already includes these patterns).
 
+### TLS Certificate Verification
+
+When connecting to a router over HTTPS with a self-signed certificate, set `tls_skip_verify: true` under the `keenetic` key:
+
+```yaml
+keenetic:
+  url: https://192.168.1.1
+  login: admin
+  password: secret
+  tls_skip_verify: true  # Disable TLS verification for self-signed certificates
+```
+
+> **Note**: Only use `tls_skip_verify` on trusted local networks. Disabling certificate verification exposes the connection to man-in-the-middle attacks.
+
 ---
 
 ## 📋 Config Reference
