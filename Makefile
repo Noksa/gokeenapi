@@ -4,27 +4,15 @@ ROOT_DIR = $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
 .DEFAULT_GOAL = help
 
-# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
-ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
-else
-GOBIN=$(shell go env GOBIN)
-endif
-
-GINKGO_BIN   := $(GOBIN)/ginkgo
 GINKGO_PROCS ?= 3
 GINKGO_FLAGS ?= --silence-skips --procs=$(GINKGO_PROCS) $(if $(RACE),--race --trace,)
 
-# Ginkgo test runner macro — auto-installs ginkgo if missing
+# Ginkgo test runner macro — uses go run so version always tracks go.mod
 # Usage: $(call run_ginkgo,./...)                  — run all tests
 #        $(call run_ginkgo,./...,MyPattern)        — run with focus
 #        $(call run_ginkgo,--cover ./...)           — run with extra flags
 define run_ginkgo
-	@if [ ! -f $(GINKGO_BIN) ]; then \
-		echo "-> installing ginkgo CLI..."; \
-		go install github.com/onsi/ginkgo/v2/ginkgo@latest; \
-	fi
-	@$(GINKGO_BIN) $(GINKGO_FLAGS) $(if $(2),--focus "$(2)",) $(1)
+	@go run github.com/onsi/ginkgo/v2/ginkgo $(GINKGO_FLAGS) $(if $(2),--focus "$(2)",) $(1)
 endef
 
 # Cyberpunk DevOps Theme - cache library locally for performance
