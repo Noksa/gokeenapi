@@ -140,6 +140,7 @@ type MockRouter struct {
 	initialState        MockRouterState // Store initial state for reset functionality
 	staticRunningConfig []string        // Optional static running config (overrides generated config)
 	version             string          // Router firmware version (default: "4.3.6.3")
+	rciBodyOverride     []byte          // Optional fixed response body for /rci/ endpoint
 }
 
 // MockRouterOption is a functional option for configuring the mock router
@@ -220,6 +221,14 @@ func WithDnsRoutingGroups(groups []MockDnsRoutingGroup, routes []MockDnsProxyRou
 func WithVersion(version string) MockRouterOption {
 	return func(m *MockRouter) {
 		m.version = version
+	}
+}
+
+// WithRciBody overrides the /rci/ POST endpoint to return a fixed raw body.
+// Useful for testing how callers handle malformed or unexpected responses.
+func WithRciBody(body []byte) MockRouterOption {
+	return func(m *MockRouter) {
+		m.rciBodyOverride = body
 	}
 }
 
@@ -895,6 +904,15 @@ func (m *MockRouter) handleHotspot(w http.ResponseWriter, r *http.Request) {
 func (m *MockRouter) handleParse(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	m.mu.RLock()
+	override := m.rciBodyOverride
+	m.mu.RUnlock()
+	if override != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(override)
 		return
 	}
 
