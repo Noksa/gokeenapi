@@ -429,8 +429,6 @@ func (c *keeneticCommon) GetApiClient() (*resty.Client, error) {
 	restyClient.SetBaseURL(config.Cfg.Keenetic.URL)
 	if config.Cfg.Keenetic.TLSSkipVerify {
 		restyClient.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec
-	} else {
-		restyClient.SetTLSClientConfig(&tls.Config{}) //nolint:gosec
 	}
 	if restyClient.Header.Get("Cookie") == "" {
 		cookie, err := c.getAuthCookie()
