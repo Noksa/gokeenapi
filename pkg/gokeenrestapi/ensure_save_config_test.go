@@ -70,6 +70,16 @@ var _ = Describe("EnsureSaveConfigAtEnd", func() {
 		}
 		Expect(saveCount).To(Equal(1))
 	})
+
+	It("does not mutate the original slice", func() {
+		input := makeReqs("ip route add", "interface up")
+		original := make([]gokeenrestapimodels.ParseRequest, len(input))
+		copy(original, input)
+
+		Common.EnsureSaveConfigAtEnd(input)
+
+		Expect(input).To(Equal(original))
+	})
 })
 
 var _ = Describe("SaveConfig", func() {
@@ -77,6 +87,9 @@ var _ = Describe("SaveConfig", func() {
 		CleanupTestConfig()
 		restyClient = nil
 		restyClientOnce = sync.Once{}
+		cachedCookieMu.Lock()
+		cachedCookie = ""
+		cachedCookieMu.Unlock()
 	})
 
 	It("executes the save config command against the router", func() {

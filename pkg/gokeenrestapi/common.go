@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -36,6 +37,14 @@ const (
 var (
 	restyClient     *resty.Client
 	restyClientOnce sync.Once
+	restyClientMu   sync.Mutex // serialises concurrent re-authentication
+
+	// cachedCookie mirrors the on-disk auth cookie in memory so that concurrent
+	// requests can read it without hitting the filesystem on every call.
+	// cachedCookieMu also serialises the first-time cache-file initialisation to
+	// prevent concurrent goroutines from racing on file creation.
+	cachedCookieMu sync.Mutex
+	cachedCookie   string
 
 	cacheCleanMu    sync.Mutex
 	cleanedOldCache bool
@@ -79,17 +88,25 @@ func (c *keeneticCommon) getKeeneticCacheFile() (keeneticCacheFile, error) {
 	cacheCleanMu.Unlock()
 	if needClean {
 		err = filepath.WalkDir(gokeenDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					return nil
+				}
+				return err
+			}
 			if d.IsDir() {
 				return nil
 			}
 			info, err := d.Info()
 			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					return nil
+				}
 				return err
 			}
 			if time.Since(info.ModTime()) >= cacheCleanupPeriod {
-				err = os.Remove(path)
-				if err != nil {
-					return err
+				if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+					return removeErr
 				}
 			}
 			return nil
@@ -125,9 +142,22 @@ func (c *keeneticCommon) getKeeneticCacheFile() (keeneticCacheFile, error) {
 }
 
 func (c *keeneticCommon) getAuthCookie() (string, error) {
+	// Serialize all cookie reads/writes so concurrent first-time initialisation
+	// does not race on cache-file creation.
+	cachedCookieMu.Lock()
+	defer cachedCookieMu.Unlock()
+
+	if cachedCookie != "" {
+		return cachedCookie, nil
+	}
+
 	cache, err := c.getKeeneticCacheFile()
 	if err != nil {
 		return "", err
+	}
+
+	if cookie := cache.Cookie.Value; cookie != "" {
+		cachedCookie = cookie
 	}
 	return cache.Cookie.Value, nil
 }
@@ -139,7 +169,13 @@ func (c *keeneticCommon) writeAuthCookie(cookie string) error {
 	}
 	cache.Cookie.Value = cookie
 	cache.Cookie.UpdateTime = time.Now()
-	return cache.Save()
+	if err := cache.Save(); err != nil {
+		return err
+	}
+	cachedCookieMu.Lock()
+	cachedCookie = cookie
+	cachedCookieMu.Unlock()
+	return nil
 }
 
 // performAuth handles the actual authentication process with a specific client
@@ -188,8 +224,8 @@ func (c *keeneticCommon) performAuth(client *resty.Client) error {
 			Password: sha256HashStr,
 		})
 
-		// set cookie globally
-		client.Header.Set("Cookie", cookieToSet)
+		// Set the cookie on this request only; the shared client cookie is
+		// refreshed via OnBeforeRequest in GetApiClient to avoid races.
 		secondRequest.Header.Set("Cookie", cookieToSet)
 
 		response, err = secondRequest.Post("/auth")
@@ -219,6 +255,9 @@ func (c *keeneticCommon) Ping() error {
 	client.SetCookieJar(nil)
 	client.SetTimeout(time.Second * 5) // Short timeout for ping
 	client.SetBaseURL(config.Cfg.Keenetic.URL)
+	if config.Cfg.Keenetic.TLSSkipVerify {
+		client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec
+	}
 
 	response, err := client.R().Get("/rci/show/version")
 	if err != nil {
@@ -326,7 +365,10 @@ func (c *keeneticCommon) ExecutePostParse(parse ...gokeenrestapimodels.ParseRequ
 			}
 			var parseResponse []gokeenrestapimodels.ParseResponse
 			decodeErr := json.Unmarshal(response.Body(), &parseResponse)
-			mErr = multierr.Append(mErr, decodeErr)
+			if decodeErr != nil {
+				mErr = multierr.Append(mErr, decodeErr)
+				continue
+			}
 			for i, myParse := range parseResponse {
 				if i == 0 {
 					parseResponse[i].Parse.DynamicData = string(response.Body())
@@ -388,17 +430,25 @@ func (c *keeneticCommon) authRetryMiddleware(client *resty.Client, resp *resty.R
 			return nil
 		}
 
-		// Clear the current cookie and perform direct authentication
-		client.Header.Del("Cookie")
+		restyClientMu.Lock()
+		authErr := c.performAuth(client)
+		restyClientMu.Unlock()
+		if authErr != nil {
+			return authErr
+		}
 
-		if err := c.performAuth(client); err != nil {
+		// Read the fresh cookie from the cache so the retry carries it.
+		cookie, err := c.getAuthCookie()
+		if err != nil {
 			return err
 		}
 
 		// Retry the original request with new authentication, marking it as already retried.
 		retryReq := resp.Request.SetContext(context.WithValue(resp.Request.Context(), authRetriedKey{}, true))
 		retryReq.Header.Del("Cookie")
-		retryReq.Header.Set("Cookie", client.Header.Get("Cookie"))
+		if cookie != "" {
+			retryReq.Header.Set("Cookie", cookie)
+		}
 
 		retryResp, err := retryReq.Execute(resp.Request.Method, resp.Request.URL)
 		if err != nil {
@@ -418,20 +468,28 @@ func (c *keeneticCommon) GetApiClient() (*resty.Client, error) {
 		restyClient.SetDisableWarn(true)
 		restyClient.SetCookieJar(nil)
 		restyClient.SetTimeout(defaultTimeout)
+		restyClient.SetBaseURL(config.Cfg.Keenetic.URL)
+		// Inject the auth cookie per-request so concurrent callers never race on
+		// the shared client.Header map.
+		restyClient.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
+			if req.Header.Get("Cookie") != "" {
+				return nil
+			}
+			cookie, err := c.getAuthCookie()
+			if err != nil {
+				return err
+			}
+			if cookie != "" {
+				req.Header.Set("Cookie", cookie)
+			}
+			return nil
+		})
 		restyClient.OnAfterResponse(c.authRetryMiddleware)
 		restyClient.RetryCount = 3
+		if config.Cfg.Keenetic.TLSSkipVerify {
+			restyClient.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec
+		}
 	})
-	// do it each time to have clean client
-	restyClient.SetBaseURL(config.Cfg.Keenetic.URL)
-	if restyClient.Header.Get("Cookie") == "" {
-		cookie, err := c.getAuthCookie()
-		if err != nil {
-			return nil, err
-		}
-		if cookie != "" {
-			restyClient.Header.Set("Cookie", cookie)
-		}
-	}
 	return restyClient, nil
 }
 
@@ -459,7 +517,7 @@ func (c *keeneticCommon) SaveConfigParseRequest() gokeenrestapimodels.ParseReque
 func (c *keeneticCommon) EnsureSaveConfigAtEnd(parseSlice []gokeenrestapimodels.ParseRequest) []gokeenrestapimodels.ParseRequest {
 	saveConfig := c.SaveConfigParseRequest()
 
-	filtered := parseSlice[:0]
+	filtered := make([]gokeenrestapimodels.ParseRequest, 0, len(parseSlice))
 	for _, req := range parseSlice {
 		if req.Parse != saveConfig.Parse {
 			filtered = append(filtered, req)
