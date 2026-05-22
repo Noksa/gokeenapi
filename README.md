@@ -177,6 +177,8 @@ All configuration options can be set via environment variables:
 
 `GOKEENAPI_KEENETIC_LOGIN` and `GOKEENAPI_KEENETIC_PASSWORD` are particularly useful for keeping sensitive credentials out of config files. `GOKEENAPI_INSIDE_DOCKER` is set automatically in the official Docker image.
 
+> **Security recommendation**: Store credentials using environment variables instead of writing them directly into the config file. Config files stored with world-readable permissions (e.g. `0644`) will trigger a runtime warning. Restrict permissions with `chmod 600 config.yaml` and use `GOKEENAPI_KEENETIC_LOGIN` / `GOKEENAPI_KEENETIC_PASSWORD` to pass credentials. Add `config.yaml` and `config_*.yaml` to your `.gitignore` to prevent accidental commits (the project's default `.gitignore` already includes these patterns).
+
 ---
 
 ## 🔧 Supported Routers
