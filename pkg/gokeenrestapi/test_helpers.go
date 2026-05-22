@@ -30,6 +30,9 @@ func SetupTestConfig(serverURL string) {
 	// Reset client and its Once guard so the next call re-initializes with the new config.
 	restyClient = nil
 	restyClientOnce = sync.Once{}
+	cachedCookieMu.Lock()
+	cachedCookie = ""
+	cachedCookieMu.Unlock()
 }
 
 // CleanupTestConfig removes the temporary test cache directory

@@ -74,9 +74,12 @@ var _ = Describe("GetApiClient", func() {
 		restyClient = nil
 		restyClientOnce = sync.Once{}
 		cleanedOldCache = false
+		cachedCookieMu.Lock()
+		cachedCookie = ""
+		cachedCookieMu.Unlock()
 	})
 
-	It("should return error instead of panicking when auth cache directory is unreadable", func() {
+	It("should surface auth cache error on request when DataDir is unreadable", func() {
 		// Set up a DataDir that exists but has no read permission so getAuthCookie fails
 		tmpDir, err := os.MkdirTemp("", "gokeenapi-test-noperm-*")
 		Expect(err).NotTo(HaveOccurred())
@@ -93,10 +96,40 @@ var _ = Describe("GetApiClient", func() {
 		restyClient = nil
 		restyClientOnce = sync.Once{}
 		cleanedOldCache = false
+		cachedCookieMu.Lock()
+		cachedCookie = ""
+		cachedCookieMu.Unlock()
 
+		// GetApiClient itself no longer fails; the error surfaces on the first request
+		// because cookie injection runs in OnBeforeRequest.
 		client, getErr := Common.GetApiClient()
-		Expect(getErr).To(HaveOccurred())
-		Expect(client).To(BeNil())
+		Expect(getErr).NotTo(HaveOccurred())
+		Expect(client).NotTo(BeNil())
+
+		_, reqErr := Common.ExecuteGetSubPath("/rci/show/version")
+		Expect(reqErr).To(HaveOccurred())
+	})
+
+	It("should be safe for concurrent use", func() {
+		server := SetupMockRouterForTest()
+		DeferCleanup(server.Close)
+
+		const goroutines = 20
+		errs := make(chan error, goroutines)
+		var wg sync.WaitGroup
+		wg.Add(goroutines)
+		for range goroutines {
+			go func() {
+				defer wg.Done()
+				_, err := Common.Version()
+				errs <- err
+			}()
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			Expect(err).NotTo(HaveOccurred())
+		}
 	})
 })
 
