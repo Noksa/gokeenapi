@@ -87,6 +87,9 @@ var _ = Describe("SaveConfig", func() {
 		CleanupTestConfig()
 		restyClient = nil
 		restyClientOnce = sync.Once{}
+		cachedCookieMu.Lock()
+		cachedCookie = ""
+		cachedCookieMu.Unlock()
 	})
 
 	It("executes the save config command against the router", func() {
