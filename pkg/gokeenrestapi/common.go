@@ -338,7 +338,10 @@ func (c *keeneticCommon) ExecutePostParse(parse ...gokeenrestapimodels.ParseRequ
 			}
 			var parseResponse []gokeenrestapimodels.ParseResponse
 			decodeErr := json.Unmarshal(response.Body(), &parseResponse)
-			mErr = multierr.Append(mErr, decodeErr)
+			if decodeErr != nil {
+				mErr = multierr.Append(mErr, decodeErr)
+				continue
+			}
 			for i, myParse := range parseResponse {
 				if i == 0 {
 					parseResponse[i].Parse.DynamicData = string(response.Body())

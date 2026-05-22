@@ -6,9 +6,29 @@ import (
 	"time"
 
 	"github.com/noksa/gokeenapi/pkg/config"
+	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+var _ = Describe("ExecutePostParse", func() {
+	AfterEach(func() {
+		CleanupTestConfig()
+	})
+
+	It("should skip batch and return error when response body is not valid JSON", func() {
+		server := SetupMockRouterForTest(WithRciBody([]byte("not valid json")))
+		DeferCleanup(server.Close)
+
+		responses, err := Common.ExecutePostParse(
+			gokeenrestapimodels.ParseRequest{Parse: "interface Wireguard0 up"},
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("invalid"))
+		// No partial results should leak through on unmarshal failure
+		Expect(responses).To(BeEmpty())
+	})
+})
 
 var _ = Describe("CheckRouterMode", func() {
 	AfterEach(func() {
