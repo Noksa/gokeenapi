@@ -16,7 +16,9 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	// Mark child processes so they exit fast instead of re-running the test suite.
-	os.Setenv("GOKEENAPI_TEST_SUBPROCESS", "1")
+	if err := os.Setenv("GOKEENAPI_TEST_SUBPROCESS", "1"); err != nil {
+		panic("failed to set GOKEENAPI_TEST_SUBPROCESS: " + err.Error())
+	}
 	os.Exit(m.Run())
 }
 
