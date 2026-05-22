@@ -268,7 +268,13 @@ func (*keeneticIp) AddRoutesFromBatUrl(url string, interfaceId string) error {
 		var response *resty.Response
 		err = gokeenspinner.WrapWithSpinner(fmt.Sprintf("Fetching %v url", color.CyanString(url)), func() error {
 			response, err = rClient.R().Get(url)
-			return err
+			if err != nil {
+				return err
+			}
+			if response.StatusCode() != 200 {
+				return fmt.Errorf("unexpected status code %d", response.StatusCode())
+			}
+			return nil
 		})
 		if err != nil {
 			return err

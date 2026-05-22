@@ -79,17 +79,25 @@ func (c *keeneticCommon) getKeeneticCacheFile() (keeneticCacheFile, error) {
 	cacheCleanMu.Unlock()
 	if needClean {
 		err = filepath.WalkDir(gokeenDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					return nil
+				}
+				return err
+			}
 			if d.IsDir() {
 				return nil
 			}
 			info, err := d.Info()
 			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					return nil
+				}
 				return err
 			}
 			if time.Since(info.ModTime()) >= cacheCleanupPeriod {
-				err = os.Remove(path)
-				if err != nil {
-					return err
+				if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+					return removeErr
 				}
 			}
 			return nil
@@ -326,7 +334,10 @@ func (c *keeneticCommon) ExecutePostParse(parse ...gokeenrestapimodels.ParseRequ
 			}
 			var parseResponse []gokeenrestapimodels.ParseResponse
 			decodeErr := json.Unmarshal(response.Body(), &parseResponse)
-			mErr = multierr.Append(mErr, decodeErr)
+			if decodeErr != nil {
+				mErr = multierr.Append(mErr, decodeErr)
+				continue
+			}
 			for i, myParse := range parseResponse {
 				if i == 0 {
 					parseResponse[i].Parse.DynamicData = string(response.Body())
