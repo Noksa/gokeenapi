@@ -2,6 +2,8 @@
 
 The scheduler is a powerful feature that allows you to automate router management by running tasks at specified intervals or fixed times. Perfect for keeping routes and DNS records up-to-date automatically without manual intervention.
 
+[🇷🇺 Русская версия](SCHEDULER_RU.md)
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -13,6 +15,7 @@ The scheduler is a powerful feature that allows you to automate router managemen
 - [Task Queue](#task-queue)
 - [Examples](#examples)
 - [Tips](#tips)
+- [Running as a Service](#running-as-a-service)
 
 ---
 
@@ -88,6 +91,7 @@ tasks:
 
 ```bash
 ./gokeenapi scheduler --config scheduler.yaml
+# Aliases: schedule, sched
 ```
 
 ### 3. Monitor Execution

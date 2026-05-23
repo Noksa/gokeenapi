@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="logo.png" alt="gokeenapi logo" width="512">
+
 # 🚀 gokeenapi
 
 **Автоматизируйте управление роутером Keenetic (Netcraze) с легкостью**
@@ -14,7 +16,13 @@
 
 *Устали кликать по веб-интерфейсу Keenetic (Netcraze)? Автоматизируйте управление роутером с помощью простых CLI команд.*
 
-[🚀 Быстрый старт](#-быстрый-старт) • [📖 Документация](#-команды) • [🎨 GUI версия](https://github.com/Noksa/gokeenapiui) • [🤝 Участие в разработке](#-участие-в-разработке)
+<div align="center">
+
+### [🇬🇧 **English documentation** 🇬🇧](README.md)
+
+</div>
+
+[🚀 Быстрый старт](#-быстрый-старт) • [📖 Документация](#-команды) • [📋 Справочник конфигурации](docs/config-reference-ru.md) • [🎨 GUI версия](https://github.com/Noksa/gokeenapiui) • [🤝 Участие в разработке](#-участие-в-разработке)
 
 </div>
 
@@ -93,7 +101,7 @@ docker run --rm -ti -v "$(pwd)/config_example.yaml":/gokeenapi/config.yaml \
 
 ## ⚙️ Конфигурация
 
-`gokeenapi` настраивается с помощью `yaml` файла. Пример можно найти [здесь](https://github.com/Noksa/gokeenapi/blob/main/config_example.yaml).
+`gokeenapi` настраивается с помощью `yaml` файла. Пример можно найти [здесь](https://github.com/Noksa/gokeenapi/blob/main/config_example.yaml). Полное описание каждого поля смотрите в [Справочнике конфигурации](docs/config-reference-ru.md).
 
 Чтобы использовать ваш конфигурационный файл, передайте флаг `--config <путь>` с вашей командой.
 
@@ -170,6 +178,14 @@ bat-url:
 `GOKEENAPI_KEENETIC_LOGIN` и `GOKEENAPI_KEENETIC_PASSWORD` позволяют не хранить чувствительные данные в конфигурационном файле. `GOKEENAPI_INSIDE_DOCKER` задаётся автоматически в официальном Docker-образе.
 
 > **Рекомендация по безопасности**: Храните учётные данные в переменных окружения вместо того, чтобы записывать их непосредственно в конфигурационный файл. Конфигурационные файлы с правами доступа для всех на чтение (например, `0644`) вызовут предупреждение в процессе работы. Ограничьте права доступа командой `chmod 600 config.yaml` и используйте `GOKEENAPI_KEENETIC_LOGIN` / `GOKEENAPI_KEENETIC_PASSWORD` для передачи учётных данных. Добавьте `config.yaml` и `config_*.yaml` в `.gitignore`, чтобы предотвратить случайные коммиты (стандартный `.gitignore` проекта уже содержит эти шаблоны).
+
+---
+
+## 📋 Справочник конфигурации
+
+Полный справочник по всем полям файла `config.yaml` смотрите в **[docs/config-reference-ru.md](docs/config-reference-ru.md)**.
+
+Смотрите также [config_example.yaml](config_example.yaml) для полностью аннотированного примера.
 
 ---
 
