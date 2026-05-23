@@ -14,7 +14,6 @@ The scheduler is a powerful feature that allows you to automate router managemen
 - [Retry Mechanism](#retry-mechanism)
 - [Task Queue](#task-queue)
 - [Examples](#examples)
-- [Tips](#tips)
 - [Running as a Service](#running-as-a-service)
 
 ---
@@ -237,6 +236,8 @@ Run tasks periodically at fixed intervals:
 - Subsequent executions occur at the specified interval
 - Timer resets after each execution completes
 
+> **Choosing an interval:** Too frequent wastes resources and may overwhelm the router; too infrequent leaves data stale. Starting with 3–6 hours and adjusting based on observed needs is a good default.
+
 ### Time-Based Execution
 
 Run tasks at specific times of day:
@@ -258,6 +259,8 @@ Run tasks at specific times of day:
 - If all times have passed today, waits until earliest time tomorrow
 - Uses 24-hour format (HH:MM)
 - Automatically handles timezone
+
+> **Tip:** Schedule maintenance tasks during off-peak hours (e.g., `"02:00"`) to minimize impact on active users.
 
 ---
 
@@ -285,6 +288,8 @@ The retry mechanism helps handle transient failures like network issues or route
 3. **Retry Attempts**: Continue up to `retry` times
 4. **Success**: Stop retrying on first success
 5. **Final Failure**: After all attempts exhausted, task fails
+
+> **Retry guidance:** Enable retry for network-dependent operations. A `retryDelay` of 30s–2m and no more than 3–5 attempts is usually appropriate. Test individual commands manually before scheduling to catch configuration errors early (`./gokeenapi add-routes --config router.yaml`).
 
 ### Example Output
 
@@ -329,12 +334,13 @@ Execution order: Task 1 → Task 2 → Task 3
 
 ## Examples
 
-### Example 1: Simple Periodic Update
+### Example 1: Simple Periodic or Time-Based Update
 
-Update routes (without deleting old) every 3 hours on multiple routers:
+Run a command on multiple routers using either an interval or fixed times:
 
 ```yaml
 tasks:
+  # Variant A: interval-based — executes immediately, then every 3 hours
   - name: "Update routes every 3 hours"
     commands:
       - add-routes
@@ -343,6 +349,18 @@ tasks:
       - /path/to/router2.yaml
       - /path/to/router3.yaml
     interval: "3h"
+
+  # Variant B: time-based — executes at 06:00, 12:00, 18:00, and 23:00 each day
+  - name: "DNS updates at fixed times"
+    commands:
+      - add-dns-records
+    configs:
+      - /path/to/router.yaml
+    times:
+      - "06:00"
+      - "12:00"
+      - "18:00"
+      - "23:00"
 ```
 
 ### Example 2: Daily Maintenance with Retry
@@ -363,25 +381,7 @@ tasks:
     retryDelay: "1m"
 ```
 
-### Example 3: Multiple Time Windows
-
-Update DNS at multiple times throughout the day:
-
-```yaml
-tasks:
-  - name: "DNS updates"
-    commands:
-      - add-dns-records
-    configs:
-      - /path/to/router.yaml
-    times:
-      - "06:00"
-      - "12:00"
-      - "18:00"
-      - "23:00"
-```
-
-### Example 4: Parallel Execution for Multiple Routers
+### Example 3: Parallel Execution for Multiple Routers
 
 Execute commands simultaneously on all routers for faster completion:
 
@@ -401,7 +401,7 @@ tasks:
     retryDelay: "30s"
 ```
 
-### Example 5: Complex Multi-Router Setup
+### Example 4: Complex Multi-Router Setup
 
 ```yaml
 tasks:
@@ -424,38 +424,6 @@ tasks:
       - /path/to/secondary1.yaml
       - /path/to/secondary2.yaml
     interval: "6h"
-```
-
----
-
-## Tips
-
-### 1. Choose Appropriate Intervals
-
-- **Too frequent**: Wastes resources, may overwhelm router
-- **Too infrequent**: Data may become stale
-- **Recommended**: Start with 3-6 hours, adjust based on needs
-
-### 2. Use Retry Wisely
-
-- Enable retry for network-dependent operations
-- Set reasonable `retryDelay` (30s - 2m)
-- Don't exceed 3-5 retry attempts
-
-### 3. Schedule Maintenance During Off-Peak
-
-```yaml
-times:
-  - "02:00"  # Low traffic time
-```
-
-### 4. Test Configuration First
-
-```bash
-# Test individual commands before scheduling
-./gokeenapi add-routes --config router.yaml
-
-# Then add to scheduler
 ```
 
 ---
