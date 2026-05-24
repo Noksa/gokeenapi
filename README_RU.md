@@ -309,6 +309,8 @@ tasks:
 ./gokeenapi delete-routes --config my_config.yaml --force
 ```
 
+> **Совет:** Чтобы найти ID интерфейсов, выполните команду `show-interfaces`.
+
 #### `add-dns-records`
 
 *Псевдонимы: `adddnsrecords`, `adr`*
@@ -434,6 +436,8 @@ dns:
 ```shell
 ./gokeenapi update-awg --config my_config.yaml --conf-file <путь-к-conf> --interface-id <interface-id>
 ```
+
+> **Совет:** Чтобы найти ID интерфейсов, выполните команду `show-interfaces`.
 
 #### `delete-known-hosts`
 
