@@ -105,16 +105,18 @@ Download the latest release for your platform:
 
 To use your configuration file, pass the `--config <path>` flag with your command.
 
-### Reusable Bat-File Lists
+### Reusable Bat-File and Bat-URL Lists
 
-When managing multiple routers with the same routing configuration, you can create a YAML file containing a list of bat-file paths and reference it across multiple configs:
+When managing multiple routers with the same routing configuration, you can create a shared YAML file containing `bat-file` paths, `bat-url` paths, or both, and reference it across multiple configs.
 
-**batfiles/common-routes.yaml:**
+**batfiles/common.yaml:**
 ```yaml
 bat-file:
   - /path/to/discord.bat
   - /path/to/youtube.bat
-  - /path/to/instagram.bat
+bat-url:
+  - https://example.com/instagram.bat
+  - https://example.com/extra.bat
 ```
 
 **Router config:**
@@ -122,47 +124,14 @@ bat-file:
 routes:
   - interfaceId: Wireguard0
     bat-file:
-      - batfiles/common-routes.yaml  # Automatically expanded
-      - /path/to/router-specific.bat # Can mix with regular files
-```
-
-The tool automatically detects `.yaml`/`.yml` files in the `bat-file` array and expands them to their contained bat-file paths. Relative paths in YAML list files are resolved relative to the YAML file's directory.
-
-### Reusable Bat-URL Lists
-
-Similar to bat-file lists, you can create reusable YAML files containing bat-url paths:
-
-**batfiles/common-urls.yaml:**
-```yaml
-bat-url:
-  - https://example.com/discord.bat
-  - https://example.com/youtube.bat
-  - https://example.com/instagram.bat
-```
-
-**Router config:**
-```yaml
-routes:
-  - interfaceId: Wireguard0
+      - batfiles/common.yaml         # Expanded: only bat-file entries are used
+      - /path/to/router-specific.bat # Can mix with regular paths
     bat-url:
-      - batfiles/common-urls.yaml    # Automatically expanded
-      - https://example.com/extra.bat # Can mix with regular URLs
+      - batfiles/common.yaml         # Expanded: only bat-url entries are used
+      - https://example.com/other.bat
 ```
 
-The tool automatically detects `.yaml`/`.yml` files in the `bat-url` array and expands them to their contained bat-url paths. Relative paths in YAML list files are resolved relative to the YAML file's directory.
-
-**Note:** You can combine both `bat-file` and `bat-url` in the same YAML file. When a YAML file is referenced in `bat-file`, only its `bat-file` list is expanded. When referenced in `bat-url`, only its `bat-url` list is expanded:
-
-```yaml
-bat-file:
-  - /path/to/file1.bat
-  - /path/to/file2.bat
-bat-url:
-  - https://example.com/url1.bat
-  - https://example.com/url2.bat
-```
-
-This allows you to maintain both local files and remote URLs in a single reusable YAML file, referencing it appropriately in your config.
+The tool automatically detects `.yaml`/`.yml` files in the `bat-file` and `bat-url` arrays and expands them to their respective list entries. When a YAML file is referenced in `bat-file`, only its `bat-file` list is used; when referenced in `bat-url`, only its `bat-url` list is used. Relative paths in YAML list files are resolved relative to the YAML file's directory.
 
 ### Environment Variables
 
