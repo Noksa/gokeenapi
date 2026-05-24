@@ -309,6 +309,8 @@ Deletes static routes for a specific interface.
 ./gokeenapi delete-routes --config my_config.yaml --force
 ```
 
+> **Tip:** To find interface IDs, run `show-interfaces`.
+
 #### `add-dns-records`
 
 *Aliases: `adddnsrecords`, `adr`*
@@ -434,6 +436,8 @@ Updates an existing WireGuard connection from a `.conf` file.
 ```shell
 ./gokeenapi update-awg --config my_config.yaml --conf-file <path-to-conf> --interface-id <interface-id>
 ```
+
+> **Tip:** To find interface IDs, run `show-interfaces`.
 
 #### `delete-known-hosts`
 
