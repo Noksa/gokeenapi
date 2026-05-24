@@ -105,16 +105,18 @@ docker run --rm -ti -v "$(pwd)/config_example.yaml":/gokeenapi/config.yaml \
 
 Чтобы использовать ваш конфигурационный файл, передайте флаг `--config <путь>` с вашей командой.
 
-### Переиспользуемые списки Bat-файлов
+### Переиспользуемые списки Bat-файлов и Bat-URL
 
-При управлении несколькими роутерами с одинаковой конфигурацией маршрутизации, вы можете создать YAML файл со списком путей к bat-файлам и ссылаться на него в разных конфигах:
+При управлении несколькими роутерами с одинаковой конфигурацией маршрутизации, вы можете создать общий YAML файл с путями к `bat-file`, путями к `bat-url` или и теми и другими, и ссылаться на него в разных конфигах.
 
-**batfiles/common-routes.yaml:**
+**batfiles/common.yaml:**
 ```yaml
 bat-file:
   - /path/to/discord.bat
   - /path/to/youtube.bat
-  - /path/to/instagram.bat
+bat-url:
+  - https://example.com/instagram.bat
+  - https://example.com/extra.bat
 ```
 
 **Конфиг роутера:**
@@ -122,47 +124,14 @@ bat-file:
 routes:
   - interfaceId: Wireguard0
     bat-file:
-      - batfiles/common-routes.yaml  # Автоматически раскрывается
-      - /path/to/router-specific.bat # Можно смешивать с обычными файлами
-```
-
-Утилита автоматически определяет `.yaml`/`.yml` файлы в массиве `bat-file` и раскрывает их в содержащиеся в них пути к bat-файлам. Относительные пути в YAML-файлах списков разрешаются относительно директории YAML-файла.
-
-### Переиспользуемые списки Bat-URL
-
-Аналогично спискам bat-файлов, вы можете создавать переиспользуемые YAML файлы со списком bat-url путей:
-
-**batfiles/common-urls.yaml:**
-```yaml
-bat-url:
-  - https://example.com/discord.bat
-  - https://example.com/youtube.bat
-  - https://example.com/instagram.bat
-```
-
-**Конфиг роутера:**
-```yaml
-routes:
-  - interfaceId: Wireguard0
+      - batfiles/common.yaml         # Раскрывается: используются только bat-file записи
+      - /path/to/router-specific.bat # Можно смешивать с обычными путями
     bat-url:
-      - batfiles/common-urls.yaml    # Автоматически раскрывается
-      - https://example.com/extra.bat # Можно смешивать с обычными URL
+      - batfiles/common.yaml         # Раскрывается: используются только bat-url записи
+      - https://example.com/other.bat
 ```
 
-Утилита автоматически определяет `.yaml`/`.yml` файлы в массиве `bat-url` и раскрывает их в содержащиеся в них пути к bat-url. Относительные пути в YAML-файлах списков разрешаются относительно директории YAML-файла.
-
-**Примечание:** Вы можете объединить `bat-file` и `bat-url` в одном YAML файле. Когда YAML файл указан в `bat-file`, раскрывается только его список `bat-file`. Когда указан в `bat-url`, раскрывается только его список `bat-url`:
-
-```yaml
-bat-file:
-  - /path/to/file1.bat
-  - /path/to/file2.bat
-bat-url:
-  - https://example.com/url1.bat
-  - https://example.com/url2.bat
-```
-
-Это позволяет хранить локальные файлы и удалённые URL в одном переиспользуемом YAML файле, ссылаясь на него соответствующим образом в конфигурации.
+Утилита автоматически определяет `.yaml`/`.yml` файлы в массивах `bat-file` и `bat-url` и раскрывает их в соответствующие записи списка. Когда YAML файл указан в `bat-file`, используется только его список `bat-file`; когда указан в `bat-url`, используется только его список `bat-url`. Относительные пути в YAML-файлах списков разрешаются относительно директории YAML-файла.
 
 ### Переменные окружения
 
