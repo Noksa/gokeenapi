@@ -28,44 +28,9 @@
 
 ---
 
-## ✨ Why Choose gokeenapi?
+## ✨ About
 
-<table>
-<tr>
-<td width="50%">
-
-### 💻 **Automate Everything**
-Manage routes, DNS records, DNS-routing, WireGuard connections, and known hosts with simple commands
-
-### ⚙️ **Zero Router Setup**
-No complex configuration needed on your router - just provide the address
-
-</td>
-<td width="50%">
-
-### 🌐 **Works Anywhere**
-LAN or Internet access via KeenDNS - your choice
-
-### 🎯 **Precise Control**
-Delete static routes for specific interfaces without affecting others
-
-</td>
-</tr>
-</table>
-
----
-
-## 🎨 Prefer a GUI?
-
-Not a command-line person? We've got you covered! Check out our user-friendly GUI version:
-
-<div align="center">
-
-### [🎨 **GUI Version Available** 🚀](https://github.com/Noksa/gokeenapiui)
-
-[![GUI Version](https://img.shields.io/badge/🎨_Try_GUI_Version-Click_Here-brightgreen?style=for-the-badge&logo=github)](https://github.com/Noksa/gokeenapiui)
-
-</div>
+`gokeenapi` is a CLI tool for automating Keenetic (Netcraze) router management. It handles routes, DNS records, DNS-routing, WireGuard connections, known hosts, and scheduled tasks — all via a YAML config file, with no changes required on the router side. Works over LAN or remotely via KeenDNS.
 
 ---
 
