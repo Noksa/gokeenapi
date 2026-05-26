@@ -17,9 +17,10 @@ func main() {
 	cmdCtx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	var err error
-	errChan := make(chan error)
+	errChan := make(chan error, 1)
 	go func() {
 		errChan <- rootCmd.ExecuteContext(cmdCtx)
+		close(errChan)
 	}()
 	select {
 	case err = <-errChan:

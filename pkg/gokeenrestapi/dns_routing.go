@@ -8,10 +8,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/fatih/color"
-	"github.com/go-resty/resty/v2"
 	"github.com/hashicorp/go-version"
 	"github.com/noksa/gokeenapi/internal/gokeencache"
 	"github.com/noksa/gokeenapi/internal/gokeenlog"
@@ -261,9 +259,7 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 	// Get previous checksum to detect changes
 	previousChecksum := gokeencache.GetURLChecksum(url)
 
-	rClient := resty.New()
-	rClient.SetDisableWarn(true)
-	rClient.SetTimeout(time.Second * 5)
+	rClient := GetURLClient() // shared client (see GetURLClient in common.go) - avoids per-call resty.New, honors TLS skip-verify
 
 	var domains []string
 	var skipped int

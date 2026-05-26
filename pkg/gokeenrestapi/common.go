@@ -39,6 +39,9 @@ var (
 	restyClientOnce sync.Once
 	restyClientMu   sync.Mutex // serialises concurrent re-authentication
 
+	urlClient     *resty.Client
+	urlClientOnce sync.Once
+
 	// cachedCookie mirrors the on-disk auth cookie in memory so that concurrent
 	// requests can read it without hitting the filesystem on every call.
 	// cachedCookieMu also serialises the first-time cache-file initialisation to
@@ -248,8 +251,14 @@ func (c *keeneticCommon) performAuth(client *resty.Client) error {
 }
 
 // Ping checks if the router is reachable by attempting a simple GET request
-// This is faster than waiting for authentication to timeout
+// This is faster than waiting for authentication to timeout.
+// For context-aware version use PingContext.
 func (c *keeneticCommon) Ping() error {
+	return c.PingContext(context.Background())
+}
+
+// PingContext is the context-aware variant of Ping.
+func (c *keeneticCommon) PingContext(ctx context.Context) error {
 	client := resty.New()
 	client.SetDisableWarn(true)
 	client.SetCookieJar(nil)
@@ -259,7 +268,7 @@ func (c *keeneticCommon) Ping() error {
 		client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec
 	}
 
-	response, err := client.R().Get("/rci/show/version")
+	response, err := client.R().SetContext(ctx).Get("/rci/show/version")
 	if err != nil {
 		return fmt.Errorf("router is not reachable: %w", err)
 	}
@@ -324,9 +333,15 @@ func (c *keeneticCommon) Auth() error {
 	return nil
 }
 
-// Version retrieves the router's version information including model and OS version
+// Version retrieves the router's version information including model and OS version.
+// For context-aware version use VersionContext.
 func (c *keeneticCommon) Version() (gokeenrestapimodels.Version, error) {
-	b, err := c.ExecuteGetSubPath("/rci/show/version")
+	return c.VersionContext(context.Background())
+}
+
+// VersionContext is the context-aware variant of Version.
+func (c *keeneticCommon) VersionContext(ctx context.Context) (gokeenrestapimodels.Version, error) {
+	b, err := c.ExecuteGetSubPathContext(ctx, "/rci/show/version")
 	if err != nil {
 		return gokeenrestapimodels.Version{}, err
 	}
@@ -336,8 +351,14 @@ func (c *keeneticCommon) Version() (gokeenrestapimodels.Version, error) {
 }
 
 // ExecutePostParse executes one or more CLI commands on the router via RCI interface
-// Automatically batches commands in groups of 50 for optimal performance
+// Automatically batches commands in groups of 50 for optimal performance.
+// For context-aware version use ExecutePostParseContext.
 func (c *keeneticCommon) ExecutePostParse(parse ...gokeenrestapimodels.ParseRequest) ([]gokeenrestapimodels.ParseResponse, error) {
+	return c.ExecutePostParseContext(context.Background(), parse...)
+}
+
+// ExecutePostParseContext is the context-aware variant of ExecutePostParse.
+func (c *keeneticCommon) ExecutePostParseContext(ctx context.Context, parse ...gokeenrestapimodels.ParseRequest) ([]gokeenrestapimodels.ParseResponse, error) {
 	parseCopy := parse
 	var parseResponses []gokeenrestapimodels.ParseResponse
 	var mErr error
@@ -346,7 +367,7 @@ func (c *keeneticCommon) ExecutePostParse(parse ...gokeenrestapimodels.ParseRequ
 		if err != nil {
 			return parseResponses, err
 		}
-		request := apiClient.R()
+		request := apiClient.R().SetContext(ctx)
 		maxParse := maxParseRequests
 		currentLen := len(parseCopy)
 		if currentLen < maxParse {
@@ -386,13 +407,19 @@ func (c *keeneticCommon) ExecutePostParse(parse ...gokeenrestapimodels.ParseRequ
 	return parseResponses, mErr
 }
 
-// ExecuteGetSubPath performs a GET request to the specified API endpoint
+// ExecuteGetSubPath performs a GET request to the specified API endpoint.
+// For context-aware version use ExecuteGetSubPathContext.
 func (c *keeneticCommon) ExecuteGetSubPath(path string) ([]byte, error) {
+	return c.ExecuteGetSubPathContext(context.Background(), path)
+}
+
+// ExecuteGetSubPathContext is the context-aware variant of ExecuteGetSubPath.
+func (c *keeneticCommon) ExecuteGetSubPathContext(ctx context.Context, path string) ([]byte, error) {
 	apiClient, err := c.GetApiClient()
 	if err != nil {
 		return nil, err
 	}
-	response, err := apiClient.R().Get(path)
+	response, err := apiClient.R().SetContext(ctx).Get(path)
 	if err != nil {
 		return nil, err
 	}
@@ -402,13 +429,19 @@ func (c *keeneticCommon) ExecuteGetSubPath(path string) ([]byte, error) {
 	return []byte{}, errors.New("no response from keenetic api")
 }
 
-// ExecutePostSubPath performs a POST request to the specified API endpoint with a request body
+// ExecutePostSubPath performs a POST request to the specified API endpoint with a request body.
+// For context-aware version use ExecutePostSubPathContext.
 func (c *keeneticCommon) ExecutePostSubPath(path string, body any) ([]byte, error) {
+	return c.ExecutePostSubPathContext(context.Background(), path, body)
+}
+
+// ExecutePostSubPathContext is the context-aware variant of ExecutePostSubPath.
+func (c *keeneticCommon) ExecutePostSubPathContext(ctx context.Context, path string, body any) ([]byte, error) {
 	apiClient, err := c.GetApiClient()
 	if err != nil {
 		return nil, err
 	}
-	response, err := apiClient.R().SetBody(body).Post(path)
+	response, err := apiClient.R().SetContext(ctx).SetBody(body).Post(path)
 	if err != nil {
 		return nil, err
 	}
@@ -455,23 +488,33 @@ func (c *keeneticCommon) authRetryMiddleware(client *resty.Client, resp *resty.R
 			return err
 		}
 
-		// Replace the response content with the retry response
-		*resp = *retryResp
+		// Safe field-by-field copy of the retry response. This avoids mutating
+		// the original *resty.Response pointer via struct assignment (*resp = *),
+		// which can race under concurrent 401 retries when multiple goroutines
+		// observe or access response objects obtained from the shared client.
+		resp.Request = retryResp.Request
+		resp.RawResponse = retryResp.RawResponse
+		resp.SetBody(retryResp.Body())
 	}
 	return nil
 }
 
-// GetApiClient returns a configured HTTP client for API requests with authentication
+// GetApiClient returns a configured HTTP client for API requests with authentication.
+// The client is initialized exactly once via sync.Once. All mutations (hooks, TLS,
+// RetryCount) are performed on a local variable before the atomic assignment to the
+// package-level restyClient. This guarantees that any goroutine observing the client
+// sees a fully-constructed, thread-safe instance, eliminating the initialization race
+// under concurrent 401 retries.
 func (c *keeneticCommon) GetApiClient() (*resty.Client, error) {
 	restyClientOnce.Do(func() {
-		restyClient = resty.New()
-		restyClient.SetDisableWarn(true)
-		restyClient.SetCookieJar(nil)
-		restyClient.SetTimeout(defaultTimeout)
-		restyClient.SetBaseURL(config.Cfg.Keenetic.URL)
+		client := resty.New()
+		client.SetDisableWarn(true)
+		client.SetCookieJar(nil)
+		client.SetTimeout(defaultTimeout)
+		client.SetBaseURL(config.Cfg.Keenetic.URL)
 		// Inject the auth cookie per-request so concurrent callers never race on
 		// the shared client.Header map.
-		restyClient.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
+		client.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
 			if req.Header.Get("Cookie") != "" {
 				return nil
 			}
@@ -484,13 +527,29 @@ func (c *keeneticCommon) GetApiClient() (*resty.Client, error) {
 			}
 			return nil
 		})
-		restyClient.OnAfterResponse(c.authRetryMiddleware)
-		restyClient.RetryCount = 3
+		client.OnAfterResponse(c.authRetryMiddleware)
+		client.RetryCount = 3
 		if config.Cfg.Keenetic.TLSSkipVerify {
-			restyClient.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec
+			client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec
 		}
+		restyClient = client
 	})
 	return restyClient, nil
+}
+
+// GetURLClient returns a shared resty.Client for external URL fetches (e.g. domain lists).
+// Initialized once with short timeout and honoring TLSSkipVerify from config.
+func GetURLClient() *resty.Client {
+	urlClientOnce.Do(func() {
+		client := resty.New()
+		client.SetDisableWarn(true)
+		client.SetTimeout(time.Second * 5)
+		if config.Cfg.Keenetic.TLSSkipVerify {
+			client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec
+		}
+		urlClient = client
+	})
+	return urlClient
 }
 
 // ShowRunningConfig retrieves the current running configuration from the router

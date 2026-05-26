@@ -386,7 +386,7 @@ var _ = Describe("Scheduler", func() {
 				Commands: []string{"nonexistent-gokeenapi-command-xyz"},
 				Configs:  []string{"/some/config.yaml"},
 			}
-			err := executeCommandsForConfig(task, "/some/config.yaml")
+			err := executeCommandsForConfig(context.Background(), task, "/some/config.yaml")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("nonexistent-gokeenapi-command-xyz"))
 		})
@@ -397,7 +397,7 @@ var _ = Describe("Scheduler", func() {
 				Commands: []string{},
 				Configs:  []string{"/some/config.yaml"},
 			}
-			Expect(executeCommandsForConfig(task, "/some/config.yaml")).To(Succeed())
+			Expect(executeCommandsForConfig(context.Background(), task, "/some/config.yaml")).To(Succeed())
 		})
 	})
 
@@ -414,7 +414,7 @@ var _ = Describe("Scheduler", func() {
 			// for each config.
 			var errs []error
 			for _, cfg := range task.Configs {
-				errs = append(errs, executeCommandsForConfig(task, cfg))
+				errs = append(errs, executeCommandsForConfig(context.Background(), task, cfg))
 			}
 			Expect(errs).To(HaveLen(3))
 			for _, err := range errs {
@@ -431,7 +431,7 @@ var _ = Describe("Scheduler", func() {
 			}
 			done := make(chan struct{})
 			go func() {
-				executeTask(task)
+				executeTask(context.Background(), task)
 				close(done)
 			}()
 			Eventually(done, "10s").Should(BeClosed())

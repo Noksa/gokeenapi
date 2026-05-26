@@ -102,9 +102,10 @@ Cannot use both in the same task.`,
 				for {
 					select {
 					case <-ctx.Done():
+						close(queue)
 						return
 					case task := <-queue:
-						executeTask(task)
+						executeTask(ctx, task)
 						if len(queue) == 0 {
 							gokeenlog.HorizontalLine()
 							gokeenlog.Info("Waiting for next task")
@@ -266,7 +267,7 @@ func getNextRunTime(times []string) time.Time {
 }
 
 // executeTask executes a single task
-func executeTask(task config.ScheduledTask) {
+func executeTask(ctx context.Context, task config.ScheduledTask) {
 	gokeenlog.HorizontalLine()
 	gokeenlog.Infof("▶ Executing task: %v", color.BlueString(task.Name))
 
@@ -276,11 +277,14 @@ func executeTask(task config.ScheduledTask) {
 			mu   sync.Mutex
 			mErr error
 		)
+		sem := make(chan struct{}, 8)
 		for _, configPath := range task.Configs {
+			sem <- struct{}{}
 			wg.Add(1)
 			go func(cfg string) {
 				defer wg.Done()
-				if err := executeCommandsForConfig(task, cfg); err != nil {
+				defer func() { <-sem }()
+				if err := executeCommandsForConfig(ctx, task, cfg); err != nil {
 					mu.Lock()
 					mErr = multierr.Append(mErr, err)
 					mu.Unlock()
@@ -293,12 +297,12 @@ func executeTask(task config.ScheduledTask) {
 		}
 	} else {
 		for _, configPath := range task.Configs {
-			_ = executeCommandsForConfig(task, configPath)
+			_ = executeCommandsForConfig(ctx, task, configPath)
 		}
 	}
 }
 
-func executeCommandsForConfig(task config.ScheduledTask, configPath string) error {
+func executeCommandsForConfig(ctx context.Context, task config.ScheduledTask, configPath string) error {
 	retryDelay := 1 * time.Minute
 	if task.RetryDelay != "" {
 		if d, err := time.ParseDuration(task.RetryDelay); err == nil {
@@ -323,7 +327,7 @@ func executeCommandsForConfig(task config.ScheduledTask, configPath string) erro
 			}
 
 			gokeenlog.Info(attemptMsg)
-			cmd := exec.Command(executable, command, "--config", configPath)
+			cmd := exec.CommandContext(ctx, executable, command, "--config", configPath)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			lastErr = cmd.Run()

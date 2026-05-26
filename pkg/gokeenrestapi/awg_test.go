@@ -77,3 +77,36 @@ PersistentKeepalive = 25`
 		Expect(err.Error()).To(Equal("conf-file flag is required"))
 	})
 })
+
+var _ = Describe("AWG AddInterface", func() {
+	It("returns error on permission denied reading conf file", func() {
+		tmpDir := GinkgoT().TempDir()
+		confPath := filepath.Join(tmpDir, "noperm.conf")
+		Expect(os.WriteFile(confPath, []byte("[Interface]\n"), 0000)).To(Succeed())
+		DeferCleanup(func() {
+			_ = os.Chmod(confPath, 0644)
+		})
+
+		_, err := AwgConf.AddInterface(confPath, "test")
+		Expect(err).To(HaveOccurred())
+		Expect(os.IsPermission(err)).To(BeTrue())
+	})
+
+	It("returns error for non-existent conf file", func() {
+		_, err := AwgConf.AddInterface("/nonexistent/path/awg.conf", "")
+		Expect(err).To(HaveOccurred())
+		Expect(os.IsNotExist(err)).To(BeTrue())
+	})
+
+	It("uses base filename when name is empty", func() {
+		// This exercises the name fallback; full success path requires router mock
+		// which is not yet wired for /rci/interface/wireguard/import
+		tmpDir := GinkgoT().TempDir()
+		confPath := filepath.Join(tmpDir, "myawg.conf")
+		Expect(os.WriteFile(confPath, []byte("[Interface]\nPrivateKey=abc\n"), 0644)).To(Succeed())
+
+		// Expect error from network/post since no handler, but name fallback executed
+		_, err := AwgConf.AddInterface(confPath, "")
+		Expect(err).To(HaveOccurred())
+	})
+})

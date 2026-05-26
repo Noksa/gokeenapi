@@ -1,6 +1,7 @@
 package gokeenrestapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -120,21 +121,37 @@ func (*keeneticInterface) PrintInfoAboutInterfaces(interfaces map[string]gokeenr
 
 }
 
-// WaitUntilInterfaceIsUp waits up to 60 seconds for an interface to become fully operational
+// WaitUntilInterfaceIsUp waits up to 60 seconds for an interface to become fully operational.
+// Accepts context for cancellation; derives from Background if needed.
+// For context-aware use WaitUntilInterfaceIsUpContext.
 func (*keeneticInterface) WaitUntilInterfaceIsUp(interfaceId string) error {
+	return Interface.WaitUntilInterfaceIsUpContext(context.Background(), interfaceId)
+}
+
+// WaitUntilInterfaceIsUpContext waits until interface is up or ctx cancelled.
+// Replaces busy-wait sleep with ticker + ctx select, returns ctx.Err() on cancel.
+func (*keeneticInterface) WaitUntilInterfaceIsUpContext(ctx context.Context, interfaceId string) error {
 	err := gokeenspinner.WrapWithSpinner(fmt.Sprintf("Waiting 60s until %v interface is up, connected to peers and working", interfaceId), func() error {
-		deadline := time.Now().Add(time.Second * 60)
-		for time.Now().Before(deadline) {
-			myInterface, err := Interface.GetInterfaceViaRciShowInterfaces(interfaceId)
-			if err != nil {
-				return err
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		deadline := time.NewTimer(60 * time.Second)
+		defer deadline.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-deadline.C:
+				return fmt.Errorf("looks like interface %v is still not up. Please check The keenetic web-interface", interfaceId)
+			case <-ticker.C:
+				myInterface, err := Interface.GetInterfaceViaRciShowInterfaces(interfaceId)
+				if err != nil {
+					return err
+				}
+				if myInterface.Connected == StateConnected && myInterface.Link == StateUp && myInterface.State == StateUp {
+					return nil
+				}
 			}
-			if myInterface.Connected == StateConnected && myInterface.Link == StateUp && myInterface.State == StateUp {
-				return nil
-			}
-			time.Sleep(time.Millisecond * 500)
 		}
-		return fmt.Errorf("looks like interface %v is still not up. Please check The keenetic web-interface", interfaceId)
 	})
 	return err
 }
