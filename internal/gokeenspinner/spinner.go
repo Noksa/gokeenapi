@@ -66,11 +66,11 @@ func WrapWithSpinnerAndOptions(spinnerText string, f func(*SpinnerOptions) error
 
 	// Interactive terminal: use spinner
 	s := spinner.New(spinner.CharSets[70], 100*time.Millisecond)
-	s.Start()
+	s.Prefix = fmt.Sprintf("⌛   %v ...", spinnerText)
 	s.PostUpdate = func(s *spinner.Spinner) {
 		s.Prefix = fmt.Sprintf("⌛   %v ... %s	", spinnerText, getPrettyFormatedDuration(time.Since(startTime).Round(time.Millisecond)))
 	}
-	s.Prefix = fmt.Sprintf("⌛   %v ...", spinnerText)
+	s.Start()
 	err := f(opts)
 	s.Prefix = spinnerText
 	if err != nil {

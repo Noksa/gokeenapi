@@ -50,4 +50,27 @@ var _ = Describe("CheckDnsRoutingSupport", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("router version information not available"))
 	})
+
+	It("should support beta version above minimum", func() {
+		gokeencache.UpdateRuntimeConfig(func(runtime *config.Runtime) {
+			runtime.RouterInfo.Version = gokeenrestapimodels.Version{Title: "5.1 Beta 4"}
+		})
+		Expect(DnsRouting.CheckDnsRoutingSupport()).To(Succeed())
+	})
+
+	It("should reject beta version below minimum", func() {
+		gokeencache.UpdateRuntimeConfig(func(runtime *config.Runtime) {
+			runtime.RouterInfo.Version = gokeenrestapimodels.Version{Title: "4.9 Beta 1"}
+		})
+		err := DnsRouting.CheckDnsRoutingSupport()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("DNS-routing requires Keenetic firmware version 5.0.1 or higher"))
+	})
+
+	It("should support RC version above minimum", func() {
+		gokeencache.UpdateRuntimeConfig(func(runtime *config.Runtime) {
+			runtime.RouterInfo.Version = gokeenrestapimodels.Version{Title: "5.2.0 RC1"}
+		})
+		Expect(DnsRouting.CheckDnsRoutingSupport()).To(Succeed())
+	})
 })

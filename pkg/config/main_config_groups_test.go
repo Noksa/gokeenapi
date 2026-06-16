@@ -188,4 +188,68 @@ dns:
 		Expect(Cfg.DNS.Routes.Groups[2].DomainURL).To(HaveLen(1))
 		Expect(Cfg.DNS.Routes.Groups[2].DomainURL[0]).To(Equal("https://example.com/youtube.txt"))
 	})
+
+	It("should override interfaceId when using file: syntax", func() {
+		tmpDir := GinkgoT().TempDir()
+		domainsDir := filepath.Join(tmpDir, "domains")
+		Expect(os.MkdirAll(domainsDir, 0755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(domainsDir, "youtube.yaml"), []byte(`domain-url:
+  - https://example.com/youtube.txt`), 0644)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(domainsDir, "work.txt"), []byte("work1.com"), 0644)).To(Succeed())
+
+		Expect(os.WriteFile(filepath.Join(tmpDir, "common.yaml"), []byte(`groups:
+  - name: youtube
+    domain-url:
+      - domains/youtube.yaml
+    interfaceId: Wireguard0
+  - name: work
+    domain-file:
+      - domains/work.txt
+    interfaceId: Wireguard0`), 0644)).To(Succeed())
+
+		configPath := filepath.Join(tmpDir, "config.yaml")
+		Expect(os.WriteFile(configPath, []byte(`keenetic:
+  url: "http://192.168.1.1"
+  login: "admin"
+  password: "password"
+dns:
+  routes:
+    groups:
+      - file: common.yaml
+        interfaceId: Wireguard4`), 0644)).To(Succeed())
+
+		Expect(LoadConfig(configPath)).To(Succeed())
+		Expect(Cfg.DNS.Routes.Groups).To(HaveLen(2))
+		Expect(Cfg.DNS.Routes.Groups[0].Name).To(Equal("youtube"))
+		Expect(Cfg.DNS.Routes.Groups[0].InterfaceID).To(Equal("Wireguard4"))
+		Expect(Cfg.DNS.Routes.Groups[1].Name).To(Equal("work"))
+		Expect(Cfg.DNS.Routes.Groups[1].InterfaceID).To(Equal("Wireguard4"))
+	})
+
+	It("should keep original interfaceId when file: has no override", func() {
+		tmpDir := GinkgoT().TempDir()
+		domainsDir := filepath.Join(tmpDir, "domains")
+		Expect(os.MkdirAll(domainsDir, 0755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(domainsDir, "work.txt"), []byte("work1.com"), 0644)).To(Succeed())
+
+		Expect(os.WriteFile(filepath.Join(tmpDir, "common.yaml"), []byte(`groups:
+  - name: work
+    domain-file:
+      - domains/work.txt
+    interfaceId: Wireguard0`), 0644)).To(Succeed())
+
+		configPath := filepath.Join(tmpDir, "config.yaml")
+		Expect(os.WriteFile(configPath, []byte(`keenetic:
+  url: "http://192.168.1.1"
+  login: "admin"
+  password: "password"
+dns:
+  routes:
+    groups:
+      - file: common.yaml`), 0644)).To(Succeed())
+
+		Expect(LoadConfig(configPath)).To(Succeed())
+		Expect(Cfg.DNS.Routes.Groups).To(HaveLen(1))
+		Expect(Cfg.DNS.Routes.Groups[0].InterfaceID).To(Equal("Wireguard0"))
+	})
 })
