@@ -31,7 +31,6 @@ import (
 const (
 	cacheCleanupPeriod = time.Hour * 24 * 7
 	maxParseRequests   = 100
-	defaultTimeout     = time.Second * 30
 )
 
 var (
@@ -510,7 +509,11 @@ func (c *keeneticCommon) GetApiClient() (*resty.Client, error) {
 		client := resty.New()
 		client.SetDisableWarn(true)
 		client.SetCookieJar(nil)
-		client.SetTimeout(defaultTimeout)
+		timeout := config.Cfg.Keenetic.Timeout
+		if timeout <= 0 {
+			timeout = time.Second * 30
+		}
+		client.SetTimeout(timeout)
 		client.SetBaseURL(config.Cfg.Keenetic.URL)
 		// Inject the auth cookie per-request so concurrent callers never race on
 		// the shared client.Header map.
