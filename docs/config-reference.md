@@ -27,6 +27,7 @@ Required by every command.
 | `login` | string | ✅ | — | Router admin username. Overridden by `GOKEENAPI_KEENETIC_LOGIN` env var. |
 | `password` | string | ✅ | — | Router admin password. Overridden by `GOKEENAPI_KEENETIC_PASSWORD` env var. |
 | `tls_skip_verify` | bool | ❌ | `false` | Disable TLS certificate verification. Enable when the router uses a self-signed certificate. |
+| `timeout` | duration | ❌ | `30s` | HTTP request timeout for router API calls. Increase for routers with large IP route tables where requests (e.g. fetching static routes) exceed the default. Accepts Go duration strings: `30s`, `1m`, `2m`. |
 
 ---
 
