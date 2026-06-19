@@ -58,6 +58,10 @@ type Keenetic struct {
 	// Enable this when the router uses a self-signed certificate.
 	// Default: false (verification enabled, secure)
 	TLSSkipVerify bool `yaml:"tls_skip_verify,omitempty"`
+	// Timeout specifies the HTTP request timeout for API calls.
+	// Default: 30s if not specified.
+	// Examples: "30s", "1m", "10s"
+	Timeout time.Duration `yaml:"timeout,omitempty"`
 }
 
 // BatFileList represents the structure of a YAML file containing bat-file paths
