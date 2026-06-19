@@ -171,6 +171,9 @@ type DnsRoutes struct {
 type DnsRoutingGroup struct {
 	// Name is the unique identifier for the object-group
 	Name string `yaml:"name"`
+	// File is an alternative to Name for importing groups from a YAML file with optional interfaceId override
+	// Example: {file: common_dns_groups.yaml, interfaceId: Wireguard4}
+	File string `yaml:"file"`
 	// DomainFile contains list of local .txt files with domains (one per line)
 	// Can also reference .yaml files containing lists of domain-file paths
 	DomainFile []string `yaml:"domain-file"`
@@ -179,7 +182,7 @@ type DnsRoutingGroup struct {
 	// InterfaceID specifies the target interface for routing
 	InterfaceID string `yaml:"interfaceId"`
 
-	// isFileReference is set to true when this group represents a file reference (string)
+	// isFileReference is set to true when this group represents a file reference (string or file: key)
 	// This is used internally by expandGroupLists to identify which groups need expansion
 	isFileReference bool `yaml:"-"`
 }
@@ -203,7 +206,12 @@ func (g *DnsRoutingGroup) UnmarshalYAML(node *yaml.Node) error {
 		return err
 	}
 
-	g.isFileReference = false
+	// If 'file:' key is set, this is a file reference with optional interfaceId override
+	if g.File != "" {
+		g.Name = g.File
+		g.isFileReference = true
+	}
+
 	return nil
 }
 
@@ -584,8 +592,13 @@ func expandGroupLists(configPath string) error {
 				groupsList = loaded
 			}
 
-			// Append all groups from the file
-			expandedGroups = append(expandedGroups, groupsList.Groups...)
+			// Append all groups from the file, applying interfaceId override if specified
+			for _, importedGroup := range groupsList.Groups {
+				if group.InterfaceID != "" {
+					importedGroup.InterfaceID = group.InterfaceID
+				}
+				expandedGroups = append(expandedGroups, importedGroup)
+			}
 		} else {
 			// Regular group definition - keep as is
 			expandedGroups = append(expandedGroups, group)

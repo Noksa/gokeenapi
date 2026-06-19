@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -26,6 +27,9 @@ const (
 	maxDomainsPerGroup = 300
 )
 
+// versionNumericRe extracts the leading numeric version (e.g. "5.1" from "5.1 Beta 4")
+var versionNumericRe = regexp.MustCompile(`^[\d]+(?:\.[\d]+)*`)
+
 var (
 	// DnsRouting provides DNS-routing functionality for domain-based routing policies
 	DnsRouting keeneticDnsRouting
@@ -44,7 +48,13 @@ func (*keeneticDnsRouting) CheckDnsRoutingSupport() error {
 		return errors.New("router version information not available. Please authenticate first")
 	}
 
-	currentVer, err := version.NewVersion(routerVersion)
+	// Strip non-numeric suffixes like "Beta 4" from "5.1 Beta 4"
+	numericVersion := versionNumericRe.FindString(routerVersion)
+	if numericVersion == "" {
+		return fmt.Errorf("failed to parse router version '%s': no numeric version found", routerVersion)
+	}
+
+	currentVer, err := version.NewVersion(numericVersion)
 	if err != nil {
 		return fmt.Errorf("failed to parse router version '%s': %w", routerVersion, err)
 	}
