@@ -21,6 +21,13 @@ keenetic:
   # Default: false — certificate verification is enabled (secure)
   # tls_skip_verify: true
 
+  # HTTP request timeout for router API calls.
+  # Format: duration string (e.g., "30s", "1m", "2m")
+  # Default: 30s if not specified
+  # Increase this for routers with large IP route tables where requests
+  # (e.g. fetching static routes) exceed the default and time out.
+  # timeout: 1m
+
 # Optional: Custom data directory for application files
 # Default: system-specific directory
 # Docker: automatically set to /etc/gokeenapi when GOKEENAPI_INSIDE_DOCKER is set
