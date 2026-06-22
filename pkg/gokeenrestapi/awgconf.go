@@ -386,63 +386,66 @@ func buildPeerCommands(interfaceId string, parsed peerParams, currentPeers []gok
 //   - AWG 2.0 parameters (S3, S4, I1-I5) — optional, requires KeeneticOS 5.1+
 //   - Peer endpoint, allowed IPs, keepalive interval, preshared key
 func (*keeneticAwgconf) ConfigureOrUpdateInterface(confPath, interfaceId string) error {
-	if confPath == "" {
-		return fmt.Errorf("conf-file flag is required")
-	}
-	err := Checks.CheckInterfaceId(interfaceId)
-	if err != nil {
-		return err
-	}
-	err = Checks.CheckInterfaceExists(interfaceId)
+	commands, err := AwgConf.PlanUpdate(confPath, interfaceId)
 	if err != nil {
 		return err
 	}
 
-	confPath, err = filepath.Abs(confPath)
-	if err != nil {
-		return err
-	}
-
-	// Parse conf file
-	asc, peer, err := parseConfFile(confPath)
-	if err != nil {
-		return err
-	}
-
-	// Get current interface state
-	interfaceDetails, err := Interface.GetInterfaceViaRciShowScInterfaces(interfaceId)
-	if err != nil {
-		return err
-	}
-
-	var parseSlice []gokeenrestapimodels.ParseRequest
-
-	// Build ASC command if ASC parameters are present and changed
-	if asc.hasAnyASC() {
-		if ascNeedsUpdate(asc, interfaceDetails.Wireguard.Asc) {
-			parseSlice = append(parseSlice, gokeenrestapimodels.ParseRequest{
-				Parse: buildASCCommand(interfaceId, asc),
-			})
-		}
-	}
-
-	// Build peer update commands if peer configuration has changed
-	if peer.PublicKey != "" && peerNeedsUpdate(peer, interfaceDetails.Wireguard.Peer) {
-		peerCmds := buildPeerCommands(interfaceId, peer, interfaceDetails.Wireguard.Peer)
-		parseSlice = append(parseSlice, peerCmds...)
-	}
-
-	// Nothing to update
-	if len(parseSlice) == 0 {
+	if len(commands) == 0 {
 		gokeenlog.InfoSubStepf("Interface %v is already up to date", color.CyanString(interfaceId))
 		return nil
 	}
 
 	return gokeenspinner.WrapWithSpinner(fmt.Sprintf("Updating %v interface configuration", color.CyanString(interfaceId)), func() error {
-		parseSlice = Common.EnsureSaveConfigAtEnd(parseSlice)
-		_, err := Common.ExecutePostParse(parseSlice...)
+		commands = Common.EnsureSaveConfigAtEnd(commands)
+		_, err := Common.ExecutePostParse(commands...)
 		return err
 	})
+}
+
+// PlanUpdate compares current interface state with a .conf file and returns
+// the list of RCI commands that would be executed to bring the interface in sync.
+// Returns empty slice if nothing needs to change.
+func (*keeneticAwgconf) PlanUpdate(confPath, interfaceId string) ([]gokeenrestapimodels.ParseRequest, error) {
+	if confPath == "" {
+		return nil, fmt.Errorf("conf-file flag is required")
+	}
+	if err := Checks.CheckInterfaceId(interfaceId); err != nil {
+		return nil, err
+	}
+	if err := Checks.CheckInterfaceExists(interfaceId); err != nil {
+		return nil, err
+	}
+
+	var err error
+	confPath, err = filepath.Abs(confPath)
+	if err != nil {
+		return nil, err
+	}
+
+	asc, peer, err := parseConfFile(confPath)
+	if err != nil {
+		return nil, err
+	}
+
+	interfaceDetails, err := Interface.GetInterfaceViaRciShowScInterfaces(interfaceId)
+	if err != nil {
+		return nil, err
+	}
+
+	var parseSlice []gokeenrestapimodels.ParseRequest
+
+	if asc.hasAnyASC() && ascNeedsUpdate(asc, interfaceDetails.Wireguard.Asc) {
+		parseSlice = append(parseSlice, gokeenrestapimodels.ParseRequest{
+			Parse: buildASCCommand(interfaceId, asc),
+		})
+	}
+
+	if peer.PublicKey != "" && peerNeedsUpdate(peer, interfaceDetails.Wireguard.Peer) {
+		parseSlice = append(parseSlice, buildPeerCommands(interfaceId, peer, interfaceDetails.Wireguard.Peer)...)
+	}
+
+	return parseSlice, nil
 }
 
 // AddInterface creates a new WireGuard interface from a .conf file
