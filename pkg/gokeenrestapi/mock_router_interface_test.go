@@ -152,8 +152,9 @@ var _ = Describe("MockRouter Interfaces", func() {
 			Expect(initial.Wireguard.Asc.Jc).To(Equal("3"))
 			Expect(initial.Wireguard.Asc.Jmin).To(Equal("50"))
 
+			// Positional format: asc <jc> <jmin> <jmax> <s1> <s2> <h1> <h2> <h3> <h4>
 			updateReq := []gokeenrestapimodels.ParseRequest{
-				{Parse: "interface Wireguard0 wireguard asc jc 5 jmin 100 jmax 2000 s1 99 s2 10 h1 10 h2 20 h3 30 h4 40"},
+				{Parse: "interface Wireguard0 wireguard asc 5 100 2000 99 10 10 20 30 40"},
 			}
 			body, _ := json.Marshal(updateReq)
 			resp, _ = http.Post(server.URL+"/rci/", "application/json", bytes.NewReader(body))
@@ -177,12 +178,41 @@ var _ = Describe("MockRouter Interfaces", func() {
 			Expect(updated.Wireguard.Asc.H4).To(Equal("40"))
 		})
 
+		It("should update AWG 2.0 parameters", func() {
+			server := NewMockRouterServer()
+			defer server.Close()
+
+			// Positional format with AWG 2.0: asc <jc> <jmin> <jmax> <s1> <s2> <h1> <h2> <h3> <h4> <s3> <s4> <i1> <i2> <i3> <i4> <i5>
+			updateReq := []gokeenrestapimodels.ParseRequest{
+				{Parse: "interface Wireguard0 wireguard asc 5 100 2000 99 10 10 20 30 40 50 60 70 80 90 100 110"},
+			}
+			body, _ := json.Marshal(updateReq)
+			resp, _ := http.Post(server.URL+"/rci/", "application/json", bytes.NewReader(body))
+			var updateResp []gokeenrestapimodels.ParseResponse
+			_ = json.NewDecoder(resp.Body).Decode(&updateResp)
+			_ = resp.Body.Close()
+			Expect(updateResp[0].Parse.Status[0].Status).To(Equal(StatusOK))
+
+			resp, _ = http.Get(server.URL + "/rci/show/sc/interface/Wireguard0")
+			var updated gokeenrestapimodels.RciShowScInterface
+			_ = json.NewDecoder(resp.Body).Decode(&updated)
+			_ = resp.Body.Close()
+			Expect(updated.Wireguard.Asc.Jc).To(Equal("5"))
+			Expect(updated.Wireguard.Asc.S3).To(Equal("50"))
+			Expect(updated.Wireguard.Asc.S4).To(Equal("60"))
+			Expect(updated.Wireguard.Asc.I1).To(Equal("70"))
+			Expect(updated.Wireguard.Asc.I2).To(Equal("80"))
+			Expect(updated.Wireguard.Asc.I3).To(Equal("90"))
+			Expect(updated.Wireguard.Asc.I4).To(Equal("100"))
+			Expect(updated.Wireguard.Asc.I5).To(Equal("110"))
+		})
+
 		It("should reject AWG config for non-existent interface", func() {
 			server := NewMockRouterServer()
 			defer server.Close()
 
 			requests := []gokeenrestapimodels.ParseRequest{
-				{Parse: "interface NonExistent wireguard asc jc 5"},
+				{Parse: "interface NonExistent wireguard asc 5"},
 			}
 			body, _ := json.Marshal(requests)
 			resp, _ := http.Post(server.URL+"/rci/", "application/json", bytes.NewReader(body))

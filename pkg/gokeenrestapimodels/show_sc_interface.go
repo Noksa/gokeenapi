@@ -14,6 +14,8 @@ type IP struct {
 
 // Asc contains AmneziaWG (AWG) specific parameters for WireGuard interfaces.
 // These parameters provide additional obfuscation for WireGuard traffic.
+// AWG 1.0 parameters: Jc, Jmin, Jmax, S1, S2, H1-H4
+// AWG 2.0 parameters (KeeneticOS 5.1+): S3, S4, I1-I5 (optional, for CPS traffic disguise)
 type Asc struct {
 	// Jc is the junk packet count parameter
 	Jc string `json:"jc"`
@@ -33,6 +35,20 @@ type Asc struct {
 	H3 string `json:"h3"`
 	// H4 is the fourth header modification parameter
 	H4 string `json:"h4"`
+	// S3 is the third obfuscation seed (AWG 2.0, KeeneticOS 5.1+)
+	S3 string `json:"s3,omitempty"`
+	// S4 is the fourth obfuscation seed (AWG 2.0, KeeneticOS 5.1+)
+	S4 string `json:"s4,omitempty"`
+	// I1 is the first CPS (Cover Protocol Signature) parameter (AWG 2.0, KeeneticOS 5.1+)
+	I1 string `json:"i1,omitempty"`
+	// I2 is the second CPS parameter (AWG 2.0, KeeneticOS 5.1+)
+	I2 string `json:"i2,omitempty"`
+	// I3 is the third CPS parameter (AWG 2.0, KeeneticOS 5.1+)
+	I3 string `json:"i3,omitempty"`
+	// I4 is the fourth CPS parameter (AWG 2.0, KeeneticOS 5.1+)
+	I4 string `json:"i4,omitempty"`
+	// I5 is the fifth CPS parameter (AWG 2.0, KeeneticOS 5.1+)
+	I5 string `json:"i5,omitempty"`
 }
 
 // Endpoint contains the WireGuard peer endpoint address.

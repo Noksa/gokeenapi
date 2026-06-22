@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -56,6 +58,8 @@ type MockIP struct {
 }
 
 // MockAsc represents AWG (Amnezia WireGuard) configuration parameters
+// AWG 1.0: Jc, Jmin, Jmax, S1, S2, H1-H4
+// AWG 2.0 (KeeneticOS 5.1+): S3, S4, I1-I5
 type MockAsc struct {
 	Jc   string
 	Jmin string
@@ -66,6 +70,14 @@ type MockAsc struct {
 	H2   string
 	H3   string
 	H4   string
+	// AWG 2.0 fields
+	S3 string
+	S4 string
+	I1 string
+	I2 string
+	I3 string
+	I4 string
+	I5 string
 }
 
 // MockPeer represents a WireGuard peer configuration
@@ -700,6 +712,13 @@ func (m *MockRouter) handleScInterfaces(w http.ResponseWriter, r *http.Request) 
 					H2:   scIface.Wireguard.Asc.H2,
 					H3:   scIface.Wireguard.Asc.H3,
 					H4:   scIface.Wireguard.Asc.H4,
+					S3:   scIface.Wireguard.Asc.S3,
+					S4:   scIface.Wireguard.Asc.S4,
+					I1:   scIface.Wireguard.Asc.I1,
+					I2:   scIface.Wireguard.Asc.I2,
+					I3:   scIface.Wireguard.Asc.I3,
+					I4:   scIface.Wireguard.Asc.I4,
+					I5:   scIface.Wireguard.Asc.I5,
 				},
 				Peer: peers,
 			},
@@ -768,6 +787,13 @@ func (m *MockRouter) handleScInterface(w http.ResponseWriter, r *http.Request) {
 				H2:   scIface.Wireguard.Asc.H2,
 				H3:   scIface.Wireguard.Asc.H3,
 				H4:   scIface.Wireguard.Asc.H4,
+				S3:   scIface.Wireguard.Asc.S3,
+				S4:   scIface.Wireguard.Asc.S4,
+				I1:   scIface.Wireguard.Asc.I1,
+				I2:   scIface.Wireguard.Asc.I2,
+				I3:   scIface.Wireguard.Asc.I3,
+				I4:   scIface.Wireguard.Asc.I4,
+				I5:   scIface.Wireguard.Asc.I5,
 			},
 			Peer: peers,
 		},
@@ -968,7 +994,13 @@ func (m *MockRouter) routeParseCommand(command string) gokeenrestapimodels.Parse
 
 		// Check for wireguard configuration
 		if tokens[2] == "wireguard" && len(tokens) >= 4 {
-			return m.parseAwgConfig(interfaceID, tokens[3:])
+			if tokens[3] == "asc" {
+				return m.parseAwgConfig(interfaceID, tokens[3:])
+			}
+			if tokens[3] == "peer" && len(tokens) >= 5 {
+				return m.parseWireguardPeer(interfaceID, tokens[4:])
+			}
+			return m.errorResponse(fmt.Sprintf("Unknown wireguard subcommand: %s", tokens[3]))
 		}
 
 		// Check for interface creation
@@ -1029,6 +1061,13 @@ func (m *MockRouter) routeParseCommand(command string) gokeenrestapimodels.Parse
 
 	case tokens[0] == "no" && len(tokens) >= 2:
 		switch tokens[1] {
+		case "interface":
+			// no interface <id> wireguard peer <key> allow-ips <cidr>
+			if len(tokens) >= 7 && tokens[3] == "wireguard" && tokens[4] == "peer" {
+				interfaceID := tokens[2]
+				return m.parseNoWireguardPeer(interfaceID, tokens[5:])
+			}
+			return m.errorResponse("Invalid no interface command")
 		case "object-group":
 			// no object-group fqdn <group-name> [include <domain>]
 			if len(tokens) >= 4 && tokens[2] == "fqdn" {
@@ -1351,13 +1390,14 @@ func (m *MockRouter) parseInterfaceState(interfaceID string, state string) gokee
 	return m.successResponse(fmt.Sprintf("Interface %s set to %s", interfaceID, state))
 }
 
-// parseAwgConfig handles the "interface <id> wireguard asc jc <value> ..." command
+// parseAwgConfig handles the "interface <id> wireguard asc ..." command
 // It updates AWG parameters in SC interface state
+// Supports both AWG 1.0 (9 positional params) and AWG 2.0 (up to 16 positional params)
 func (m *MockRouter) parseAwgConfig(interfaceID string, tokens []string) gokeenrestapimodels.ParseResponse {
-	// Expected format: asc jc <value> jmin <value> jmax <value> s1 <value> s2 <value> h1 <value> h2 <value> h3 <value> h4 <value>
-	// Minimum: asc jc <value>
-	if len(tokens) < 3 || tokens[0] != "asc" {
-		return m.errorResponse("Invalid AWG config command: expected 'interface <id> wireguard asc jc <value> ...'")
+	// Expected format: asc <jc> <jmin> <jmax> <s1> <s2> <h1> <h2> <h3> <h4> [<s3> <s4> <i1> <i2> <i3> <i4> <i5>]
+	// Minimum: asc <jc> (at least one value)
+	if len(tokens) < 2 || tokens[0] != "asc" {
+		return m.errorResponse("Invalid AWG config command: expected 'interface <id> wireguard asc <values...>'")
 	}
 
 	m.mu.Lock()
@@ -1369,45 +1409,175 @@ func (m *MockRouter) parseAwgConfig(interfaceID string, tokens []string) gokeenr
 		return m.errorResponse(fmt.Sprintf("SC interface '%s' does not exist", interfaceID))
 	}
 
-	// Parse AWG parameters from tokens
-	// Format: jc <value> jmin <value> jmax <value> s1 <value> s2 <value> h1 <value> h2 <value> h3 <value> h4 <value>
-	params := make(map[string]string)
-	for i := 1; i < len(tokens)-1; i += 2 {
-		paramName := strings.ToLower(tokens[i])
-		paramValue := tokens[i+1]
-		params[paramName] = paramValue
-	}
+	// AWG ASC uses positional parameters:
+	// Position 1-9: Jc Jmin Jmax S1 S2 H1 H2 H3 H4 (AWG 1.0)
+	// Position 10-16: S3 S4 I1 I2 I3 I4 I5 (AWG 2.0, optional)
+	values := tokens[1:]
 
-	// Update AWG parameters if provided
-	if val, ok := params["jc"]; ok {
-		scIface.Wireguard.Asc.Jc = val
+	if len(values) >= 1 {
+		scIface.Wireguard.Asc.Jc = values[0]
 	}
-	if val, ok := params["jmin"]; ok {
-		scIface.Wireguard.Asc.Jmin = val
+	if len(values) >= 2 {
+		scIface.Wireguard.Asc.Jmin = values[1]
 	}
-	if val, ok := params["jmax"]; ok {
-		scIface.Wireguard.Asc.Jmax = val
+	if len(values) >= 3 {
+		scIface.Wireguard.Asc.Jmax = values[2]
 	}
-	if val, ok := params["s1"]; ok {
-		scIface.Wireguard.Asc.S1 = val
+	if len(values) >= 4 {
+		scIface.Wireguard.Asc.S1 = values[3]
 	}
-	if val, ok := params["s2"]; ok {
-		scIface.Wireguard.Asc.S2 = val
+	if len(values) >= 5 {
+		scIface.Wireguard.Asc.S2 = values[4]
 	}
-	if val, ok := params["h1"]; ok {
-		scIface.Wireguard.Asc.H1 = val
+	if len(values) >= 6 {
+		scIface.Wireguard.Asc.H1 = values[5]
 	}
-	if val, ok := params["h2"]; ok {
-		scIface.Wireguard.Asc.H2 = val
+	if len(values) >= 7 {
+		scIface.Wireguard.Asc.H2 = values[6]
 	}
-	if val, ok := params["h3"]; ok {
-		scIface.Wireguard.Asc.H3 = val
+	if len(values) >= 8 {
+		scIface.Wireguard.Asc.H3 = values[7]
 	}
-	if val, ok := params["h4"]; ok {
-		scIface.Wireguard.Asc.H4 = val
+	if len(values) >= 9 {
+		scIface.Wireguard.Asc.H4 = values[8]
+	}
+	// AWG 2.0 parameters
+	if len(values) >= 10 {
+		scIface.Wireguard.Asc.S3 = values[9]
+	}
+	if len(values) >= 11 {
+		scIface.Wireguard.Asc.S4 = values[10]
+	}
+	if len(values) >= 12 {
+		scIface.Wireguard.Asc.I1 = values[11]
+	}
+	if len(values) >= 13 {
+		scIface.Wireguard.Asc.I2 = values[12]
+	}
+	if len(values) >= 14 {
+		scIface.Wireguard.Asc.I3 = values[13]
+	}
+	if len(values) >= 15 {
+		scIface.Wireguard.Asc.I4 = values[14]
+	}
+	if len(values) >= 16 {
+		scIface.Wireguard.Asc.I5 = values[15]
 	}
 
 	return m.successResponse(fmt.Sprintf("AWG parameters updated for interface %s", interfaceID))
+}
+
+// parseWireguardPeer handles "interface <id> wireguard peer <key> <subcommand> <value>" commands
+// Supported subcommands: endpoint, keepalive-interval, preshared-key, allow-ips
+func (m *MockRouter) parseWireguardPeer(interfaceID string, tokens []string) gokeenrestapimodels.ParseResponse {
+	// tokens[0] = public key, tokens[1] = subcommand, tokens[2] = value
+	if len(tokens) < 3 {
+		return m.errorResponse("Invalid wireguard peer command: expected '<key> <subcommand> <value>'")
+	}
+
+	publicKey := tokens[0]
+	subcommand := tokens[1]
+	value := tokens[2]
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	scIface, exists := m.scInterfaces[interfaceID]
+	if !exists {
+		return m.errorResponse(fmt.Sprintf("SC interface '%s' does not exist", interfaceID))
+	}
+
+	// Find or create peer
+	var peer *MockPeer
+	for i := range scIface.Wireguard.Peer {
+		if scIface.Wireguard.Peer[i].Key == publicKey {
+			peer = &scIface.Wireguard.Peer[i]
+			break
+		}
+	}
+	if peer == nil {
+		// Create new peer entry
+		scIface.Wireguard.Peer = append(scIface.Wireguard.Peer, MockPeer{Key: publicKey})
+		peer = &scIface.Wireguard.Peer[len(scIface.Wireguard.Peer)-1]
+	}
+
+	switch subcommand {
+	case "endpoint":
+		peer.Endpoint = value
+	case "keepalive-interval":
+		interval, err := strconv.Atoi(value)
+		if err != nil {
+			return m.errorResponse(fmt.Sprintf("Invalid keepalive-interval value: %s", value))
+		}
+		peer.KeepaliveInterval = interval
+	case "preshared-key":
+		peer.PresharedKey = value
+	case "allow-ips":
+		// Parse CIDR into address and mask
+		allowIP := parseCIDRToAllowedIP(value)
+		peer.AllowedIPs = append(peer.AllowedIPs, allowIP)
+	default:
+		return m.errorResponse(fmt.Sprintf("Unknown wireguard peer subcommand: %s", subcommand))
+	}
+
+	return m.successResponse(fmt.Sprintf("Wireguard peer %s %s updated for interface %s", publicKey, subcommand, interfaceID))
+}
+
+// parseNoWireguardPeer handles "no interface <id> wireguard peer <key> allow-ips <cidr>" commands
+func (m *MockRouter) parseNoWireguardPeer(interfaceID string, tokens []string) gokeenrestapimodels.ParseResponse {
+	// tokens[0] = public key, tokens[1] = subcommand (allow-ips), tokens[2] = value
+	if len(tokens) < 3 {
+		return m.errorResponse("Invalid no wireguard peer command: expected '<key> allow-ips <cidr>'")
+	}
+
+	publicKey := tokens[0]
+	subcommand := tokens[1]
+	value := tokens[2]
+
+	if subcommand != "allow-ips" {
+		return m.errorResponse(fmt.Sprintf("Unsupported no wireguard peer subcommand: %s", subcommand))
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	scIface, exists := m.scInterfaces[interfaceID]
+	if !exists {
+		return m.errorResponse(fmt.Sprintf("SC interface '%s' does not exist", interfaceID))
+	}
+
+	// Find peer
+	for i := range scIface.Wireguard.Peer {
+		if scIface.Wireguard.Peer[i].Key == publicKey {
+			// Remove matching allow-ip entry
+			newAllowedIPs := make([]MockAllowedIP, 0, len(scIface.Wireguard.Peer[i].AllowedIPs))
+			targetIP := parseCIDRToAllowedIP(value)
+			for _, allowIP := range scIface.Wireguard.Peer[i].AllowedIPs {
+				if allowIP.Address != targetIP.Address || allowIP.Mask != targetIP.Mask {
+					newAllowedIPs = append(newAllowedIPs, allowIP)
+				}
+			}
+			scIface.Wireguard.Peer[i].AllowedIPs = newAllowedIPs
+			return m.successResponse(fmt.Sprintf("Allow-ips %s removed from peer %s on interface %s", value, publicKey, interfaceID))
+		}
+	}
+
+	return m.successResponse(fmt.Sprintf("Peer %s not found on interface %s (command accepted)", publicKey, interfaceID))
+}
+
+// parseCIDRToAllowedIP converts a CIDR string to MockAllowedIP (address + dotted mask)
+func parseCIDRToAllowedIP(cidr string) MockAllowedIP {
+	_, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		// Fallback: try to split manually
+		parts := strings.SplitN(cidr, "/", 2)
+		if len(parts) == 2 {
+			return MockAllowedIP{Address: parts[0], Mask: parts[1]}
+		}
+		return MockAllowedIP{Address: cidr, Mask: "255.255.255.255"}
+	}
+	mask := net.IP(ipNet.Mask).String()
+	return MockAllowedIP{Address: ipNet.IP.String(), Mask: mask}
 }
 
 // parseCreateInterface handles interface creation commands
