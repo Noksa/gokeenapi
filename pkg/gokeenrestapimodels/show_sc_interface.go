@@ -1,15 +1,19 @@
 package gokeenrestapimodels
 
-// Address wraps an IP address string.
+// Address wraps an IP address with optional mask.
 type Address struct {
 	// Address is the IP address value
 	Address string `json:"address"`
+	// Mask is the subnet mask in dotted notation (e.g., "255.255.255.255")
+	Mask string `json:"mask,omitempty"`
 }
 
 // IP contains IP address configuration for an interface.
 type IP struct {
 	// Address contains the interface IP address
 	Address Address `json:"address"`
+	// Mtu is the interface MTU setting
+	Mtu string `json:"mtu,omitempty"`
 }
 
 // Asc contains AmneziaWG (AWG) specific parameters for WireGuard interfaces.

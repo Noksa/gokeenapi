@@ -14,6 +14,7 @@ import (
 	"github.com/noksa/gokeenapi/internal/gokeenlog"
 	"github.com/noksa/gokeenapi/internal/gokeenspinner"
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
+	"github.com/pmezard/go-difflib/difflib"
 	"go.uber.org/multierr"
 	"gopkg.in/ini.v1"
 )
@@ -481,4 +482,230 @@ func (*keeneticAwgconf) AddInterface(confFile string, name string) (gokeenrestap
 		return err
 	})
 	return createdInterface, err
+}
+
+// DiffUpdate returns a unified diff string between current interface state (rendered as .conf)
+// and the new conf file (also normalized). Returns empty string if no differences.
+func (*keeneticAwgconf) DiffUpdate(confPath, interfaceId string) (string, error) {
+	if confPath == "" {
+		return "", fmt.Errorf("conf-file flag is required")
+	}
+	if err := Checks.CheckInterfaceId(interfaceId); err != nil {
+		return "", err
+	}
+	if err := Checks.CheckInterfaceExists(interfaceId); err != nil {
+		return "", err
+	}
+
+	confPath, err := filepath.Abs(confPath)
+	if err != nil {
+		return "", err
+	}
+
+	// Parse the new conf file into structured params
+	asc, peer, err := parseConfFile(confPath)
+	if err != nil {
+		return "", err
+	}
+
+	// Also get MTU from the new conf (parseConfFile doesn't extract it)
+	newMtu := extractMtuFromConf(confPath)
+
+	// Get current state
+	interfaceDetails, err := Interface.GetInterfaceViaRciShowScInterfaces(interfaceId)
+	if err != nil {
+		return "", err
+	}
+
+	// Render both sides in canonical .conf format
+	currentConf := renderCanonicalConf(interfaceDetails)
+	newConf := renderCanonicalConfFromParams(interfaceDetails, asc, peer, newMtu)
+
+	if currentConf == newConf {
+		return "", nil
+	}
+
+	diff := difflib.UnifiedDiff{
+		A:        difflib.SplitLines(currentConf),
+		B:        difflib.SplitLines(newConf),
+		FromFile: interfaceId + " (current)",
+		ToFile:   filepath.Base(confPath) + " (new)",
+		Context:  3,
+	}
+
+	return difflib.GetUnifiedDiffString(diff)
+}
+
+// extractMtuFromConf reads MTU from a conf file's [Interface] section
+func extractMtuFromConf(confPath string) string {
+	cfg, err := ini.Load(confPath)
+	if err != nil {
+		return ""
+	}
+	section, err := cfg.GetSection("Interface")
+	if err != nil {
+		return ""
+	}
+	if key, err := section.GetKey("MTU"); err == nil {
+		return key.String()
+	}
+	return ""
+}
+
+// renderCanonicalConf renders current router state as a canonical .conf string
+func renderCanonicalConf(sc gokeenrestapimodels.RciShowScInterface) string {
+	var b strings.Builder
+
+	b.WriteString("[Interface]\n")
+	b.WriteString(fmt.Sprintf("Address = %s\n", addressToCIDR(sc.IP.Address)))
+	if sc.IP.Mtu != "" && sc.IP.Mtu != "0" {
+		b.WriteString(fmt.Sprintf("MTU = %s\n", sc.IP.Mtu))
+	}
+
+	asc := sc.Wireguard.Asc
+	writeASCBlock(&b, asc)
+
+	for _, peer := range sc.Wireguard.Peer {
+		writePeerBlock(&b, peer)
+	}
+
+	return b.String()
+}
+
+// renderCanonicalConfFromParams renders the "desired" state using parsed params,
+// but preserving address/MTU from current if not changed.
+func renderCanonicalConfFromParams(current gokeenrestapimodels.RciShowScInterface, asc ascParams, peer peerParams, mtu string) string {
+	var b strings.Builder
+
+	b.WriteString("[Interface]\n")
+	// Address comes from current state (we don't change it via update-awg)
+	b.WriteString(fmt.Sprintf("Address = %s\n", addressToCIDR(current.IP.Address)))
+	// MTU: use new if specified, otherwise keep current
+	effectiveMtu := current.IP.Mtu
+	if mtu != "" {
+		effectiveMtu = mtu
+	}
+	if effectiveMtu != "" && effectiveMtu != "0" {
+		b.WriteString(fmt.Sprintf("MTU = %s\n", effectiveMtu))
+	}
+
+	// ASC: use new params if present, otherwise current
+	if asc.hasAnyASC() {
+		writeASCParamsBlock(&b, asc)
+	} else {
+		writeASCBlock(&b, current.Wireguard.Asc)
+	}
+
+	// Peer: use new params if present, otherwise current
+	if peer.PublicKey != "" {
+		writePeerParamsBlock(&b, peer)
+	} else {
+		for _, p := range current.Wireguard.Peer {
+			writePeerBlock(&b, p)
+		}
+	}
+
+	return b.String()
+}
+
+// addressToCIDR converts Address model (address + dotted mask) to CIDR notation
+func addressToCIDR(addr gokeenrestapimodels.Address) string {
+	if addr.Mask == "" {
+		return addr.Address
+	}
+	mask := net.IPMask(net.ParseIP(addr.Mask).To4())
+	if mask == nil {
+		return addr.Address
+	}
+	ones, _ := mask.Size()
+	return fmt.Sprintf("%s/%d", addr.Address, ones)
+}
+
+// writeASCBlock writes ASC parameters from current state in canonical order
+func writeASCBlock(b *strings.Builder, asc gokeenrestapimodels.Asc) {
+	writeNonZero(b, "Jc", asc.Jc)
+	writeNonZero(b, "Jmin", asc.Jmin)
+	writeNonZero(b, "Jmax", asc.Jmax)
+	writeNonZero(b, "S1", asc.S1)
+	writeNonZero(b, "S2", asc.S2)
+	writeNonZero(b, "H1", asc.H1)
+	writeNonZero(b, "H2", asc.H2)
+	writeNonZero(b, "H3", asc.H3)
+	writeNonZero(b, "H4", asc.H4)
+	writeNonZero(b, "S3", asc.S3)
+	writeNonZero(b, "S4", asc.S4)
+	writeNonZero(b, "I1", asc.I1)
+	writeNonZero(b, "I2", asc.I2)
+	writeNonZero(b, "I3", asc.I3)
+	writeNonZero(b, "I4", asc.I4)
+	writeNonZero(b, "I5", asc.I5)
+}
+
+// writeASCParamsBlock writes ASC parameters from parsed conf params in canonical order
+func writeASCParamsBlock(b *strings.Builder, asc ascParams) {
+	writeNonZero(b, "Jc", asc.Jc)
+	writeNonZero(b, "Jmin", asc.Jmin)
+	writeNonZero(b, "Jmax", asc.Jmax)
+	writeNonZero(b, "S1", asc.S1)
+	writeNonZero(b, "S2", asc.S2)
+	writeNonZero(b, "H1", asc.H1)
+	writeNonZero(b, "H2", asc.H2)
+	writeNonZero(b, "H3", asc.H3)
+	writeNonZero(b, "H4", asc.H4)
+	writeNonZero(b, "S3", asc.S3)
+	writeNonZero(b, "S4", asc.S4)
+	writeNonZero(b, "I1", asc.I1)
+	writeNonZero(b, "I2", asc.I2)
+	writeNonZero(b, "I3", asc.I3)
+	writeNonZero(b, "I4", asc.I4)
+	writeNonZero(b, "I5", asc.I5)
+}
+
+// writePeerBlock writes a peer section from current state model
+func writePeerBlock(b *strings.Builder, peer gokeenrestapimodels.Peer) {
+	b.WriteString("\n[Peer]\n")
+	if peer.Key != "" {
+		b.WriteString(fmt.Sprintf("PublicKey = %s\n", peer.Key))
+	}
+	if peer.PresharedKey != "" {
+		b.WriteString(fmt.Sprintf("PresharedKey = %s\n", peer.PresharedKey))
+	}
+	if peer.Endpoint.Address != "" {
+		b.WriteString(fmt.Sprintf("Endpoint = %s\n", peer.Endpoint.Address))
+	}
+	if len(peer.AllowIps) > 0 {
+		cidrs := make([]string, 0, len(peer.AllowIps))
+		for _, allowIP := range peer.AllowIps {
+			cidrs = append(cidrs, allowIPToCIDR(allowIP))
+		}
+		b.WriteString(fmt.Sprintf("AllowedIPs = %s\n", strings.Join(cidrs, ", ")))
+	}
+	if peer.KeepaliveInterval.Interval > 0 {
+		b.WriteString(fmt.Sprintf("PersistentKeepalive = %d\n", peer.KeepaliveInterval.Interval))
+	}
+}
+
+// writePeerParamsBlock writes a peer section from parsed conf params
+func writePeerParamsBlock(b *strings.Builder, peer peerParams) {
+	b.WriteString("\n[Peer]\n")
+	b.WriteString(fmt.Sprintf("PublicKey = %s\n", peer.PublicKey))
+	if peer.PresharedKey != "" {
+		b.WriteString(fmt.Sprintf("PresharedKey = %s\n", peer.PresharedKey))
+	}
+	if peer.Endpoint != "" {
+		b.WriteString(fmt.Sprintf("Endpoint = %s\n", peer.Endpoint))
+	}
+	if len(peer.AllowedIPs) > 0 {
+		b.WriteString(fmt.Sprintf("AllowedIPs = %s\n", strings.Join(peer.AllowedIPs, ", ")))
+	}
+	if peer.PersistentKeepalive > 0 {
+		b.WriteString(fmt.Sprintf("PersistentKeepalive = %d\n", peer.PersistentKeepalive))
+	}
+}
+
+// writeNonZero writes a key=value line if value is non-empty and not "0"
+func writeNonZero(b *strings.Builder, name, value string) {
+	if value != "" && value != "0" {
+		b.WriteString(fmt.Sprintf("%s = %s\n", name, value))
+	}
 }

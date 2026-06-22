@@ -300,3 +300,174 @@ var _ = Describe("AWG AddInterface", func() {
 		Expect(err).To(HaveOccurred())
 	})
 })
+
+var _ = Describe("AWG DiffUpdate", func() {
+	var server *httptest.Server
+
+	BeforeEach(func() {
+		server = SetupMockRouterForTest(
+			WithScInterfaces(map[string]MockScInterface{
+				"Wireguard0": {
+					Description: "Test WireGuard",
+					IP:          MockIP{Address: "10.9.9.2/32"},
+					Wireguard: MockWireguard{
+						Asc: MockAsc{Jc: "3", Jmin: "41", Jmax: "115", S1: "110", S2: "52", H1: "100", H2: "200", H3: "300", H4: "400", S3: "52", S4: "19", I1: "56"},
+						Peer: []MockPeer{
+							{
+								Key:               "ySQT/OAXa6htlgpxQLhFFjrVN/qlGoyEUNTAzYM9Fzs=",
+								Endpoint:          "148.253.214.56:1235",
+								KeepaliveInterval: 33,
+								AllowedIPs:        []MockAllowedIP{{Address: "0.0.0.0", Mask: "0.0.0.0"}},
+							},
+						},
+					},
+				},
+			}),
+		)
+	})
+
+	AfterEach(func() {
+		if server != nil {
+			server.Close()
+		}
+	})
+
+	createConf := func(content string) string {
+		tmpDir := GinkgoT().TempDir()
+		confPath := filepath.Join(tmpDir, "test.conf")
+		Expect(os.WriteFile(confPath, []byte(content), 0644)).To(Succeed())
+		return confPath
+	}
+
+	It("should return empty diff when nothing changed", func() {
+		confPath := createConf(`[Interface]
+PrivateKey = abc
+Address = 10.9.9.2/32
+Jc = 3
+Jmin = 41
+Jmax = 115
+S1 = 110
+S2 = 52
+H1 = 100
+H2 = 200
+H3 = 300
+H4 = 400
+S3 = 52
+S4 = 19
+I1 = 56
+
+[Peer]
+PublicKey = ySQT/OAXa6htlgpxQLhFFjrVN/qlGoyEUNTAzYM9Fzs=
+Endpoint = 148.253.214.56:1235
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 33`)
+
+		diff, err := AwgConf.DiffUpdate(confPath, "Wireguard0")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(diff).To(BeEmpty())
+	})
+
+	It("should show diff when endpoint changes", func() {
+		confPath := createConf(`[Interface]
+PrivateKey = abc
+Address = 10.9.9.2/32
+Jc = 3
+Jmin = 41
+Jmax = 115
+S1 = 110
+S2 = 52
+H1 = 100
+H2 = 200
+H3 = 300
+H4 = 400
+S3 = 52
+S4 = 19
+I1 = 56
+
+[Peer]
+PublicKey = ySQT/OAXa6htlgpxQLhFFjrVN/qlGoyEUNTAzYM9Fzs=
+Endpoint = 999.999.999.999:5555
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 33`)
+
+		diff, err := AwgConf.DiffUpdate(confPath, "Wireguard0")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(diff).NotTo(BeEmpty())
+		Expect(diff).To(ContainSubstring("-Endpoint = 148.253.214.56:1235"))
+		Expect(diff).To(ContainSubstring("+Endpoint = 999.999.999.999:5555"))
+	})
+
+	It("should show diff when ASC changes", func() {
+		confPath := createConf(`[Interface]
+PrivateKey = abc
+Address = 10.9.9.2/32
+Jc = 99
+Jmin = 41
+Jmax = 115
+S1 = 110
+S2 = 52
+H1 = 100
+H2 = 200
+H3 = 300
+H4 = 400
+
+[Peer]
+PublicKey = ySQT/OAXa6htlgpxQLhFFjrVN/qlGoyEUNTAzYM9Fzs=
+Endpoint = 148.253.214.56:1235
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 33`)
+
+		diff, err := AwgConf.DiffUpdate(confPath, "Wireguard0")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(diff).NotTo(BeEmpty())
+		Expect(diff).To(ContainSubstring("-Jc = 3"))
+		Expect(diff).To(ContainSubstring("+Jc = 99"))
+	})
+
+	It("should not show address as changed when it matches", func() {
+		confPath := createConf(`[Interface]
+PrivateKey = abc
+Address = 10.9.9.2/32
+Jc = 3
+Jmin = 41
+Jmax = 115
+S1 = 110
+S2 = 52
+H1 = 100
+H2 = 200
+H3 = 300
+H4 = 400
+S3 = 52
+S4 = 19
+I1 = 56
+
+[Peer]
+PublicKey = ySQT/OAXa6htlgpxQLhFFjrVN/qlGoyEUNTAzYM9Fzs=
+Endpoint = 148.253.214.56:1235
+AllowedIPs = 10.0.0.0/8, 192.168.0.0/16
+PersistentKeepalive = 33`)
+
+		diff, err := AwgConf.DiffUpdate(confPath, "Wireguard0")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(diff).NotTo(ContainSubstring("-Address"))
+		Expect(diff).NotTo(ContainSubstring("+Address"))
+	})
+
+	It("should fail for non-existent interface", func() {
+		confPath := createConf(`[Interface]
+PrivateKey = abc
+Address = 10.0.0.1/24
+
+[Peer]
+PublicKey = key
+Endpoint = x:1`)
+
+		_, err := AwgConf.DiffUpdate(confPath, "NonExistent")
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should fail for empty conf path", func() {
+		_, err := AwgConf.DiffUpdate("", "Wireguard0")
+		Expect(err).To(HaveOccurred())
+	})
+})

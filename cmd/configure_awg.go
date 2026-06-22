@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/noksa/gokeenapi/internal/gokeenlog"
@@ -45,21 +46,38 @@ Examples:
 			return errors.New("--interface-id flag is required")
 		}
 		if dryRun {
-			commands, err := gokeenrestapi.AwgConf.PlanUpdate(confFile, interfaceId)
+			diff, err := gokeenrestapi.AwgConf.DiffUpdate(confFile, interfaceId)
 			if err != nil {
 				return err
 			}
-			if len(commands) == 0 {
+			if diff == "" {
 				gokeenlog.InfoSubStepf("Interface %v is already up to date — no changes needed", color.CyanString(interfaceId))
 				return nil
 			}
-			gokeenlog.Infof("Dry-run: %v command(s) would be applied to %v:", color.YellowString("%d", len(commands)), color.CyanString(interfaceId))
-			for _, c := range commands {
-				gokeenlog.InfoSubStepf("%v", color.GreenString(c.Parse))
-			}
+			gokeenlog.Infof("Changes for %v:", color.CyanString(interfaceId))
+			printColoredDiff(diff)
 			return nil
 		}
 		return gokeenrestapi.AwgConf.ConfigureOrUpdateInterface(confFile, interfaceId)
 	}
 	return cmd
+}
+
+// printColoredDiff prints a unified diff with colored output:
+// red for removals, green for additions, cyan for hunk headers, bold for file headers.
+func printColoredDiff(diff string) {
+	for line := range strings.SplitSeq(diff, "\n") {
+		switch {
+		case strings.HasPrefix(line, "---"), strings.HasPrefix(line, "+++"):
+			gokeenlog.Info(color.New(color.Bold).Sprint(line))
+		case strings.HasPrefix(line, "@@"):
+			gokeenlog.Info(color.CyanString(line))
+		case strings.HasPrefix(line, "-"):
+			gokeenlog.Info(color.RedString(line))
+		case strings.HasPrefix(line, "+"):
+			gokeenlog.Info(color.GreenString(line))
+		case line != "":
+			gokeenlog.Info(line)
+		}
+	}
 }
