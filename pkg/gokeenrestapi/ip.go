@@ -209,6 +209,9 @@ func (*keeneticIp) AddRoutesFromBatFile(batFile string, interfaceId string) erro
 		if line == "" {
 			continue
 		}
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
 		sl := routeRegex.FindStringSubmatch(line)
 		if len(sl) != 3 {
 			gokeenlog.InfoSubStepf("Skipping line with invalid format: '%v'", line)
@@ -291,6 +294,9 @@ func (*keeneticIp) AddRoutesFromBatUrl(url string, interfaceId string) error {
 	var parseSlice []gokeenrestapimodels.ParseRequest
 	for _, line := range splitted {
 		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "#") {
 			continue
 		}
 		sl := routeRegex.FindStringSubmatch(line)
