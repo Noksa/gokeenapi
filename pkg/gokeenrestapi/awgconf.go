@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/hashicorp/go-version"
+	"github.com/noksa/gokeenapi/internal/gokeencache"
 	"github.com/noksa/gokeenapi/internal/gokeenlog"
 	"github.com/noksa/gokeenapi/internal/gokeenspinner"
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
@@ -25,6 +27,42 @@ var (
 )
 
 type keeneticAwgconf struct{}
+
+const minAWG2Version = "5.1"
+
+// warnIfAWG2Unsupported logs a warning if the router firmware is below 5.1
+// and AWG 2.0 parameters are present in the conf file.
+func warnIfAWG2Unsupported(asc ascParams) {
+	if !asc.hasAWG2() {
+		return
+	}
+
+	runtime := gokeencache.GetRuntimeConfig()
+	routerVersion := runtime.RouterInfo.Version.Title
+	if routerVersion == "" {
+		return
+	}
+
+	numericVersion := versionNumericRe.FindString(routerVersion)
+	if numericVersion == "" {
+		return
+	}
+
+	currentVer, err := version.NewVersion(numericVersion)
+	if err != nil {
+		return
+	}
+
+	minVer, err := version.NewVersion(minAWG2Version)
+	if err != nil {
+		return
+	}
+
+	if currentVer.LessThan(minVer) {
+		gokeenlog.Infof("⚠️  %s: AWG 2.0 parameters (S3, S4, I1-I5) require KeeneticOS %s+. Current firmware: %s. These parameters may be ignored by the router.",
+			color.YellowString("WARNING"), minAWG2Version, routerVersion)
+	}
+}
 
 // ascParams holds parsed ASC obfuscation parameters from a .conf file.
 // All fields are optional — standard WireGuard configs won't have any of these.
@@ -429,6 +467,8 @@ func (*keeneticAwgconf) PlanUpdate(confPath, interfaceId string) ([]gokeenrestap
 		return nil, err
 	}
 
+	warnIfAWG2Unsupported(asc)
+
 	interfaceDetails, err := Interface.GetInterfaceViaRciShowScInterfaces(interfaceId)
 	if err != nil {
 		return nil, err
@@ -507,6 +547,8 @@ func (*keeneticAwgconf) DiffUpdate(confPath, interfaceId string) (string, error)
 	if err != nil {
 		return "", err
 	}
+
+	warnIfAWG2Unsupported(asc)
 
 	// Also get MTU from the new conf (parseConfFile doesn't extract it)
 	newMtu := extractMtuFromConf(confPath)
