@@ -5,6 +5,7 @@
 config.yaml
 config_*.yaml
 binaries
+generated
 scripts/upload_routes*.sh
 batfiles/file*.bat
 coverage.html

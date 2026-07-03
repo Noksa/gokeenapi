@@ -130,7 +130,7 @@ build: $(CYBER_CACHE) lint ## Build (includes linting)
 	@./scripts/build.sh
 
 .PHONY: binaries
-binaries: $(CYBER_CACHE) lint ## Build release binaries (VERSION=<version>)
+binaries: $(CYBER_CACHE) ## Build release binaries (VERSION=<version>, TARGET=os/arch)
 	@source $(CYBER_CACHE) && { \
 		echo ""; \
 		echo -e "$${CYBER_D}╔═══════════════════════════════════════════════════════════════╗$${CYBER_X}"; \
@@ -141,7 +141,7 @@ binaries: $(CYBER_CACHE) lint ## Build release binaries (VERSION=<version>)
 		cyber_step "Creating release binaries..."; \
 	}
 	@chmod +x ./scripts/create_binaries.sh
-	@cd ./scripts && ./create_binaries.sh --version $(VERSION)
+	@TARGET=$(TARGET) ./scripts/create_binaries.sh $(if $(VERSION),--version $(VERSION),)
 
 ##@ Docker
 
