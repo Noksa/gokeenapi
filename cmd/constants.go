@@ -12,6 +12,7 @@ const (
 	CmdAddDnsRouting    = "add-dns-routing"
 	CmdDeleteDnsRouting = "delete-dns-routing"
 	CmdDeleteKnownHosts = "delete-known-hosts"
+	CmdDeleteAllRoutes  = "delete-all-routes"
 	CmdExec             = "exec"
 	CmdScheduler        = "scheduler"
 	CmdVersion          = "version"
@@ -40,6 +41,7 @@ var (
 	AliasesDeleteDnsRecords = []string{"deletednsrecords", "ddr"}
 	AliasesAddDnsRouting    = []string{"adddnsrouting", "adnsr", "adddnsroutes", "add-dns-routes"}
 	AliasesDeleteDnsRouting = []string{"deletednsrouting", "ddnsr", "deletednsroutes", "delete-dns-routes"}
+	AliasesDeleteAllRoutes  = []string{"deleteallroutes", "dar"}
 	AliasesDeleteKnownHosts = []string{"deleteknownhosts", "dkh"}
 	AliasesExec             = []string{"e"}
 	AliasesScheduler        = []string{"schedule", "sched"}

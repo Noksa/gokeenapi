@@ -398,3 +398,15 @@ func checkInterfaceContainsRoute(routeIp, mask, interfaceId string, existingRout
 	}
 	return false, nil
 }
+
+// DeleteAllRoutes removes all static routes from the router via a single RCI POST request.
+func (*keeneticIp) DeleteAllRoutes() error {
+	body := []any{
+		map[string]any{"ip": map[string]any{"route": []any{map[string]any{"no": true}}}},
+		map[string]any{"system": map[string]any{"configuration": map[string]any{"save": map[string]any{}}}},
+	}
+	return gokeenspinner.WrapWithSpinner("Deleting all static routes", func() error {
+		_, err := Common.ExecutePostSubPath("/rci/", body)
+		return err
+	})
+}
