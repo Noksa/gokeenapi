@@ -32,6 +32,7 @@ var _ = Describe("NewRootCmd", func() {
 			CmdShowInterfaces,
 			CmdAddRoutes,
 			CmdDeleteRoutes,
+			CmdDeleteAllRoutes,
 			CmdAddDnsRecords,
 			CmdDeleteDnsRecords,
 			CmdAddAwg,
