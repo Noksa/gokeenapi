@@ -239,7 +239,7 @@ func (*keeneticIp) AddRoutesFromBatFile(batFile string, interfaceId string) erro
 	}
 	if len(parseSlice) == 0 {
 		gokeenlog.InfoSubStepf("No need to add new static routes from %v file", color.CyanString("%v", batFile))
-		return nil
+		return mErr
 	}
 	gokeencache.SetRciShowIpRoute(nil)
 	var parseResponse []gokeenrestapimodels.ParseResponse
@@ -326,7 +326,7 @@ func (*keeneticIp) AddRoutesFromBatUrl(url string, interfaceId string) error {
 	}
 	if len(parseSlice) == 0 {
 		gokeenlog.InfoSubStepf("No need to add new static routes from %v url", color.CyanString("%v", url))
-		return nil
+		return mErr
 	}
 	gokeencache.SetRciShowIpRoute(nil)
 	var parseResponse []gokeenrestapimodels.ParseResponse
