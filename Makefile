@@ -118,16 +118,18 @@ test-ci: $(CYBER_CACHE) ## Run tests in CI (race + randomized + reports)
 ##@ Build
 
 .PHONY: build
-build: $(CYBER_CACHE) lint ## Build (includes linting)
+build: $(CYBER_CACHE) lint ## Build Docker image (includes linting) — TAG=<tag> (default: stable)
 	@source $(CYBER_CACHE) && { \
 		echo ""; \
 		echo -e "$${CYBER_D}╔═══════════════════════════════════════════════════════════════╗$${CYBER_X}"; \
 		echo -e "$${CYBER_D}║$${CYBER_X}  $${CYBER_M}🔨$${CYBER_X} $${CYBER_B}$${CYBER_C}BUILD$${CYBER_X}"; \
+		echo -e "$${CYBER_D}╠═══════════════════════════════════════════════════════════════╣$${CYBER_X}"; \
+		echo -e "$${CYBER_D}║$${CYBER_X}  $${CYBER_W}Tag$${CYBER_X} $${CYBER_C}→$${CYBER_X} $${CYBER_G}$${TAG:-stable}$${CYBER_X}"; \
 		echo -e "$${CYBER_D}╚═══════════════════════════════════════════════════════════════╝$${CYBER_X}"; \
-		cyber_step "Building binary..."; \
+		cyber_step "Building Docker image..."; \
 	}
 	@chmod +x ./scripts/build.sh
-	@./scripts/build.sh
+	@TAG=$(TAG) ./scripts/build.sh
 
 .PHONY: binaries
 binaries: $(CYBER_CACHE) ## Build release binaries (VERSION=<version>, TARGET=os/arch)

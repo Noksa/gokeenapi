@@ -1,8 +1,31 @@
-**
-!go.sum
-!go.work
-!go.mod
-!cmd/
-!internal/
-!pkg/
-!main.go
+.git
+.github
+.idea
+.vscode
+.kiro
+.claude
+
+# Test and coverage artifacts
+coverage.out
+coverage.html
+report.json
+cover.out
+**/testdata/
+
+# Docs and examples (not needed for build)
+*.md
+batfiles/
+custom/
+docs/
+
+# Build artifacts
+generated/
+gokeenapi
+gokeenapiw
+
+# Scripts (only Dockerfile needs them, not the binary)
+scripts/
+
+# Misc
+.DS_Store
+.cyber.sh

@@ -42,9 +42,18 @@ The easiest way to get started is by using Docker or by downloading the latest r
 
 Using Docker is the recommended way to run `gokeenapi`.
 
+Two image tags are available on [Docker Hub](https://hub.docker.com/r/noksa/gokeenapi):
+
+| Tag | Description |
+|-----|-------------|
+| `stable` | Latest stable release (updated on every release) |
+| `1.7.0`, `1.7.1`, … | Pinned version tag — available starting from `v1.7.0` |
+
 ```bash
-# Pull the Docker image
+# Pull the latest stable image
 export GOKEENAPI_IMAGE="noksa/gokeenapi:stable"
+# Or pin to a specific version (available since v1.7.0)
+# export GOKEENAPI_IMAGE="noksa/gokeenapi:1.7.0"
 docker pull "${GOKEENAPI_IMAGE}"
 
 # Run a command
