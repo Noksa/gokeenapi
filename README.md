@@ -113,6 +113,20 @@ All configuration options can be set via environment variables:
 
 > **Security recommendation**: Store credentials using environment variables instead of writing them directly into the config file. Config files stored with world-readable permissions (e.g. `0644`) will trigger a runtime warning. Restrict permissions with `chmod 600 config.yaml` and use `GOKEENAPI_KEENETIC_LOGIN` / `GOKEENAPI_KEENETIC_PASSWORD` to pass credentials. Add `config.yaml` and `config_*.yaml` to your `.gitignore` to prevent accidental commits (the project's default `.gitignore` already includes these patterns).
 
+### TLS Certificate Verification
+
+When connecting to a router over HTTPS with a self-signed certificate, set `tls_skip_verify: true` under the `keenetic` key:
+
+```yaml
+keenetic:
+  url: https://192.168.1.1
+  login: admin
+  password: secret
+  tls_skip_verify: true  # Disable TLS verification for self-signed certificates
+```
+
+> **Note**: Only use `tls_skip_verify` on trusted local networks. Disabling certificate verification exposes the connection to man-in-the-middle attacks.
+
 ---
 
 ## 📋 Config Reference
@@ -245,6 +259,22 @@ Deletes static routes for a specific interface.
 
 > **Tip:** To find interface IDs, run `show-interfaces`.
 
+#### `delete-all-routes`
+
+*Aliases: `deleteallroutes`, `dar`*
+
+Deletes all static routes from the router in a single request, regardless of interface.
+
+```shell
+# Delete all routes (with confirmation prompt)
+./gokeenapi delete-all-routes --config my_config.yaml
+
+# Delete all routes without confirmation
+./gokeenapi delete-all-routes --config my_config.yaml --force
+```
+
+> **Warning:** This removes every user-defined static route on the router at once. Use with caution.
+
 #### `add-dns-records`
 
 *Aliases: `adddnsrecords`, `adr`*
@@ -365,13 +395,16 @@ Adds a new WireGuard connection from a `.conf` file.
 
 *Aliases: `updateawg`, `uawg`*
 
-Updates an existing WireGuard connection from a `.conf` file.
+Updates an existing WireGuard connection from a `.conf` file. Supports AmneziaWG (AWG 2.0) parameters.
 
 ```shell
 ./gokeenapi update-awg --config my_config.yaml --conf-file <path-to-conf> --interface-id <interface-id>
+
+# Preview changes without applying them
+./gokeenapi update-awg --config my_config.yaml --conf-file <path-to-conf> --interface-id <interface-id> --dry-run
 ```
 
-> **Tip:** To find interface IDs, run `show-interfaces`.
+> **Tip:** To find interface IDs, run `show-interfaces`. Use `--dry-run` to see a unified diff of what would change before applying.
 
 #### `delete-known-hosts`
 
