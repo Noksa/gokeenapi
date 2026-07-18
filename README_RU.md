@@ -259,6 +259,22 @@ tasks:
 
 > **Совет:** Чтобы найти ID интерфейсов, выполните команду `show-interfaces`.
 
+#### `delete-all-routes`
+
+*Псевдонимы: `deleteallroutes`, `dar`*
+
+Удаляет все статические маршруты с роутера одним запросом, независимо от интерфейса.
+
+```shell
+# Удалить все маршруты (с подтверждением)
+./gokeenapi delete-all-routes --config my_config.yaml
+
+# Удалить все маршруты без подтверждения
+./gokeenapi delete-all-routes --config my_config.yaml --force
+```
+
+> **Внимание:** Эта команда удаляет ВСЕ пользовательские статические маршруты на роутере. Используйте с осторожностью.
+
 #### `add-dns-records`
 
 *Псевдонимы: `adddnsrecords`, `adr`*
@@ -379,13 +395,16 @@ dns:
 
 *Псевдонимы: `updateawg`, `uawg`*
 
-Обновляет существующее WireGuard соединение из `.conf` файла.
+Обновляет существующее WireGuard соединение из `.conf` файла. Поддерживает параметры AmneziaWG (AWG 2.0).
 
 ```shell
 ./gokeenapi update-awg --config my_config.yaml --conf-file <путь-к-conf> --interface-id <interface-id>
+
+# Предпросмотр изменений без применения
+./gokeenapi update-awg --config my_config.yaml --conf-file <путь-к-conf> --interface-id <interface-id> --dry-run
 ```
 
-> **Совет:** Чтобы найти ID интерфейсов, выполните команду `show-interfaces`.
+> **Совет:** Чтобы найти ID интерфейсов, выполните команду `show-interfaces`. Используйте `--dry-run` для просмотра unified diff перед применением изменений.
 
 #### `delete-known-hosts`
 

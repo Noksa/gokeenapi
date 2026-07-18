@@ -259,6 +259,22 @@ Deletes static routes for a specific interface.
 
 > **Tip:** To find interface IDs, run `show-interfaces`.
 
+#### `delete-all-routes`
+
+*Aliases: `deleteallroutes`, `dar`*
+
+Deletes all static routes from the router in a single request, regardless of interface.
+
+```shell
+# Delete all routes (with confirmation prompt)
+./gokeenapi delete-all-routes --config my_config.yaml
+
+# Delete all routes without confirmation
+./gokeenapi delete-all-routes --config my_config.yaml --force
+```
+
+> **Warning:** This removes every user-defined static route on the router at once. Use with caution.
+
 #### `add-dns-records`
 
 *Aliases: `adddnsrecords`, `adr`*
@@ -379,13 +395,16 @@ Adds a new WireGuard connection from a `.conf` file.
 
 *Aliases: `updateawg`, `uawg`*
 
-Updates an existing WireGuard connection from a `.conf` file.
+Updates an existing WireGuard connection from a `.conf` file. Supports AmneziaWG (AWG 2.0) parameters.
 
 ```shell
 ./gokeenapi update-awg --config my_config.yaml --conf-file <path-to-conf> --interface-id <interface-id>
+
+# Preview changes without applying them
+./gokeenapi update-awg --config my_config.yaml --conf-file <path-to-conf> --interface-id <interface-id> --dry-run
 ```
 
-> **Tip:** To find interface IDs, run `show-interfaces`.
+> **Tip:** To find interface IDs, run `show-interfaces`. Use `--dry-run` to see a unified diff of what would change before applying.
 
 #### `delete-known-hosts`
 
