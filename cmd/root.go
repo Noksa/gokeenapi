@@ -84,6 +84,7 @@ Can also be set via GOKEENAPI_CONFIG environment variable.`)
 	rootCmd.AddCommand(
 		newAddRoutesCmd(),
 		newDeleteRoutesCmd(),
+		newDeleteAllRoutesCmd(),
 		newShowInterfacesCmd(),
 		newUpdateAwgCmd(),
 		newAddAwgCmd(),
