@@ -29,35 +29,43 @@ gokeenapi/
 └── Makefile                     # lint, test, build, coverage targets
 ```
 
+## File & Package Naming
+
+- Source files: `snake_case` — `add_routes.go`, `add_routes_test.go`, `add_routes_property_test.go`
+- Command constructors: `newXxxCmd()` (lowercase `new`)
+- Exported symbols: `PascalCase`; unexported: `camelCase`
+- Package names: single lowercase word, no underscores
+- Shared helpers go in `cmd/common.go`; command-specific logic in `cmd/<command>.go`
+- Externally importable code belongs in `pkg/`; internal-only utilities in `internal/`
+
 ## API Singletons (`pkg/gokeenrestapi`)
 
-Never instantiate these — use the package-level singletons only:
+Never instantiate — use package-level singletons only:
 
 | Singleton | Responsibility |
 |---|---|
 | `gokeenrestapi.Common` | Auth, raw RCI execution |
-| `gokeenrestapi.Ip` | IP route management |
+| `gokeenrestapi.Ip` | IP route management (`AddRoutes`, `DeleteRoutes`, `DeleteAllRoutes`) |
 | `gokeenrestapi.DnsRouting` | DNS-routing management |
+| `gokeenrestapi.AwgConf` | AWG/WireGuard configuration and diff-update |
 | `gokeenrestapi.Checks` | Input validation (`CheckInterfaceId`, `CheckInterfaceExists`, `CheckComponentInstalled`) |
 | `gokeenrestapi.Interface` | Interface listing |
 
-Authentication is handled automatically by `PersistentPreRunE` in `root.go`. Commands must never call `Auth()` directly.
-
-`PersistentPreRunE` skips init for `completion`, `help`, `scheduler`, and `version` commands.
+Authentication is automatic via `PersistentPreRunE` in `root.go`. Commands must never call `Auth()` directly. `PersistentPreRunE` skips init for `completion`, `help`, `scheduler`, and `version` commands.
 
 ## Global Config
 
-`config.Cfg` is loaded once in `root.go` via `config.LoadConfig()`. Access it directly inside `RunE` — never reload it in commands, and never access it in command constructors.
+`config.Cfg` is loaded once in `root.go` via `config.LoadConfig()`. Access it inside `RunE` only — never in command constructors, never reload in commands.
 
-## Adding a New Command (3 steps)
+## Adding a Command (3 steps)
 
 **Step 1 — `cmd/constants.go`**: define name and aliases
 ```go
-const CmdMyCommand = "my-command"           // kebab-case
-var AliasesMyCommand = []string{"mycommand", "mc"} // compact, no hyphens
+const CmdMyCommand = "my-command"                    // kebab-case
+var AliasesMyCommand = []string{"mycommand", "mc"}   // compact, no hyphens
 ```
 
-**Step 2 — `cmd/my_command.go`**: implement the command
+**Step 2 — `cmd/my_command.go`**: implement
 ```go
 func newMyCommandCmd() *cobra.Command {
     cmd := &cobra.Command{
@@ -69,7 +77,7 @@ func newMyCommandCmd() *cobra.Command {
     cmd.Flags().StringP("interface", "i", "", "Interface name")
     cmd.RunE = func(cmd *cobra.Command, args []string) error {
         // 1. Parse flags
-        // 2. Validate inputs via gokeenrestapi.Checks
+        // 2. Validate via gokeenrestapi.Checks
         // 3. Call API singletons
         // 4. Log with gokeenlog
         return nil
@@ -83,7 +91,8 @@ func newMyCommandCmd() *cobra.Command {
 rootCmd.AddCommand(newMyCommandCmd())
 ```
 
-### Command Rules (enforced)
+### Enforced Command Rules
+
 - Always `RunE`, never `Run`
 - Never access `config.Cfg` or API singletons in the constructor — only inside `RunE`
 - Never use `fmt.Println` / `log.Println` / `print` — always `gokeenlog`
@@ -93,21 +102,23 @@ rootCmd.AddCommand(newMyCommandCmd())
 
 ```go
 // Routes
-gokeenrestapi.Ip.AddRoutes(routes, interfaceName)
+gokeenrestapi.Ip.AddRoutesFromBatFile(absPath, interfaceID)
+gokeenrestapi.Ip.AddRoutesFromBatUrl(url, interfaceID)
 gokeenrestapi.Ip.DeleteRoutes(routes, interfaceName)
 
 // DNS routing
 gokeenrestapi.DnsRouting.AddDomains(domains, interfaceName)
 gokeenrestapi.DnsRouting.DeleteDomains(domains, interfaceName)
 
-// Validation
-exists, err := gokeenrestapi.Checks.InterfaceExists(interfaceName)
+// Validation — always run before API calls
+gokeenrestapi.Checks.CheckInterfaceId(id)
+gokeenrestapi.Checks.CheckInterfaceExists(id)
 
 // Raw RCI
 output, err := gokeenrestapi.Common.ExecutePostParse(command)
 ```
 
-Multi-operation error aggregation — always collect all errors, not just the first:
+Multi-operation error aggregation — always collect all errors, never just the first:
 ```go
 var errs error
 for _, item := range items {
@@ -118,27 +129,9 @@ for _, item := range items {
 return errs
 ```
 
-## Testing
-
-> **IMPORTANT:** Activate the `golang-testing` skill before creating or modifying any test file.
-> The skill is the single source of truth for test patterns, structure, and conventions.
-
-| Test type | File pattern | Location |
-|---|---|---|
-| Unit | `*_test.go` | Same dir as source |
-| Property-based | `*_property_test.go` | Same dir as source |
-| Integration | `docker_*_test.go` | Repository root |
-
-Key rules (see `golang-testing` skill for full details):
-- All tests use Ginkgo v2 + Gomega — never testify
-- Every test package has `suite_test.go` with `RegisterFailHandler(Fail)` + `RunSpecs()`
-- Property tests use `rapid.Check(GinkgoT(), ...)` inside Ginkgo `It` blocks
-- Any test touching the API must call `gokeenrestapi.SetupMockRouterForTest()`
-- Mock testing follows `mock-testing-guidelines.md` steering
-
 ## Logging
 
-Always use `gokeenlog`. Available functions:
+`gokeenlog` is the only allowed logging package. Available functions:
 
 ```go
 gokeenlog.Info("done")
@@ -149,17 +142,19 @@ gokeenlog.HorizontalLine()
 gokeenlog.PrintParseResponse(resp)
 ```
 
-## File & Package Naming Conventions
+## Testing
 
-| Concern | Location |
-|---|---|
-| Shared validation / prompt helpers | `cmd/common.go` |
-| Command-specific logic | `cmd/<command>.go` |
-| Externally importable code | `pkg/` |
-| Internal-only utilities | `internal/` |
-| Integration tests | repo root `docker_*_test.go` |
+> **IMPORTANT:** Activate the `golang-testing` skill before creating or modifying any test file.
 
-- Files: `snake_case` — e.g. `add_routes.go`, `add_routes_test.go`, `add_routes_property_test.go`
-- Command constructors: `newXxxCmd()` (lowercase `new`)
-- Exported symbols: PascalCase; unexported: camelCase
-- Package names: single lowercase word, no underscores
+| Test type | File pattern | Location |
+|---|---|---|
+| Unit | `*_test.go` | Same dir as source |
+| Property-based | `*_property_test.go` | Same dir as source |
+| Integration | `docker_*_test.go` | Repository root |
+
+Key rules:
+- All tests use Ginkgo v2 + Gomega — never testify
+- Every test package has `suite_test.go` with `RegisterFailHandler(Fail)` + `RunSpecs()`
+- Property tests use `rapid.Check(GinkgoT(), ...)` inside Ginkgo `It` blocks
+- Any test touching the API must call `gokeenrestapi.SetupMockRouterForTest()`
+- Use `Eventually(...).WithTimeout(...).WithPolling(...).Should(...)` fluent API — never positional args
