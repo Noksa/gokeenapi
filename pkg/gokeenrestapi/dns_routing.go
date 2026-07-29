@@ -432,9 +432,11 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 		slices.Sort(allDomains)
 		allDomains = slices.Compact(allDomains)
 		if duplicates := originalCount - len(allDomains); duplicates > 0 {
-			gokeenlog.InfoSubStepf("Removed %v duplicate domain(s) from group %v",
-				color.YellowString("%d", duplicates),
-				color.CyanString(group.Name))
+			if config.Cfg.Logs.Debug {
+				gokeenlog.InfoSubStepf("Removed %v duplicate domain(s) from group %v (deduplicated across sources in memory, not a router change)",
+					color.YellowString("%d", duplicates),
+					color.CyanString(group.Name))
+			}
 		}
 
 		// Check router limit: maximum domains per group
