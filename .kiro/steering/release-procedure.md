@@ -34,7 +34,18 @@ git tag v<X.Y.Z> && git push origin v<X.Y.Z>
 ```
 
 The release workflow (`.github/workflows/release.yml`) triggers automatically on `v*` tags.
-It builds binaries for 6 platform/arch combinations and creates a GitHub release with auto-generated notes.
+It builds binaries for 6 platform/arch combinations, creates a GitHub release with auto-generated notes,
+and builds + pushes a multi-arch Docker image (`linux/amd64` + `linux/arm64`) to Docker Hub.
+
+**Docker tags produced per release:**
+
+| Tag | Example | When |
+|-----|---------|------|
+| `stable` | `noksa/gokeenapi:stable` | Every non-prerelease tag |
+| `X.Y.Z` | `noksa/gokeenapi:1.7.1` | Every tag |
+| `X.Y` | `noksa/gokeenapi:1.7` | Every tag |
+
+Prerelease tags (`v1.7.2-beta.1`, `-rc.1`, etc.) produce only the version tag — `stable` is skipped.
 
 ## Step 3 — Wait for the workflow to complete
 
@@ -103,4 +114,5 @@ rm release_notes_vX.Y.Z.md
 - [ ] All changes pushed to `main`
 - [ ] Tag pushed: `git tag vX.Y.Z && git push origin vX.Y.Z`
 - [ ] Workflow completed successfully: `gh run watch <id> --exit-status`
+- [ ] Docker image verified: `docker buildx imagetools inspect noksa/gokeenapi:X.Y.Z` (should show `linux/amd64` + `linux/arm64`)
 - [ ] Release notes updated with pretty format matching v1.7.0/v1.7.1 style
