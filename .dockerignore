@@ -1,31 +1,15 @@
-.git
-.github
-.idea
-.vscode
-.kiro
-.claude
+**
 
-# Test and coverage artifacts
-coverage.out
-coverage.html
-report.json
-cover.out
-**/testdata/
+# Root build files
+!go.mod
+!go.sum
+!main.go
+!Makefile
 
-# Docs and examples (not needed for build)
-*.md
-batfiles/
-custom/
-docs/
+# Source directories
+!cmd/
+!internal/
+!pkg/
 
-# Build artifacts
-generated/
-gokeenapi
-gokeenapiw
-
-# Scripts (only Dockerfile needs them, not the binary)
-scripts/
-
-# Misc
-.DS_Store
-.cyber.sh
+# Cyber script (used in Dockerfile)
+!.cyber.sh

@@ -10,6 +10,15 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// cmds is a helper to build []config.ScheduledCommand from plain strings.
+func cmds(names ...string) []config.ScheduledCommand {
+	out := make([]config.ScheduledCommand, len(names))
+	for i, n := range names {
+		out[i] = config.ScheduledCommand{Name: n}
+	}
+	return out
+}
+
 var _ = Describe("Scheduler", func() {
 	It("should create command with correct attributes", func() {
 		cmd := newSchedulerCmd()
@@ -24,7 +33,7 @@ var _ = Describe("Scheduler", func() {
 	Describe("validateTask", func() {
 		It("should accept valid task", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"add-routes"},
+				Name: "Test task", Commands: cmds("add-routes"),
 				Configs: []string{"/path/to/config.yaml"}, Interval: "1h",
 			}
 			Expect(validateTask(task)).To(Succeed())
@@ -32,7 +41,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should reject missing name", func() {
 			task := config.ScheduledTask{
-				Name: "", Commands: []string{"add-routes"},
+				Name: "", Commands: cmds("add-routes"),
 				Configs: []string{"/path/to/config.yaml"}, Interval: "1h",
 			}
 			err := validateTask(task)
@@ -42,7 +51,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should reject missing commands", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{},
+				Name: "Test task", Commands: []config.ScheduledCommand{},
 				Configs: []string{"/path/to/config.yaml"}, Interval: "1h",
 			}
 			err := validateTask(task)
@@ -52,7 +61,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should reject missing configs", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"add-routes"},
+				Name: "Test task", Commands: cmds("add-routes"),
 				Configs: []string{}, Interval: "1h",
 			}
 			err := validateTask(task)
@@ -62,7 +71,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should reject missing interval and times", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"add-routes"},
+				Name: "Test task", Commands: cmds("add-routes"),
 				Configs: []string{"/path/to/config.yaml"},
 			}
 			err := validateTask(task)
@@ -72,7 +81,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should reject both interval and times", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"add-routes"},
+				Name: "Test task", Commands: cmds("add-routes"),
 				Configs: []string{"/path/to/config.yaml"}, Interval: "1h", Times: []string{"12:00"},
 			}
 			err := validateTask(task)
@@ -82,7 +91,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should reject invalid interval", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"add-routes"},
+				Name: "Test task", Commands: cmds("add-routes"),
 				Configs: []string{"/path/to/config.yaml"}, Interval: "invalid",
 			}
 			err := validateTask(task)
@@ -92,7 +101,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should reject too short interval", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"add-routes"},
+				Name: "Test task", Commands: cmds("add-routes"),
 				Configs: []string{"/path/to/config.yaml"}, Interval: "500ms",
 			}
 			err := validateTask(task)
@@ -102,7 +111,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should reject invalid time format", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"add-routes"},
+				Name: "Test task", Commands: cmds("add-routes"),
 				Configs: []string{"/path/to/config.yaml"}, Times: []string{"25:00"},
 			}
 			err := validateTask(task)
@@ -112,7 +121,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should accept valid times", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"add-routes"},
+				Name: "Test task", Commands: cmds("add-routes"),
 				Configs: []string{"/path/to/config.yaml"}, Times: []string{"06:00", "12:00", "18:00"},
 			}
 			Expect(validateTask(task)).To(Succeed())
@@ -120,7 +129,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should accept multiple commands", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"delete-routes", "add-routes"},
+				Name: "Test task", Commands: cmds("delete-routes", "add-routes"),
 				Configs: []string{"/path/to/config.yaml"}, Interval: "1h",
 			}
 			Expect(validateTask(task)).To(Succeed())
@@ -128,7 +137,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should accept valid retry config", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"add-routes"},
+				Name: "Test task", Commands: cmds("add-routes"),
 				Configs: []string{"/path/to/config.yaml"}, Interval: "1h",
 				Retry: 3, RetryDelay: "30s",
 			}
@@ -137,7 +146,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should reject negative retry", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"add-routes"},
+				Name: "Test task", Commands: cmds("add-routes"),
 				Configs: []string{"/path/to/config.yaml"}, Interval: "1h", Retry: -1,
 			}
 			err := validateTask(task)
@@ -147,7 +156,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should reject invalid retry delay", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"add-routes"},
+				Name: "Test task", Commands: cmds("add-routes"),
 				Configs: []string{"/path/to/config.yaml"}, Interval: "1h", RetryDelay: "invalid",
 			}
 			err := validateTask(task)
@@ -157,7 +166,7 @@ var _ = Describe("Scheduler", func() {
 
 		It("should reject too short retry delay", func() {
 			task := config.ScheduledTask{
-				Name: "Test task", Commands: []string{"add-routes"},
+				Name: "Test task", Commands: cmds("add-routes"),
 				Configs: []string{"/path/to/config.yaml"}, Interval: "1h", RetryDelay: "500ms",
 			}
 			err := validateTask(task)
@@ -168,7 +177,7 @@ var _ = Describe("Scheduler", func() {
 		Context("strategy validation", func() {
 			It("should accept sequential", func() {
 				task := config.ScheduledTask{
-					Name: "Test task", Commands: []string{"add-routes"},
+					Name: "Test task", Commands: cmds("add-routes"),
 					Configs: []string{"/path/to/config.yaml"}, Interval: "1h", Strategy: "sequential",
 				}
 				Expect(validateTask(task)).To(Succeed())
@@ -176,7 +185,7 @@ var _ = Describe("Scheduler", func() {
 
 			It("should accept parallel", func() {
 				task := config.ScheduledTask{
-					Name: "Test task", Commands: []string{"add-routes"},
+					Name: "Test task", Commands: cmds("add-routes"),
 					Configs: []string{"/path/to/config.yaml"}, Interval: "1h", Strategy: "parallel",
 				}
 				Expect(validateTask(task)).To(Succeed())
@@ -184,7 +193,7 @@ var _ = Describe("Scheduler", func() {
 
 			It("should accept empty strategy", func() {
 				task := config.ScheduledTask{
-					Name: "Test task", Commands: []string{"add-routes"},
+					Name: "Test task", Commands: cmds("add-routes"),
 					Configs: []string{"/path/to/config.yaml"}, Interval: "1h", Strategy: "",
 				}
 				Expect(validateTask(task)).To(Succeed())
@@ -192,7 +201,7 @@ var _ = Describe("Scheduler", func() {
 
 			It("should reject invalid strategy", func() {
 				task := config.ScheduledTask{
-					Name: "Test task", Commands: []string{"add-routes"},
+					Name: "Test task", Commands: cmds("add-routes"),
 					Configs: []string{"/path/to/config.yaml"}, Interval: "1h", Strategy: "invalid",
 				}
 				err := validateTask(task)
@@ -253,7 +262,7 @@ var _ = Describe("Scheduler", func() {
 			})
 		})
 
-		It("should load valid config", func() {
+		It("should load valid config with string commands (backward-compatible)", func() {
 			configPath := writeTempFile(tmpDir, "scheduler.yaml", `tasks:
   - name: "Test task"
     commands:
@@ -266,8 +275,28 @@ var _ = Describe("Scheduler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Tasks).To(HaveLen(1))
 			Expect(cfg.Tasks[0].Name).To(Equal("Test task"))
-			Expect(cfg.Tasks[0].Commands).To(Equal([]string{"add-routes"}))
+			Expect(cfg.Tasks[0].Commands).To(Equal(cmds("add-routes")))
 			Expect(cfg.Tasks[0].Interval).To(Equal("1h"))
+		})
+
+		It("should load config with object-form command and args", func() {
+			configPath := writeTempFile(tmpDir, "scheduler.yaml", `tasks:
+  - name: "Test task"
+    commands:
+      - name: delete-all-dns-routing
+        args: ["--force"]
+      - add-dns-routing
+    configs:
+      - /path/to/config.yaml
+    interval: "6h"
+`)
+			cfg, err := config.LoadSchedulerConfig(configPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.Tasks[0].Commands).To(HaveLen(2))
+			Expect(cfg.Tasks[0].Commands[0].Name).To(Equal("delete-all-dns-routing"))
+			Expect(cfg.Tasks[0].Commands[0].Args).To(Equal([]string{"--force"}))
+			Expect(cfg.Tasks[0].Commands[1].Name).To(Equal("add-dns-routing"))
+			Expect(cfg.Tasks[0].Commands[1].Args).To(BeNil())
 		})
 
 		It("should load config with multiple commands", func() {
@@ -284,8 +313,26 @@ var _ = Describe("Scheduler", func() {
 			cfg, err := config.LoadSchedulerConfig(configPath)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Tasks).To(HaveLen(1))
-			Expect(cfg.Tasks[0].Commands).To(Equal([]string{"delete-routes", "add-routes"}))
+			Expect(cfg.Tasks[0].Commands).To(Equal(cmds("delete-routes", "add-routes")))
 			Expect(cfg.Tasks[0].Times).To(Equal([]string{"02:00"}))
+		})
+
+		It("should load mixed string and object commands", func() {
+			configPath := writeTempFile(tmpDir, "scheduler.yaml", `tasks:
+  - name: "Mixed task"
+    commands:
+      - delete-routes
+      - name: add-routes
+        args: ["--debug"]
+    configs:
+      - /path/to/config.yaml
+    interval: "1h"
+`)
+			cfg, err := config.LoadSchedulerConfig(configPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.Tasks[0].Commands).To(HaveLen(2))
+			Expect(cfg.Tasks[0].Commands[0]).To(Equal(config.ScheduledCommand{Name: "delete-routes"}))
+			Expect(cfg.Tasks[0].Commands[1]).To(Equal(config.ScheduledCommand{Name: "add-routes", Args: []string{"--debug"}}))
 		})
 
 		It("should fail on empty path", func() {
@@ -360,7 +407,7 @@ var _ = Describe("Scheduler", func() {
 			queue := make(chan config.ScheduledTask, 1)
 			task := config.ScheduledTask{
 				Name:     "interval-task",
-				Commands: []string{"add-routes"},
+				Commands: cmds("add-routes"),
 				Configs:  []string{"/cfg.yaml"},
 				Interval: "10ms",
 			}
@@ -383,7 +430,7 @@ var _ = Describe("Scheduler", func() {
 		It("should return error when command fails", func() {
 			task := config.ScheduledTask{
 				Name:     "test-task",
-				Commands: []string{"nonexistent-gokeenapi-command-xyz"},
+				Commands: cmds("nonexistent-gokeenapi-command-xyz"),
 				Configs:  []string{"/some/config.yaml"},
 			}
 			err := executeCommandsForConfig(context.Background(), task, "/some/config.yaml")
@@ -394,10 +441,23 @@ var _ = Describe("Scheduler", func() {
 		It("should return nil when no commands", func() {
 			task := config.ScheduledTask{
 				Name:     "empty-task",
-				Commands: []string{},
+				Commands: []config.ScheduledCommand{},
 				Configs:  []string{"/some/config.yaml"},
 			}
 			Expect(executeCommandsForConfig(context.Background(), task, "/some/config.yaml")).To(Succeed())
+		})
+
+		It("should include args in error message when object-form command fails", func() {
+			task := config.ScheduledTask{
+				Name: "test-task",
+				Commands: []config.ScheduledCommand{
+					{Name: "nonexistent-gokeenapi-command-xyz", Args: []string{"--force"}},
+				},
+				Configs: []string{"/some/config.yaml"},
+			}
+			err := executeCommandsForConfig(context.Background(), task, "/some/config.yaml")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("nonexistent-gokeenapi-command-xyz"))
 		})
 	})
 
@@ -405,7 +465,7 @@ var _ = Describe("Scheduler", func() {
 		It("should collect errors from all failing goroutines without losing any", func() {
 			task := config.ScheduledTask{
 				Name:     "parallel-fail",
-				Commands: []string{"nonexistent-gokeenapi-command-xyz"},
+				Commands: cmds("nonexistent-gokeenapi-command-xyz"),
 				Configs:  []string{"/cfg1.yaml", "/cfg2.yaml", "/cfg3.yaml"},
 				Strategy: StrategyParallel,
 			}
@@ -425,7 +485,7 @@ var _ = Describe("Scheduler", func() {
 		It("should complete without deadlock in parallel mode", func() {
 			task := config.ScheduledTask{
 				Name:     "parallel-deadlock-check",
-				Commands: []string{"nonexistent-gokeenapi-command-xyz"},
+				Commands: cmds("nonexistent-gokeenapi-command-xyz"),
 				Configs:  []string{"/cfg1.yaml", "/cfg2.yaml"},
 				Strategy: StrategyParallel,
 			}

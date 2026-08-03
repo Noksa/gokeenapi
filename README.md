@@ -329,6 +329,28 @@ Adds DNS-routing rules (policy-based routing by domain) to your router. This fea
 
 **YAML expansion:** The tool automatically detects `.yaml`/`.yml` files in the `domain-file` and `domain-url` arrays and expands them to their contained domain paths (similar to bat-file/bat-url expansion).
 
+> **Key rule:** when a `.yaml` file is referenced in `domain-file`, only its `domain-file` list is extracted; when referenced in `domain-url`, only its `domain-url` list is extracted. To use both files and remote URLs from a single YAML manifest, reference it in **both** keys:
+>
+> ```yaml
+> # domains/social.yaml
+> domain-file:
+>   - social.txt           # local domains
+> domain-url:
+>   - https://example.com/social-extra.txt  # remote domains
+> ```
+>
+> ```yaml
+> # Router config group
+> - name: social
+>   domain-file:
+>     - domains/social.yaml   # extracts domain-file list → social.txt
+>   domain-url:
+>     - domains/social.yaml   # extracts domain-url list → remote URL
+>   interfaceId: Wireguard0
+> ```
+>
+> If you reference the YAML only in `domain-file`, the remote URLs inside it are silently ignored — and vice versa.
+
 **NEW: Reusable DNS Routing Groups**
 
 You can now create shared YAML files containing complete DNS routing group definitions and import them across multiple router configs. This is different from domain-file/domain-url expansion - you're importing entire group definitions, not just domain lists.
@@ -364,6 +386,21 @@ dns:
 
 This allows you to maintain common DNS routing rules in one place and share them across all your routers. When you add telegram to one router, just update `common_dns_groups.yaml` and all routers using it will get the update.
 
+There are two ways to import a shared groups file:
+
+```yaml
+groups:
+  # Simple string — import all groups as-is
+  - common_dns_groups.yaml
+
+  # Object with file: key — same import, but with interfaceId override
+  # All groups from the file will use Wireguard1 instead of their original interface
+  - file: common_dns_groups.yaml
+    interfaceId: Wireguard1
+```
+
+The `file:` + `interfaceId` form is useful when the same common groups file is shared across routers that use different WireGuard interfaces (e.g., `Wireguard0` on one router, `Wireguard1` on another) — you define interface names once per router config rather than duplicating the entire groups file.
+
 **Example use cases:**
 - Route social media traffic through a VPN (Wireguard0)
 - Route streaming services through a different connection
@@ -389,6 +426,24 @@ The command will:
 2. Display the rules to be deleted
 3. Request confirmation (unless `--force` flag is used)
 4. Remove dns-proxy routes first, then object-groups
+
+#### `delete-all-dns-routing`
+
+*Aliases: `deletealldnsrouting`, `dadnsr`*
+
+Deletes **all** DNS-routing groups from the router in a single operation, regardless of what is defined in the config file. Useful for fully resetting DNS-routing before re-applying a new or updated configuration.
+
+```shell
+# Delete all DNS-routing groups (with confirmation prompt)
+./gokeenapi delete-all-dns-routing --config my_config.yaml
+
+# Delete all DNS-routing groups without confirmation
+./gokeenapi delete-all-dns-routing --config my_config.yaml --force
+```
+
+> **Warning:** This removes every DNS-routing group on the router. Use before re-applying after renaming or reorganising groups.
+
+**Requirements:** Keenetic firmware version 5.0.1 or higher
 
 #### `add-awg`
 

@@ -2,10 +2,53 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"gopkg.in/yaml.v3"
 )
+
+// ScheduledCommand represents a single command with optional extra arguments.
+// It can be specified as a plain string (backward-compatible) or as an object:
+//
+//	# string form
+//	commands:
+//	  - add-dns-routing
+//
+//	# object form (with extra flags)
+//	commands:
+//	  - name: delete-all-dns-routing
+//	    args: ["--force"]
+type ScheduledCommand struct {
+	// Name is the gokeenapi command to run (e.g., "add-routes", "delete-all-dns-routing")
+	Name string
+	// Args contains extra flags/arguments appended after the command name (e.g., ["--force"])
+	Args []string
+}
+
+// UnmarshalYAML implements custom unmarshaling so that a plain string
+// and an object {name: ..., args: [...]} are both valid.
+func (c *ScheduledCommand) UnmarshalYAML(node *yaml.Node) error {
+	// Plain string form: "- add-routes"
+	if node.Kind == yaml.ScalarNode {
+		if node.Value == "" {
+			return fmt.Errorf("command name cannot be empty")
+		}
+		c.Name = node.Value
+		return nil
+	}
+
+	// Object form: "- name: delete-all-dns-routing\n  args: [--force]"
+	type scheduledCommandAlias ScheduledCommand
+	alias := (*scheduledCommandAlias)(c)
+	if err := node.Decode(alias); err != nil {
+		return err
+	}
+	if c.Name == "" {
+		return fmt.Errorf("command name cannot be empty")
+	}
+	return nil
+}
 
 // SchedulerConfig represents scheduler configuration structure
 type SchedulerConfig struct {
@@ -17,8 +60,9 @@ type SchedulerConfig struct {
 type ScheduledTask struct {
 	// Name is a descriptive name for the task
 	Name string `yaml:"name"`
-	// Commands is the list of gokeenapi commands to execute sequentially (e.g., ["delete-routes", "add-routes"])
-	Commands []string `yaml:"commands"`
+	// Commands is the list of gokeenapi commands to execute sequentially.
+	// Each entry can be a plain string or an object with name and args fields.
+	Commands []ScheduledCommand `yaml:"commands"`
 	// Configs contains paths to config files to use for this task
 	Configs []string `yaml:"configs"`
 	// Interval specifies execution interval (e.g., "3h", "30m", "1h30m")

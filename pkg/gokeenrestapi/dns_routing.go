@@ -1,6 +1,7 @@
 package gokeenrestapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/hashicorp/go-version"
@@ -19,7 +22,16 @@ import (
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
 	"go.uber.org/multierr"
 	"golang.org/x/net/idna"
+	"golang.org/x/sync/errgroup"
 )
+
+// urlFetchResult holds the parsed result of a single URL fetch
+type urlFetchResult struct {
+	domains         []string
+	skipped         int
+	checksumChanged bool
+	fromCache       bool
+}
 
 const (
 	minDnsRoutingVersion = "5.0.1"
@@ -326,7 +338,138 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 	return domains, nil
 }
 
-// validateNoDuplicateDomainsAcrossGroups checks that no domain appears in multiple groups
+// fetchURLDomainsRaw fetches and parses domains from a URL without printing anything.
+// Retries up to 3 times with linear backoff on failure.
+// Results are cached the same way as LoadDomainsFromURL.
+func fetchURLDomainsRaw(rawURL string) (urlFetchResult, error) {
+	// Serve from cache if available
+	if cached, ok := gokeencache.GetURLContent(rawURL); ok {
+		lines := strings.Split(cached, "\n")
+		domains, skipped := parseDomainLines(lines, "URL")
+		return urlFetchResult{domains: domains, skipped: skipped, fromCache: true}, nil
+	}
+
+	previousChecksum := gokeencache.GetURLChecksum(rawURL)
+	rClient := GetURLClient()
+
+	const maxRetries = 3
+	var lastErr error
+	for attempt := range maxRetries {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 2 * time.Second)
+		}
+
+		response, err := rClient.R().Get(rawURL)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if response.StatusCode() != 200 {
+			lastErr = fmt.Errorf("status code %d", response.StatusCode())
+			continue
+		}
+
+		content := string(response.Body())
+		currentChecksum := fmt.Sprintf("%x", gokeencache.ComputeChecksum([]byte(content)))
+		checksumChanged := previousChecksum != "" && previousChecksum != currentChecksum
+
+		if err := gokeencache.SetURLContent(rawURL, content, config.GetURLCacheTTL()); err != nil {
+			gokeenlog.InfoSubStepf("Warning: failed to cache URL content for %v: %v", rawURL, err)
+		}
+
+		lines := strings.Split(content, "\n")
+		domains, skipped := parseDomainLines(lines, "URL")
+
+		return urlFetchResult{
+			domains:         domains,
+			skipped:         skipped,
+			checksumChanged: checksumChanged,
+			fromCache:       false,
+		}, nil
+	}
+
+	return urlFetchResult{}, fmt.Errorf("failed to fetch domain URL '%s' after %d attempts: %w", rawURL, maxRetries, lastErr)
+}
+
+// prefetchURLsWithSpinner fetches all unique URLs across groups in parallel (max 4 concurrent)
+// under a single shared spinner. After completion prints per-URL substeps in original order.
+func prefetchURLsWithSpinner(groups []config.DnsRoutingGroup) (map[string]urlFetchResult, error) {
+	// Collect unique URLs preserving declaration order
+	seen := make(map[string]bool)
+	var orderedURLs []string
+	for _, group := range groups {
+		for _, u := range group.DomainURL {
+			if !seen[u] {
+				seen[u] = true
+				orderedURLs = append(orderedURLs, u)
+			}
+		}
+	}
+
+	if len(orderedURLs) == 0 {
+		return nil, nil
+	}
+
+	results := make(map[string]urlFetchResult, len(orderedURLs))
+	var mu sync.Mutex
+
+	err := gokeenspinner.WrapWithSpinnerAndOptions(
+		fmt.Sprintf("Fetching %v domain URL(s)", color.CyanString("%d", len(orderedURLs))),
+		func(opts *gokeenspinner.SpinnerOptions) error {
+			g, _ := errgroup.WithContext(context.Background())
+			g.SetLimit(4)
+
+			for _, u := range orderedURLs {
+				g.Go(func() error {
+					res, err := fetchURLDomainsRaw(u)
+					if err != nil {
+						return err
+					}
+					mu.Lock()
+					results[u] = res
+					mu.Unlock()
+					return nil
+				})
+			}
+
+			fetchErr := g.Wait()
+
+			// Register substep logging — show results for all successfully fetched URLs
+			opts.AddActionAfterSpinner(func() {
+				for _, u := range orderedURLs {
+					res, ok := results[u]
+					if !ok {
+						continue // failed URL — reported via returned error
+					}
+					if res.fromCache {
+						gokeenlog.InfoSubStepf("%v: %v from cache",
+							color.CyanString(u),
+							color.GreenString("%d domains", len(res.domains)))
+					} else {
+						gokeenlog.InfoSubStepf("%v: %v",
+							color.CyanString(u),
+							color.GreenString("%d domains", len(res.domains)))
+						if res.checksumChanged {
+							gokeenlog.InfoSubStepf("  updated (checksum changed)")
+						}
+						if res.skipped > 0 {
+							gokeenlog.InfoSubStepf("  skipped %v invalid domain(s)",
+								color.YellowString("%d", res.skipped))
+						}
+					}
+				}
+			})
+
+			return fetchErr
+		},
+	)
+
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
 // This prevents routing conflicts where the same domain would be routed through different interfaces
 func validateNoDuplicateDomainsAcrossGroups(groupDomains map[string][]string) {
 	domainToGroups := make(map[string][]string)
@@ -393,6 +536,12 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 		}
 	}
 
+	// Prefetch all URLs in parallel under a single spinner, then use results below
+	prefetched, prefetchErr := prefetchURLsWithSpinner(groups)
+	if prefetchErr != nil {
+		return fmt.Errorf("failed to prefetch domain URLs: %w", prefetchErr)
+	}
+
 	// Load domains from files and URLs for each group
 	var mErr error
 	groupDomains := make(map[string][]string)
@@ -411,14 +560,14 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 			allDomains = append(allDomains, domains...)
 		}
 
-		// Load domains from URLs
+		// Use prefetched URL results (already fetched in parallel above)
 		for _, url := range group.DomainURL {
-			domains, err := DnsRouting.LoadDomainsFromURL(url)
-			if err != nil {
-				mErr = multierr.Append(mErr, fmt.Errorf("group '%s': %w", group.Name, err))
+			res, ok := prefetched[url]
+			if !ok {
+				mErr = multierr.Append(mErr, fmt.Errorf("group '%s': missing prefetch result for URL '%s'", group.Name, url))
 				continue
 			}
-			allDomains = append(allDomains, domains...)
+			allDomains = append(allDomains, res.domains...)
 		}
 
 		if len(allDomains) == 0 {
@@ -577,6 +726,44 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 	)
 
 	return err
+}
+
+// DeleteAllDnsRoutingGroups removes every dns-proxy route and object-group currently on the router.
+// It fetches the live state and deletes whatever is present, regardless of the config file.
+// This is the DNS-routing equivalent of Ip.DeleteAllRoutes.
+func (d *keeneticDnsRouting) DeleteAllDnsRoutingGroups() error {
+	// Check router version support
+	if err := d.CheckDnsRoutingSupport(); err != nil {
+		return err
+	}
+
+	// Fetch everything currently on the router
+	existingGroups, err := d.GetExistingDnsRoutingGroups()
+	if err != nil {
+		return fmt.Errorf("failed to get existing DNS-routing groups: %w", err)
+	}
+
+	existingRoutes, err := d.GetExistingDnsProxyRoutes()
+	if err != nil {
+		return fmt.Errorf("failed to get existing dns-proxy routes: %w", err)
+	}
+
+	if len(existingGroups) == 0 {
+		gokeenlog.Info("No DNS-routing groups found on router")
+		return nil
+	}
+
+	// Build config.DnsRoutingGroup slice from live router state
+	groups := make([]config.DnsRoutingGroup, 0, len(existingGroups))
+	for groupName := range existingGroups {
+		interfaceID := existingRoutes[groupName] // empty string is fine — DeleteDnsRoutingGroups handles it
+		groups = append(groups, config.DnsRoutingGroup{
+			Name:        groupName,
+			InterfaceID: interfaceID,
+		})
+	}
+
+	return d.DeleteDnsRoutingGroups(groups)
 }
 
 // DeleteDnsRoutingGroups removes dns-proxy routes and object-groups for the specified groups

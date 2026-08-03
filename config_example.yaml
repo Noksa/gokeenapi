@@ -137,7 +137,7 @@ dns:
         domain-file:
           - domains/social-media.txt
           - domains/additional-social.txt
-          - domains/common-domains.yaml  # YAML file with domain-file list
+          - domains/common-domains.yaml  # YAML file: only its domain-file list is used
         
         # Remote URLs serving .txt files with domain lists
         # Downloaded and processed by add-dns-routing command
@@ -168,19 +168,62 @@ dns:
         interfaceId: ISP
       
       # =============================================================================
+      # IMPORTANT: YAML manifest with both local files and remote URLs
+      # =============================================================================
+      # When a group's .yaml file contains both domain-file and domain-url entries,
+      # you MUST reference that .yaml in BOTH keys to get all sources:
+      #
+      #   domains/mixed.yaml:
+      #     domain-file:
+      #       - mixed.txt                          # local domains
+      #     domain-url:
+      #       - https://example.com/extra.txt      # remote domains
+      #
+      # Correct — both sources are loaded:
+      - name: mixed-sources
+        domain-file:
+          - domains/mixed.yaml   # extracts domain-file list  → mixed.txt
+        domain-url:
+          - domains/mixed.yaml   # extracts domain-url list   → remote URL
+        interfaceId: Wireguard0
+      #
+      # Wrong — remote URLs inside mixed.yaml are silently ignored:
+      # - name: mixed-sources
+      #   domain-file:
+      #     - domains/mixed.yaml   # only mixed.txt is loaded; URLs are dropped
+      #   interfaceId: Wireguard0
+      # =============================================================================
+      
+      # =============================================================================
       # Option 3: Mix imported and router-specific groups
       # =============================================================================
       # You can combine imported groups with router-specific groups:
       #
       # groups:
-      #   - custom/common_dns_groups.yaml    # Import common groups
+      #   - custom/common_dns_groups.yaml    # Import common groups (simple string form)
       #   - name: router-specific-isp        # Add router-specific group
       #     domain-file:
       #       - domains/isp.yaml
       #     interfaceId: GigabitEthernet0/Vlan4
       #
-      # This is useful when you have some common groups shared across all routers
-      # and some unique groups specific to individual routers
+      # =============================================================================
+      # Option 3b: Override interfaceId for all imported groups
+      # =============================================================================
+      # When routers use different WireGuard interfaces, use the object form with
+      # file: key to override the interfaceId for all groups in the imported file.
+      # This avoids duplicating the entire groups file per router:
+      #
+      # groups:
+      #   # All groups from common_dns_groups.yaml will use Wireguard1 on this router
+      #   - file: custom/common_dns_groups.yaml
+      #     interfaceId: Wireguard1
+      #   - name: router-specific-isp
+      #     domain-file:
+      #       - domains/isp.yaml
+      #     interfaceId: GigabitEthernet0/Vlan4
+      #
+      # This is useful when common groups define interfaceId: Wireguard0 but a
+      # specific router needs Wireguard1 for the same groups.
       # =============================================================================
 
 # =============================================================================

@@ -318,16 +318,19 @@ func executeCommandsForConfig(ctx context.Context, task config.ScheduledTask, co
 
 		maxAttempts := max(task.Retry+1, 1)
 
+		// Build args: <command-name> --config <configPath> [extra args...]
+		cmdArgs := append([]string{command.Name, "--config", configPath}, command.Args...)
+
 		var lastErr error
 		for attempt := 1; attempt <= maxAttempts; attempt++ {
 			gokeenlog.HorizontalLine()
-			attemptMsg := fmt.Sprintf("▶ Executing '%s' command for %s", color.BlueString(command), color.CyanString(configPath))
+			attemptMsg := fmt.Sprintf("▶ Executing '%s' command for %s", color.BlueString(command.Name), color.CyanString(configPath))
 			if attempt > 1 {
-				attemptMsg = fmt.Sprintf("▶ Executing '%s' command for %s (attempt %v/%v)", color.BlueString(command), color.CyanString(configPath), color.MagentaString("%v", attempt), color.YellowString("%v", maxAttempts))
+				attemptMsg = fmt.Sprintf("▶ Executing '%s' command for %s (attempt %v/%v)", color.BlueString(command.Name), color.CyanString(configPath), color.MagentaString("%v", attempt), color.YellowString("%v", maxAttempts))
 			}
 
 			gokeenlog.Info(attemptMsg)
-			cmd := exec.CommandContext(ctx, executable, command, "--config", configPath)
+			cmd := exec.CommandContext(ctx, executable, cmdArgs...)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			lastErr = cmd.Run()
@@ -345,7 +348,7 @@ func executeCommandsForConfig(ctx context.Context, task config.ScheduledTask, co
 		}
 
 		if lastErr != nil {
-			return fmt.Errorf("command %q for config %q failed: %w", command, configPath, lastErr)
+			return fmt.Errorf("command %q for config %q failed: %w", command.Name, configPath, lastErr)
 		}
 	}
 	return nil

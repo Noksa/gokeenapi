@@ -51,7 +51,7 @@ routes:
 
 		task := schedulerCfg.Tasks[0]
 		Expect(task.Name).To(Equal("Test task with expanded bat-files"))
-		Expect(task.Commands).To(Equal([]string{"add-routes"}))
+		Expect(task.Commands).To(Equal(cmds("add-routes")))
 		Expect(task.Configs).To(Equal([]string{routerConfigPath}))
 		Expect(task.Interval).To(Equal("1h"))
 

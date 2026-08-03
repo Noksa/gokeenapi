@@ -92,6 +92,7 @@ Can also be set via GOKEENAPI_CONFIG environment variable.`)
 		newDeleteDnsRecordsCmd(),
 		newAddDnsRoutingCmd(),
 		newDeleteDnsRoutingCmd(),
+		newDeleteAllDnsRoutingCmd(),
 		newDeleteKnownHostsCmd(),
 		newExecCmd(),
 		newSchedulerCmd(),

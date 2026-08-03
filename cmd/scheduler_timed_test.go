@@ -49,7 +49,7 @@ var _ = Describe("runTimedTask", func() {
 		// Schedule far in the future (next occurrence of 00:01, essentially ~24h away at worst)
 		task := config.ScheduledTask{
 			Name:     "far-future-task",
-			Commands: []string{"add-routes"},
+			Commands: cmds("add-routes"),
 			Configs:  []string{"/cfg.yaml"},
 			Times:    []string{"00:01"},
 		}
@@ -78,7 +78,7 @@ var _ = Describe("runTimedTask", func() {
 
 		task := config.ScheduledTask{
 			Name:     "next-minute-task",
-			Commands: []string{"add-routes"},
+			Commands: cmds("add-routes"),
 			Configs:  []string{"/cfg.yaml"},
 			Times:    []string{timeStr},
 		}
@@ -101,7 +101,7 @@ var _ = Describe("runTask", func() {
 
 		task := config.ScheduledTask{
 			Name:     "interval-dispatch",
-			Commands: []string{"add-routes"},
+			Commands: cmds("add-routes"),
 			Configs:  []string{"/cfg.yaml"},
 			Interval: "10ms",
 		}
@@ -124,7 +124,7 @@ var _ = Describe("runTask", func() {
 		queue := make(chan config.ScheduledTask)
 		task := config.ScheduledTask{
 			Name:     "cancelled-timed",
-			Commands: []string{"add-routes"},
+			Commands: cmds("add-routes"),
 			Configs:  []string{"/cfg.yaml"},
 			Times:    []string{"23:59"},
 		}
@@ -145,7 +145,7 @@ var _ = Describe("runTask", func() {
 		queue := make(chan config.ScheduledTask)
 		task := config.ScheduledTask{
 			Name:     "cancelled-interval",
-			Commands: []string{"add-routes"},
+			Commands: cmds("add-routes"),
 			Configs:  []string{"/cfg.yaml"},
 			Interval: "1h",
 		}

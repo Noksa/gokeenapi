@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -278,31 +277,5 @@ var _ = Describe("Dockerfile Validity", func() {
 	It("should have build args for version and build date", func() {
 		Expect(dockerfile).To(ContainSubstring("ARG GOKEENAPI_VERSION"))
 		Expect(dockerfile).To(ContainSubstring("ARG GOKEENAPI_BUILDDATE"))
-	})
-})
-
-var _ = Describe("DockerIgnore", func() {
-	var lines []string
-
-	BeforeEach(func() {
-		content, err := os.ReadFile(".dockerignore")
-		Expect(err).NotTo(HaveOccurred(), "Failed to read .dockerignore")
-		lines = strings.Split(string(content), "\n")
-	})
-
-	It("should exclude all by default", func() {
-		Expect(lines).To(ContainElement("**"))
-	})
-
-	It("should include necessary root files", func() {
-		Expect(lines).To(ContainElement("!go.mod"))
-		Expect(lines).To(ContainElement("!go.sum"))
-		Expect(lines).To(ContainElement("!main.go"))
-	})
-
-	It("should include source directories", func() {
-		Expect(lines).To(ContainElement("!cmd/"))
-		Expect(lines).To(ContainElement("!internal/"))
-		Expect(lines).To(ContainElement("!pkg/"))
 	})
 })

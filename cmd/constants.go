@@ -2,20 +2,21 @@ package cmd
 
 // Command names
 const (
-	CmdAddRoutes        = "add-routes"
-	CmdDeleteRoutes     = "delete-routes"
-	CmdShowInterfaces   = "show-interfaces"
-	CmdAddAwg           = "add-awg"
-	CmdUpdateAwg        = "update-awg"
-	CmdAddDnsRecords    = "add-dns-records"
-	CmdDeleteDnsRecords = "delete-dns-records"
-	CmdAddDnsRouting    = "add-dns-routing"
-	CmdDeleteDnsRouting = "delete-dns-routing"
-	CmdDeleteKnownHosts = "delete-known-hosts"
-	CmdDeleteAllRoutes  = "delete-all-routes"
-	CmdExec             = "exec"
-	CmdScheduler        = "scheduler"
-	CmdVersion          = "version"
+	CmdAddRoutes           = "add-routes"
+	CmdDeleteRoutes        = "delete-routes"
+	CmdShowInterfaces      = "show-interfaces"
+	CmdAddAwg              = "add-awg"
+	CmdUpdateAwg           = "update-awg"
+	CmdAddDnsRecords       = "add-dns-records"
+	CmdDeleteDnsRecords    = "delete-dns-records"
+	CmdAddDnsRouting       = "add-dns-routing"
+	CmdDeleteDnsRouting    = "delete-dns-routing"
+	CmdDeleteKnownHosts    = "delete-known-hosts"
+	CmdDeleteAllRoutes     = "delete-all-routes"
+	CmdDeleteAllDnsRouting = "delete-all-dns-routing"
+	CmdExec                = "exec"
+	CmdScheduler           = "scheduler"
+	CmdVersion             = "version"
 )
 
 // Built-in commands that should skip initialization
@@ -32,17 +33,18 @@ const (
 
 // Command aliases
 var (
-	AliasesAddRoutes        = []string{"addroutes", "ar"}
-	AliasesDeleteRoutes     = []string{"deleteroutes", "dr"}
-	AliasesShowInterfaces   = []string{"showinterfaces", "si", "showinterface", "show-interface"}
-	AliasesAddAwg           = []string{"addawg", "aawg"}
-	AliasesUpdateAwg        = []string{"updateawg", "uawg"}
-	AliasesAddDnsRecords    = []string{"adddnsrecords", "adr"}
-	AliasesDeleteDnsRecords = []string{"deletednsrecords", "ddr"}
-	AliasesAddDnsRouting    = []string{"adddnsrouting", "adnsr", "adddnsroutes", "add-dns-routes"}
-	AliasesDeleteDnsRouting = []string{"deletednsrouting", "ddnsr", "deletednsroutes", "delete-dns-routes"}
-	AliasesDeleteAllRoutes  = []string{"deleteallroutes", "dar"}
-	AliasesDeleteKnownHosts = []string{"deleteknownhosts", "dkh"}
-	AliasesExec             = []string{"e"}
-	AliasesScheduler        = []string{"schedule", "sched"}
+	AliasesAddRoutes           = []string{"addroutes", "ar"}
+	AliasesDeleteRoutes        = []string{"deleteroutes", "dr"}
+	AliasesShowInterfaces      = []string{"showinterfaces", "si", "showinterface", "show-interface"}
+	AliasesAddAwg              = []string{"addawg", "aawg"}
+	AliasesUpdateAwg           = []string{"updateawg", "uawg"}
+	AliasesAddDnsRecords       = []string{"adddnsrecords", "adr"}
+	AliasesDeleteDnsRecords    = []string{"deletednsrecords", "ddr"}
+	AliasesAddDnsRouting       = []string{"adddnsrouting", "adnsr", "adddnsroutes", "add-dns-routes"}
+	AliasesDeleteDnsRouting    = []string{"deletednsrouting", "ddnsr", "deletednsroutes", "delete-dns-routes"}
+	AliasesDeleteAllRoutes     = []string{"deleteallroutes", "dar"}
+	AliasesDeleteAllDnsRouting = []string{"deletealldnsrouting", "dadnsr"}
+	AliasesDeleteKnownHosts    = []string{"deleteknownhosts", "dkh"}
+	AliasesExec                = []string{"e"}
+	AliasesScheduler           = []string{"schedule", "sched"}
 )
