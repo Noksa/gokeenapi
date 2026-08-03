@@ -115,7 +115,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=stable
+            type=raw,value=stable,enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
