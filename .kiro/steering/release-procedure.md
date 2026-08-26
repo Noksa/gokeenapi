@@ -6,6 +6,8 @@ inclusion: manual
 
 Use when the user asks to create a release, cut a new version, or publish changes.
 
+CI workflow conventions: `github-actions-workflow.md`. Local checks: `tech.md`.
+
 ## Versioning
 
 - Patch (`v1.x.Y+1`): bug fixes, docs, non-breaking additions (new commands, new flags)
@@ -34,8 +36,9 @@ git tag v<X.Y.Z> && git push origin v<X.Y.Z>
 ```
 
 The release workflow (`.github/workflows/release.yml`) triggers automatically on `v*` tags.
-It builds binaries for 6 platform/arch combinations, creates a GitHub release with auto-generated notes,
-and builds + pushes a multi-arch Docker image (`linux/amd64` + `linux/arm64`) to Docker Hub.
+It uses Go 1.26, builds binaries for 6 platform/arch combinations (`make binaries TARGET=os/arch`),
+creates a GitHub release with auto-generated notes, and builds + pushes a multi-arch Docker image
+(`linux/amd64` + `linux/arm64`) to Docker Hub.
 
 **Docker tags produced per release:**
 

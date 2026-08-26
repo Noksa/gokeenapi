@@ -88,7 +88,11 @@ Used by: `add-dns-routing`, `delete-dns-routing`.
 
 A list of domain groups for policy-based routing. Each group creates an object-group and a dns-proxy route on the router. Requires Keenetic firmware ≥ 5.0.1.
 
-Each entry is either a **group object** or a **path to a `.yaml` file** that contains a `groups:` list (for sharing common groups across multiple router configs).
+Each entry is one of:
+
+- a **group object**
+- a **string path** to a `.yaml` file that contains a `groups:` list (shared groups across router configs)
+- an **import object** with `file:` plus optional `interfaceId` override
 
 **Group object fields:**
 
@@ -98,8 +102,9 @@ Each entry is either a **group object** or a **path to a `.yaml` file** that con
 | `interfaceId` | string | ✅ | Target interface for routing matched domain traffic (e.g. `Wireguard0`). Run `show-interfaces` to list available IDs. |
 | `domain-file` | list of strings | ❌ | Paths to local `.txt` files with one domain per line (lines starting with `#` are comments). A `.yaml`/`.yml` path is expanded to the `domain-file` list it contains. |
 | `domain-url` | list of strings | ❌ | Remote URLs serving domain lists (one domain per line). A `.yaml`/`.yml` path is expanded to the `domain-url` list it contains. |
+| `file` | string | ❌ | Path to a YAML file with a `groups:` list. When set, this entry is an import, not a group. Combined with `interfaceId`, every imported group uses that interface. |
 
-At least one of `domain-file` or `domain-url` is required per group.
+At least one of `domain-file` or `domain-url` is required per real group (not per import).
 
 Example:
 
@@ -120,8 +125,12 @@ dns:
           - domains/internal.txt
         interfaceId: GigabitEthernet0/Vlan4
 
-      # Import shared groups from a file
+      # Import shared groups from a file (as-is)
       - common/shared_groups.yaml
+
+      # Import the same file but force every group onto Wireguard1
+      - file: common/shared_groups.yaml
+        interfaceId: Wireguard1
 ```
 
 ---
@@ -146,6 +155,7 @@ AllowedIPs = 0.0.0.0/0
 | `--conf-file` | ✅ | Path to a WireGuard `.conf` file. |
 | `--name` | ❌ (`add-awg` only) | Name for the new interface. Auto-generated if omitted. |
 | `--interface-id` | ✅ (`update-awg` only) | ID of the existing interface to update. |
+| `--dry-run` | ❌ (`update-awg` only) | Print a unified diff of pending changes and do not apply them. |
 
 ---
 
@@ -162,3 +172,11 @@ AllowedIPs = 0.0.0.0/0
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `urlTtl` | duration | ❌ | `1m` | How long to cache content downloaded from `bat-url` and `domain-url`. Accepts Go duration strings: `30s`, `5m`, `1h`. |
+
+---
+
+## See also
+
+- [config_example.yaml](../config_example.yaml) — annotated router config
+- [SCHEDULER.md](../SCHEDULER.md) — `scheduler.yaml` (separate file; not part of router `config.yaml`)
+- [README.md](../README.md) — environment variables and command tutorials

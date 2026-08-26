@@ -2,6 +2,8 @@
 
 Thank you for your interest in contributing!
 
+Coding agents: start at [AGENTS.md](AGENTS.md); project rules live in [`.kiro/steering/`](.kiro/steering/).
+
 ## Prerequisites
 
 - **Go 1.26+** — see [go.mod](go.mod) for the exact requirement
@@ -16,6 +18,7 @@ gokeenapi/
 │   ├── root.go                    # Root command + PersistentPreRunE (auth, config load)
 │   ├── constants.go               # CmdXxx constants and AliasesXxx slices
 │   ├── common.go                  # Shared validation, prompts, error helpers
+│   ├── helpers_test.go            # cmd-package test helpers (mock router, captureOutput)
 │   ├── <command>.go               # One file per command (snake_case)
 │   └── <command>_test.go          # Unit and property tests alongside source
 ├── pkg/
@@ -27,8 +30,8 @@ gokeenapi/
 │   ├── gokeencache/               # In-memory API response cache
 │   ├── gokeenspinner/             # CLI progress indicators
 │   └── gokeenversion/             # Build-time version info
-├── batfiles/                      # Example IP route bat-files (one CIDR per line)
-├── docs/                          # Configuration reference documentation
+├── batfiles/                      # Example Windows-style `route add` bat-files
+├── docs/                          # Human-facing config.yaml reference (EN + RU)
 ├── scripts/                       # Build and lint helper scripts
 ├── config_example.yaml            # Annotated single-router config example
 ├── scheduler_example.yaml         # Annotated multi-router scheduler config example

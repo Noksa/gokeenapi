@@ -4,68 +4,83 @@ inclusion: always
 
 # Project Structure & Architecture
 
+Command list, config schema, and behavioral contracts: `product.md`.
+Stack, make targets, and anti-patterns: `tech.md`.
+Mock router details: `mock-testing-guidelines.md`.
+
 ## Directory Layout
 
 ```
 gokeenapi/
-├── main.go                      # Entry point — calls cmd.NewRootCmd().Execute()
+├── main.go                      # Entry point — cmd.NewRootCmd().Execute()
 ├── cmd/                         # CLI commands (Cobra)
-│   ├── root.go                  # Root command + PersistentPreRunE (auth, config load)
+│   ├── root.go                  # Root command, PersistentPreRunE (config load + auth)
 │   ├── constants.go             # CmdXxx constants and AliasesXxx slices
-│   ├── common.go                # Shared validation, prompts, error helpers
-│   ├── <command>.go             # One file per command
-│   └── *_test.go / *_property_test.go
+│   ├── common.go                # checkRequiredFields, confirmAction, RestoreCursor
+│   ├── helpers_test.go          # setupMockRouter, cleanupMockRouter, writeTempFile, captureOutput
+│   ├── configure_awg.go         # implements update-awg (historical name — do not add update_awg.go)
+│   ├── <command>.go             # One file per command (snake_case)
+│   └── *_test.go
 ├── pkg/
-│   ├── config/                  # YAML config loading + expansion
-│   ├── gokeenrestapi/           # Keenetic REST API singletons + mock router
-│   └── gokeenrestapimodels/     # API request/response structs — always use these types
+│   ├── config/                  # YAML load + expansion; access via config.Cfg
+│   ├── gokeenrestapi/           # API singletons + unified mock router
+│   └── gokeenrestapimodels/     # Request/response structs — always use these types
 ├── internal/
-│   ├── gokeenlog/               # Structured logging — the ONLY logging package allowed
-│   ├── gokeencache/             # In-memory API response cache
-│   ├── gokeenspinner/           # CLI progress indicators
+│   ├── gokeenlog/               # The only allowed logging package
+│   ├── gokeencache/             # In-memory API / URL-content cache
+│   ├── gokeenspinner/           # CLI progress spinners
 │   └── gokeenversion/           # Build-time version info
-├── custom/                      # Example configs and domain lists
-├── batfiles/                    # Example IP route bat-files
+├── docs/                        # Human config reference (EN + RU) — not agent instructions
+├── scripts/                     # check.sh (lint), build.sh, create_binaries.sh
+├── batfiles/                    # Example Windows-style route bat-files
+├── custom/                      # Local example router configs (gitignored patterns apply)
+├── .github/workflows/           # ci.yml, release.yml
+├── docker_*_test.go             # Docker integration tests (repo root)
+├── config_example.yaml          # Annotated single-router config
+├── scheduler_example.yaml       # Annotated scheduler config
+├── Dockerfile                   # Multi-arch image (linux/amd64, linux/arm64)
 └── Makefile                     # lint, test, build, coverage targets
 ```
 
+`custom/` holds operator-specific configs and domain lists used with this checkout. Do not treat it as public product docs.
+
 ## File & Package Naming
 
-- Source files: `snake_case` — `add_routes.go`, `add_routes_test.go`, `add_routes_property_test.go`
+- Source files: `snake_case` — `add_routes.go`, `add_routes_test.go`
 - Command constructors: `newXxxCmd()` (lowercase `new`)
 - Exported symbols: `PascalCase`; unexported: `camelCase`
 - Package names: single lowercase word, no underscores
 - Shared helpers go in `cmd/common.go`; command-specific logic in `cmd/<command>.go`
-- Externally importable code belongs in `pkg/`; internal-only utilities in `internal/`
+- Externally importable code in `pkg/`; internal-only utilities in `internal/`
+- CLI layer in `cmd/` must not grow business logic — that belongs in `pkg/` or `internal/`
 
 ## API Singletons (`pkg/gokeenrestapi`)
 
-Never instantiate — use package-level singletons only:
+Never instantiate — use package-level values only. Method names: `product.md`.
 
-| Singleton | Responsibility |
-|---|---|
-| `gokeenrestapi.Common` | Auth, raw RCI execution |
-| `gokeenrestapi.Ip` | IP route management (`AddRoutes`, `DeleteRoutes`, `DeleteAllRoutes`) |
-| `gokeenrestapi.DnsRouting` | DNS-routing management |
-| `gokeenrestapi.AwgConf` | AWG/WireGuard configuration and diff-update |
-| `gokeenrestapi.Checks` | Input validation (`CheckInterfaceId`, `CheckInterfaceExists`, `CheckComponentInstalled`) |
-| `gokeenrestapi.Interface` | Interface listing |
+Authentication is automatic via `PersistentPreRunE` in `root.go`. Commands must **never** call `Auth()` directly.
 
-Authentication is automatic via `PersistentPreRunE` in `root.go`. Commands must never call `Auth()` directly. `PersistentPreRunE` skips init for `completion`, `help`, `scheduler`, and `version` commands.
+`PersistentPreRunE` skips config load and auth for: `completion`, `help`, `scheduler`, `version`.
 
 ## Global Config
 
-`config.Cfg` is loaded once in `root.go` via `config.LoadConfig()`. Access it inside `RunE` only — never in command constructors, never reload in commands.
+`config.Cfg` is loaded once in `root.go` via `config.LoadConfig()`. Rules:
+
+- Access `config.Cfg` only inside `RunE` — never in command constructors
+- Never call `config.LoadConfig()` in commands
+- Env vars override YAML: `GOKEENAPI_KEENETIC_LOGIN`, `GOKEENAPI_KEENETIC_PASSWORD`, `GOKEENAPI_CONFIG`
 
 ## Adding a Command (3 steps)
 
 **Step 1 — `cmd/constants.go`**: define name and aliases
+
 ```go
 const CmdMyCommand = "my-command"                    // kebab-case
-var AliasesMyCommand = []string{"mycommand", "mc"}   // compact, no hyphens
+var AliasesMyCommand = []string{"mycommand", "mc"}   // compact, typically no hyphens
 ```
 
 **Step 2 — `cmd/my_command.go`**: implement
+
 ```go
 func newMyCommandCmd() *cobra.Command {
     cmd := &cobra.Command{
@@ -74,7 +89,6 @@ func newMyCommandCmd() *cobra.Command {
         Short:   "Brief description",
         Long:    `Detailed description`,
     }
-    cmd.Flags().StringP("interface", "i", "", "Interface name")
     cmd.RunE = func(cmd *cobra.Command, args []string) error {
         // 1. Parse flags
         // 2. Validate via gokeenrestapi.Checks
@@ -86,39 +100,42 @@ func newMyCommandCmd() *cobra.Command {
 }
 ```
 
-**Step 3 — `cmd/root.go`**: register
+**Step 3 — `cmd/root.go`**: register inside `NewRootCmd()`:
+
 ```go
 rootCmd.AddCommand(newMyCommandCmd())
 ```
+
+Then: unit tests in `cmd/my_command_test.go`; update `README.md` / `docs/` / `custom/` examples if the change is user-visible. Property tests (`*_property_test.go`) belong with non-trivial invariants (parsing, expansion, idempotency), not every command.
 
 ### Enforced Command Rules
 
 - Always `RunE`, never `Run`
 - Never access `config.Cfg` or API singletons in the constructor — only inside `RunE`
-- Never use `fmt.Println` / `log.Println` / `print` — always `gokeenlog`
-- Never call `os.Exit()` — return errors
+- Never use `fmt.Println` / `log.Println` / `print` — always `gokeenlog` (exception: `confirmAction` in `common.go` writes an interactive prompt)
+- Never call `os.Exit()` — return errors from `RunE`
+- Always validate inputs via `gokeenrestapi.Checks` before any API call
 
 ## API Usage Patterns
 
 ```go
-// Routes
-gokeenrestapi.Ip.AddRoutesFromBatFile(absPath, interfaceID)
-gokeenrestapi.Ip.AddRoutesFromBatUrl(url, interfaceID)
-gokeenrestapi.Ip.DeleteRoutes(routes, interfaceName)
-
-// DNS routing
-gokeenrestapi.DnsRouting.AddDomains(domains, interfaceName)
-gokeenrestapi.DnsRouting.DeleteDomains(domains, interfaceName)
-
-// Validation — always run before API calls
 gokeenrestapi.Checks.CheckInterfaceId(id)
 gokeenrestapi.Checks.CheckInterfaceExists(id)
 
-// Raw RCI
+gokeenrestapi.Ip.AddRoutesFromBatFile(absPath, interfaceID)
+gokeenrestapi.Ip.AddRoutesFromBatUrl(url, interfaceID)
+gokeenrestapi.Ip.DeleteRoutes(routes, interfaceName)
+gokeenrestapi.Ip.DeleteAllRoutes()
+
+gokeenrestapi.DnsRouting.AddDnsRoutingGroups(config.Cfg.DNS.Routes.Groups)
+gokeenrestapi.DnsRouting.DeleteDnsRoutingGroups(config.Cfg.DNS.Routes.Groups)
+gokeenrestapi.DnsRouting.DeleteAllDnsRoutingGroups()
+
 output, err := gokeenrestapi.Common.ExecutePostParse(command)
 ```
 
-Multi-operation error aggregation — always collect all errors, never just the first:
+Multi-operation error aggregation — collect all errors, never just the first:
+
 ```go
 var errs error
 for _, item := range items {
@@ -131,20 +148,11 @@ return errs
 
 ## Logging
 
-`gokeenlog` is the only allowed logging package. Available functions:
-
-```go
-gokeenlog.Info("done")
-gokeenlog.Infof("processed %d items", n)
-gokeenlog.InfoSubStepf("  - item %s", name)
-gokeenlog.InfoSubStep("  - item")
-gokeenlog.HorizontalLine()
-gokeenlog.PrintParseResponse(resp)
-```
+`internal/gokeenlog` is the only allowed logging package. Function table: `tech.md`.
 
 ## Testing
 
-> **IMPORTANT:** Activate the `golang-testing` skill before creating or modifying any test file.
+Mock-router rules: `mock-testing-guidelines.md`.
 
 | Test type | File pattern | Location |
 |---|---|---|
@@ -153,8 +161,39 @@ gokeenlog.PrintParseResponse(resp)
 | Integration | `docker_*_test.go` | Repository root |
 
 Key rules:
+
 - All tests use Ginkgo v2 + Gomega — never testify
 - Every test package has `suite_test.go` with `RegisterFailHandler(Fail)` + `RunSpecs()`
 - Property tests use `rapid.Check(GinkgoT(), ...)` inside Ginkgo `It` blocks
-- Any test touching the API must call `gokeenrestapi.SetupMockRouterForTest()`
+- Any test touching the API must call `gokeenrestapi.SetupMockRouterForTest()` — never create custom mocks
 - Use `Eventually(...).WithTimeout(...).WithPolling(...).Should(...)` fluent API — never positional args
+
+### Standard Test Setup (`cmd` package)
+
+Helpers in `cmd/helpers_test.go`:
+
+```go
+var _ = Describe("MyCommand", func() {
+    var server *httptest.Server
+
+    BeforeEach(func() {
+        server = setupMockRouter() // SetupMockRouterForTest + Auth
+    })
+
+    AfterEach(func() {
+        cleanupMockRouter(server) // Close + CleanupTestConfig
+    })
+
+    It("should do something", func() {
+        cmd := newMyCommandCmd()
+        Expect(cmd.RunE(cmd, []string{})).To(Succeed())
+    })
+})
+```
+
+- `setupMockRouter(opts ...MockRouterOption) *httptest.Server`
+- `cleanupMockRouter(server)`
+- `captureOutput(cmd, args) (string, error)`
+- `writeTempFile(dir, name, content string) string`
+
+`setupMockRouter` accepts `gokeenrestapi.WithInterfaces(...)`, `WithRoutes(...)`, and other options listed in `mock-testing-guidelines.md`.

@@ -4,99 +4,125 @@ inclusion: always
 
 # Product Overview
 
-`gokeenapi` is a Go CLI tool for automating Keenetic (Netcraze) router management via REST API. It manages IP routes, DNS records, DNS-based routing policies, WireGuard/AmneziaWG VPN, and executes arbitrary RCI commands.
+`gokeenapi` is a Go CLI for automating Keenetic (Netcraze) routers over the REST/RCI API. It manages static IP routes, DNS records, DNS-based routing policies, WireGuard/AmneziaWG VPN, known hosts, and scheduled multi-router jobs.
+
+Human-facing docs live in `README.md`, `docs/`, and `SCHEDULER.md`. Agent rules live in `.kiro/steering/` (see `AGENTS.md`).
+
+When adding a command, follow the checklist in `structure.md`.
 
 ## Commands Reference
 
-All command names and aliases are defined in `cmd/constants.go`. Always define both `CmdXxx` (constant, kebab-case) and `AliasesXxx` (slice, compact no hyphens) when adding a command.
+Names and aliases are defined in `cmd/constants.go`. Always add both `CmdXxx` (kebab-case constant) and `AliasesXxx` (compact strings, typically no hyphens — extra hyphenated aliases exist for a few commands).
 
 | Command | Aliases | Purpose |
 |---|---|---|
 | `add-routes` | `addroutes`, `ar` | Add static IP routes from bat-files or URLs |
-| `delete-routes` | `deleteroutes`, `dr` | Delete static IP routes |
+| `delete-routes` | `deleteroutes`, `dr` | Delete static IP routes listed in config |
 | `delete-all-routes` | `deleteallroutes`, `dar` | Remove all static routes in a single request |
 | `add-dns-records` | `adddnsrecords`, `adr` | Add static DNS A/AAAA records |
 | `delete-dns-records` | `deletednsrecords`, `ddr` | Delete static DNS records |
-| `add-dns-routing` | `adddnsrouting`, `adnsr` | Add policy-based DNS routing by domain |
-| `delete-dns-routing` | `deletednsrouting`, `ddnsr` | Delete DNS routing entries |
-| `add-awg` | `addawg`, `aawg` | Add WireGuard/AWG VPN from a `.conf` file |
-| `update-awg` | `updateawg`, `uawg` | Update existing AWG interface from a `.conf` file; supports `--dry-run` |
+| `add-dns-routing` | `adddnsrouting`, `adnsr`, `adddnsroutes`, `add-dns-routes` | Add policy-based DNS routing by domain |
+| `delete-dns-routing` | `deletednsrouting`, `ddnsr`, `deletednsroutes`, `delete-dns-routes` | Delete DNS-routing groups from config |
+| `delete-all-dns-routing` | `deletealldnsrouting`, `dadnsr` | Remove every DNS-routing group on the router; prompts unless `--force` |
+| `add-awg` | `addawg`, `aawg` | Add WireGuard/AWG VPN from a `.conf` file (`--conf-file`, optional `--name`) |
+| `update-awg` | `updateawg`, `uawg` | Update an existing AWG interface (`--conf-file`, `--interface-id`, optional `--dry-run`) |
 | `delete-known-hosts` | `deleteknownhosts`, `dkh` | Remove known host entries (regex supported) |
-| `exec` | `e` | Execute arbitrary Keenetic RCI commands |
-| `scheduler` | `schedule`, `sched` | Run automated scheduled tasks |
-| `show-interfaces` | `showinterfaces`, `si` | List all router interfaces |
+| `exec` | `e` | Execute arbitrary Keenetic RCI parse commands |
+| `scheduler` | `schedule`, `sched` | Run automated scheduled tasks from a scheduler YAML |
+| `show-interfaces` | `showinterfaces`, `si`, `showinterface`, `show-interface` | List router interfaces |
 | `version` | — | Print build version info |
 
-`PersistentPreRunE` in `root.go` skips auth/config init for `completion`, `help`, `scheduler`, and `version` commands.
+`PersistentPreRunE` in `cmd/root.go` skips config load and auth for `completion`, `help`, `scheduler`, and `version`.
+
+Route and DNS-routing commands take the interface from the YAML config, not from a CLI argument. `add-awg` / `update-awg` take `--conf-file` (and `update-awg` requires `--interface-id`).
+
+`update-awg` is implemented in `cmd/configure_awg.go` (historical filename). Do not add a second `update_awg.go`.
 
 ## API Singletons
 
-Never instantiate these — use the package-level singletons from `pkg/gokeenrestapi/`:
+Never instantiate — use the package-level values in `pkg/gokeenrestapi/`. Validate with `Checks` before other API calls.
 
 | Singleton | Responsibility |
 |---|---|
-| `gokeenrestapi.Common` | Auth, raw RCI execution |
-| `gokeenrestapi.Ip` | IP route management (`AddRoutes`, `DeleteRoutes`, `DeleteAllRoutes`) |
-| `gokeenrestapi.DnsRouting` | DNS-routing management |
-| `gokeenrestapi.AwgConf` | AWG/WireGuard configuration and diff-update |
-| `gokeenrestapi.Checks` | Input validation (`CheckInterfaceId`, `CheckInterfaceExists`, `CheckComponentInstalled`) |
-| `gokeenrestapi.Interface` | Interface listing |
+| `gokeenrestapi.Common` | Auth, raw RCI (`ExecutePostParse`, `ExecuteGetSubPath`, `ExecutePostSubPath`), config save |
+| `gokeenrestapi.Ip` | Routes, DNS records, known hosts (`AddRoutesFromBatFile`, `AddRoutesFromBatUrl`, `DeleteRoutes`, `DeleteAllRoutes`, `AddDnsRecords`, `DeleteDnsRecords`, `DeleteKnownHosts`) |
+| `gokeenrestapi.DnsRouting` | DNS-routing groups (`AddDnsRoutingGroups`, `DeleteDnsRoutingGroups`, `DeleteAllDnsRoutingGroups`, `LoadDomainsFromFile`, `LoadDomainsFromURL`, `CheckDnsRoutingSupport`) |
+| `gokeenrestapi.AwgConf` | AWG/WireGuard (`AddInterface`, `ConfigureOrUpdateInterface`, `DiffUpdate`, `PlanUpdate`) |
+| `gokeenrestapi.Checks` | Input validation (`CheckInterfaceId`, `CheckInterfaceExists`, `CheckComponentInstalled`, `CheckAWGInterfaceExistsFromConfFile`) |
+| `gokeenrestapi.Interface` | Interface listing, wait-until-up, global IP |
+| `gokeenrestapi.Components` | Installed component list |
+
+Auth is automatic in `PersistentPreRunE`. Commands must never call `Auth()` themselves.
+
+## Router YAML (`config.yaml`)
+
+Schema: `pkg/config/main_config.go`. Annotated example: `config_example.yaml`. Field-by-field user reference: `docs/config-reference.md`.
+
+Required at runtime (`cmd/common.go` `checkRequiredFields`):
+
+- `keenetic.url`
+- `keenetic.login` (or `GOKEENAPI_KEENETIC_LOGIN`)
+- `keenetic.password` (or `GOKEENAPI_KEENETIC_PASSWORD`)
+
+YAML credentials are allowed; env vars override YAML and are the recommended way to store secrets. A world-readable config file prints a warning.
+
+| Env var | Role |
+|---|---|
+| `GOKEENAPI_CONFIG` | Config path (alternative to `--config`) |
+| `GOKEENAPI_KEENETIC_LOGIN` | Overrides `keenetic.login` |
+| `GOKEENAPI_KEENETIC_PASSWORD` | Overrides `keenetic.password` |
+| `GOKEENAPI_INSIDE_DOCKER` | Forces `dataDir` to `/etc/gokeenapi` (set in the official image) |
+
+Other router-config fields: `keenetic.tls_skip_verify`, `keenetic.timeout` (default `30s`), `dataDir`, `routes[]`, `dns.records[]`, `dns.routes.groups[]`, `logs.debug`, `cache.urlTtl`.
+
+Configs support **expansion**: a `.yaml`/`.yml` path in `bat-file`, `bat-url`, `domain-file`, or `domain-url` is replaced by the list of the same name inside that file. Paths resolve relative to the referencing file. A YAML referenced from `bat-file` contributes only `bat-file` entries (same for the other keys).
+
+DNS-routing `groups` entries may be:
+
+- a group object (`name`, `interfaceId`, `domain-file` / `domain-url`)
+- a string path to a YAML file with a `groups:` list
+- `{file: common.yaml, interfaceId: Wireguard1}` — import that file and override `interfaceId` on every imported group
+
+## Scheduler YAML (`scheduler.yaml`)
+
+Schema: `pkg/config/scheduler_config.go`. User guide: `SCHEDULER.md`. Example: `scheduler_example.yaml`.
+
+Each task has `name`, `commands`, `configs`, and either `interval` (e.g. `3h`) or `times` (e.g. `["06:00"]`). Optional: `retry`, `retryDelay`, `strategy` (`sequential` default, or `parallel` — constants `StrategySequential` / `StrategyParallel` in `cmd/constants.go`).
+
+A command entry is either a string (`add-routes`) or `{name: delete-all-dns-routing, args: ["--force"]}`.
 
 ## Input File Formats
 
-**Bat-files** (`batfiles/`) — IP route sources:
-- One IPv4 CIDR or address per line: `192.168.1.0/24`, `10.0.0.1`
-- `#`-prefixed lines and empty lines are ignored
+**Bat-files** (`batfiles/`) — Windows-style route commands, parsed by `routeRegex` in `pkg/gokeenrestapi/ip.go`:
+
+```
+route add 11.11.11.11 MASK 255.255.255.255 0.0.0.0
+```
+
+`#`-prefixed lines and blank lines are skipped. CIDR-only lines are **not** accepted.
 
 **Domain-files** (`custom/domains/`) — DNS-routing sources:
+
 - One domain per line: `example.com`, `*.example.com`
-- `#`-prefixed lines and empty lines are ignored
-- Supports wildcards and IDNA-encoded internationalized domains
-
-## YAML Configuration
-
-- Each router has its own config YAML (`custom/config_*.yaml`)
-- Configs support **expansion**: reference other YAML files via `bat-file`, `bat-url`, `domain-file`, `domain-url` list types; paths resolve relative to the referencing file
-- Scheduler config (`custom/scheduler.yaml`) references per-router configs for multi-router automation
-- Scheduler supports `sequential` and `parallel` execution strategies (`cmd/constants.go`: `StrategySequential`, `StrategyParallel`)
-- Only required field: `keenetic-url`; credentials must use env vars, not YAML
-
-## Authentication
-
-Resolved in priority order (env vars win):
-1. `GOKEENAPI_KEENETIC_LOGIN` / `GOKEENAPI_KEENETIC_PASSWORD`
-2. `keenetic-login` / `keenetic-password` in config YAML
-
-Auth is handled automatically by `PersistentPreRunE` in `root.go`. Commands must never call `Auth()` directly.
+- `#`-prefixed lines and blank lines are ignored
+- Wildcards and IDNA-encoded internationalized domains are supported
 
 ## Interface Names
 
-Interface names are case-sensitive: `Wireguard0`, `Wireguard1`, `ISP`, `HomeNetwork`. Use `show-interfaces` to discover available names. An interface name is a required argument for route and DNS-routing commands.
+Interface IDs are case-sensitive: `Wireguard0`, `Wireguard1`, `ISP`, `HomeNetwork`. Use `show-interfaces` to discover them.
 
 ## Behavioral Contracts
 
-- **Idempotency**: add/delete operations are safe to repeat — no duplicates created, no errors on missing items
-- **Fail-fast validation**: validate inputs (IPs, domains, interface existence) via `gokeenrestapi.Checks` before any API call
-- **Error aggregation**: always use `multierr.Append()` when iterating lists — collect all errors, not just the first
-- **DNS-routing firmware**: requires Keenetic firmware 5.0.1+
-- **AWG support**: `update-awg` handles standard WireGuard, AmneziaWG 1.0 (Jc, Jmin, Jmax, S1, S2, H1–H4), and AWG 2.0 (S3, S4, I1–I5) parameters
-
-## Adding a New Command — Checklist
-
-1. **`cmd/constants.go`** — add `CmdXxx` constant (kebab-case) and `AliasesXxx` slice (compact, no hyphens)
-2. **`cmd/<command_name>.go`** — implement `newXxxCmd() *cobra.Command`
-   - Always `RunE`, never `Run`
-   - Access `config.Cfg` and API singletons only inside `RunE`, never in the constructor
-   - Use `gokeenlog` for all output — never `fmt.Println` or `log.Println`
-   - Return errors from `RunE` — never `os.Exit()`
-   - Validate inputs via `gokeenrestapi.Checks` before calling other singletons
-3. **`cmd/root.go`** — register with `rootCmd.AddCommand(newXxxCmd())`
-4. Write `*_test.go` (unit) and `*_property_test.go` (property-based) — activate `golang-testing` skill for patterns
-5. Update `custom/` example configs and `README.md` if the feature affects configuration
+- **Idempotency**: add/delete is safe to repeat — no duplicates on add, no errors on missing items during delete
+- **Fail-fast validation**: `gokeenrestapi.Checks` before other API calls
+- **Error aggregation**: `multierr.Append()` when iterating lists — collect all errors
+- **DNS-routing firmware**: Keenetic OS 5.0.1+
+- **AWG**: `update-awg` supports standard WireGuard, AmneziaWG 1.0 (Jc, Jmin, Jmax, S1, S2, H1–H4), and AWG 2.0 (S3, S4, I1–I5; needs Keenetic OS 5.1+). `--dry-run` prints a unified diff and does not apply changes
+- **Config save**: mutating RCI batches end with `system configuration save` via `Common.EnsureSaveConfigAtEnd`
 
 ## Target Use Cases
 
-- VPN split-tunneling: route specific IPs/domains through VPN, rest through ISP
+- VPN split-tunneling: send selected IPs/domains through VPN, the rest through ISP
 - Selective routing: different traffic through different interfaces
-- Automated updates: scheduler keeps route/domain lists current from remote URLs
-- Multi-site management: single binary manages multiple Keenetic routers
+- Automated updates: scheduler refreshes route/domain lists from remote URLs
+- Multi-site management: one binary, many Keenetic routers

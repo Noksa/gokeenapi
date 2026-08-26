@@ -5,25 +5,34 @@ fileMatchPattern: ['**/*_test.go', '**/mock_*.go']
 
 # Mock Testing Guidelines
 
-> **IMPORTANT:** This steering covers mock router patterns only.
-> For general test structure (Ginkgo/Gomega, suites, property tests, Makefile targets), activate the `golang-testing` skill.
+Ginkgo/Gomega layout, suites, and Makefile targets: `structure.md` and `tech.md`.
+This file covers the unified Keenetic mock only.
 
 ## Critical Rule: Single Unified Mock Router
 
-This project uses ONE centralized mock router at `pkg/gokeenrestapi/mock_router.go` that simulates the Keenetic REST API for all tests.
+All tests use one mock at `pkg/gokeenrestapi/mock_router.go` (`MockRouter`).
 
-**NEVER create separate mock implementations.** Always extend the unified mock router.
+**Never create a separate mock implementation.** Extend this mock.
 
-## Why This Matters
+## File Split
 
-- Consistency: All tests use the same mock behavior
-- Maintainability: API changes require updates in one place
-- Realism: Mock closely mirrors actual Keenetic router responses
-- Simplicity: No need to maintain multiple mock implementations
+| File | Role |
+|------|------|
+| `mock_router.go` | `MockRouter` state, `MockRouterOption`s, `NewMockRouter`, `NewMockRouterServer`, `SetupMockRouterForTest` |
+| `mock_router_handlers_core.go` | Auth, version, parse dispatch, system mode, running-config |
+| `mock_router_handlers_dns.go` | DNS records, object-groups, dns-proxy routes, components |
+| `mock_router_handlers_interface.go` | Interfaces, SC interfaces, hotspot, known hosts |
+| `mock_router_handlers_routes.go` | IP routes, AWG/WireGuard parse |
+| `test_helpers.go` | `SetupTestConfig`, `CleanupTestConfig` |
 
-## Standard Setup Pattern
+## Standard Setup
 
-### Basic Setup (Ginkgo BeforeEach/AfterEach)
+### `cmd` package
+
+Use `setupMockRouter` / `cleanupMockRouter` from `cmd/helpers_test.go` (they already call `Auth()` and `CleanupTestConfig()`).
+
+### Other packages
+
 ```go
 var _ = Describe("MyFeature", func() {
     var server *httptest.Server
@@ -38,322 +47,79 @@ var _ = Describe("MyFeature", func() {
         }
         gokeenrestapi.CleanupTestConfig()
     })
-
-    It("should do something", func() {
-        // Test code here - mock is ready with default state
-    })
 })
 ```
 
-### Custom Initial State
+### Custom initial state
+
+Options are `MockRouterOption` funcs on `*MockRouter`:
+
 ```go
-BeforeEach(func() {
-    server = gokeenrestapi.SetupMockRouterForTest(
-        gokeenrestapi.WithInterfaces(customInterfaces),
-        gokeenrestapi.WithRoutes(customRoutes),
-        gokeenrestapi.WithDNSRecords(customDNS),
-    )
-})
+server = gokeenrestapi.SetupMockRouterForTest(
+    gokeenrestapi.WithInterfaces([]gokeenrestapi.MockInterface{{ID: "Wireguard0", Type: gokeenrestapi.InterfaceTypeWireguard}}),
+    gokeenrestapi.WithRoutes([]gokeenrestapi.MockRoute{{Host: "192.168.1.0", Mask: "255.255.255.0", Interface: "Wireguard0"}}),
+    gokeenrestapi.WithDNSRecords(map[string]string{"example.com": "1.2.3.4"}),
+    gokeenrestapi.WithVersion("5.0.1"),
+)
 ```
 
-## Adding New Mock Endpoints
+Other options: `WithScInterfaces`, `WithHotspotDevices`, `WithSystemMode`, `WithStaticRunningConfig`, `WithDnsRoutingGroups`, `WithRciBody`, `WithComponents`.
 
-When you need to test a new API endpoint, follow this checklist:
+## Adding a New Mock Endpoint
 
-| Step | Action | Required |
-|------|--------|----------|
-| 1 | Add handler function to `mock_router.go` (e.g., `handleDeleteDnsRecord`) | ✅ Yes |
-| 2 | Register endpoint in `NewMockRouterServer()` mux | ✅ Yes |
-| 3 | Add endpoint to smoke test in `mock_router_test.go` | ✅ Yes |
-| 4 | Write API client tests in appropriate `*_test.go` file | ✅ Yes |
-| 5 | Write unit tests for mock handler behavior | ❌ No - avoid duplication |
+| Step | Action |
+|------|--------|
+| 1 | Add the handler on `*MockRouter` in the matching `mock_router_handlers_*.go` file |
+| 2 | Register the path in `NewMockRouterServer()` in `mock_router.go` |
+| 3 | Smoke-cover the path from an API client test (or a small mock infrastructure test if the endpoint has no client yet) |
+| 4 | Do **not** add a parallel mock-only unit test that duplicates the client test |
 
-### Handler Implementation Pattern
-```go
-func (m *MockRouterServer) handleMyEndpoint(w http.ResponseWriter, r *http.Request) {
-    // 1. Validate HTTP method
-    if r.Method != http.MethodPost {
-        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-        return
-    }
-    
-    // 2. Parse request body
-    var req MyRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, "Invalid request", http.StatusBadRequest)
-        return
-    }
-    
-    // 3. Update mock state
-    m.mu.Lock()
-    defer m.mu.Unlock()
-    // ... modify m.state ...
-    
-    // 4. Return response
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(MyResponse{Success: true})
-}
-```
+Handlers take `(w http.ResponseWriter, r *http.Request)`, lock `m.mu` when mutating state, and encode JSON via `m.encodeJSON`.
 
-### Endpoint Registration Pattern
-```go
-func NewMockRouterServer(opts ...MockOption) *MockRouterServer {
-    // ... initialization ...
-    
-    mux.HandleFunc("/api/my-endpoint", server.handleMyEndpoint)
-    
-    return server
-}
-```
+## What To Test Where
 
-## Test Coverage Strategy
+**Mock infrastructure tests** (`mock_router_test.go` and `mock_router_*_test.go`): state helpers, options, lifecycle, mock-only edge cases (bad method, 404). Keep these focused.
 
-### DO Test in Mock Infrastructure Tests (`mock_router_test.go`)
+**API client tests**: real behavior through singletons (`api_test.go`, `ip_test.go`, `dns_routing_*.go` tests, `awg_test.go`, `interface_wait_test.go`, `checks_test.go`).
 
-Only test mock-specific functionality not covered by API client tests:
+Do not re-test route add/delete inside mock tests if `ip_test.go` already covers it.
 
-- State management methods: `GetState()`, `ResetState()`, `SetState()`
-- Configuration options: `WithInterfaces()`, `WithRoutes()`, `WithDNSRecords()`
-- Mock server lifecycle: startup, shutdown, cleanup
-- Edge cases unique to mock: malformed requests, invalid methods, 404s
-
-Keep `mock_router_test.go` minimal (~5-10 tests maximum).
-
-### DO Test in API Client Tests (`*_test.go`)
-
-Test actual API functionality through the client interface:
-
-- Authentication flow (`api_test.go`)
-- Interface queries (`interface_test.go`)
-- Route operations (`ip_test.go`)
-- DNS-routing operations (`dns_routing_test.go`)
-- AWG configuration (`awg_test.go`)
-- Error handling and validation
-
-### DO NOT Test in Mock Tests
-
-Avoid duplicating coverage:
-
-- ❌ Authentication flow → already covered by `api_test.go`
-- ❌ Interface existence checks → already covered by API tests
-- ❌ Route add/delete operations → already covered by `ip_test.go`
-- ❌ DNS record operations → already covered by `dns_routing_test.go`
-- ❌ Business logic validation → belongs in API client tests
-
-## Mock State Management
-
-The mock router maintains stateful behavior to simulate a real router:
+## State
 
 ```go
 type MockRouterState struct {
-    Interfaces  []Interface
-    Routes      []Route
-    DNSRecords  []DNSRecord
-    DNSRouting  []DNSRoutingRule
-    AWGConfig   *AWGConfig
+    Interfaces       map[string]*MockInterface
+    ScInterfaces     map[string]*MockScInterface
+    Routes           []MockRoute
+    DNSRecords       map[string]string
+    HotspotDevices   []MockHost
+    SystemMode       MockSystemMode
+    DnsRoutingGroups []MockDnsRoutingGroup
+    DnsProxyRoutes   []MockDnsProxyRoute
 }
 ```
 
-### Accessing State in Tests
+`GetState()` / `ResetState()` operate on this snapshot. Types are `MockRoute`, `MockInterface`, … — not unprefixed `Route`.
+
+## Example: command path through the real API
+
 ```go
-// Get current state
-state := server.GetState()
-Expect(state.Routes).To(HaveLen(expectedCount))
-
-// Reset to default state
-server.ResetState()
-
-// Set custom state
-server.SetState(customState)
-```
-
-## Common Patterns
-
-### Testing Add Operations
-```go
-var _ = Describe("AddRoute", func() {
-    var server *httptest.Server
-
-    BeforeEach(func() {
-        server = gokeenrestapi.SetupMockRouterForTest()
-    })
-
-    AfterEach(func() {
-        if server != nil {
-            server.Close()
-        }
-        gokeenrestapi.CleanupTestConfig()
-    })
-
-    It("should add a route", func() {
-        Expect(gokeenrestapi.Ip.AddRoute("192.168.1.0/24", "Wireguard0")).To(Succeed())
-    })
+It("should add routes from a bat file", func() {
+    path := writeTempFile(tmpDir, "routes.bat", "route add 10.0.0.0 MASK 255.255.255.0 0.0.0.0\n")
+    Expect(gokeenrestapi.Ip.AddRoutesFromBatFile(path, "Wireguard0")).To(Succeed())
 })
 ```
 
-### Testing Delete Operations
-```go
-BeforeEach(func() {
-    server = gokeenrestapi.SetupMockRouterForTest(
-        gokeenrestapi.WithRoutes([]Route{{IP: "192.168.1.0/24"}}),
-    )
-})
+There is no `Ip.AddRoute` helper.
 
-It("should delete a route", func() {
-    Expect(gokeenrestapi.Ip.DeleteRoute("192.168.1.0/24", "Wireguard0")).To(Succeed())
-})
-```
+## Property tests
 
-### Testing Error Conditions
-```go
-It("should reject invalid interface", func() {
-    err := gokeenrestapi.Ip.AddRoute("192.168.1.0/24", "NonExistent")
-    Expect(err).To(HaveOccurred())
-    Expect(err.Error()).To(ContainSubstring("interface not found"))
-})
-```
+The mock works with `rapid.Check(GinkgoT(), ...)` inside Ginkgo `It` blocks. Reset or isolate state inside the property if the generator mutates the router.
 
-## File Organization
+## Anti-Patterns
 
-| File | Purpose | Test Count |
-|------|---------|------------|
-| `mock_router.go` | Unified mock implementation with all handlers | N/A |
-| `mock_router_test.go` | Mock infrastructure tests only | ~5-10 |
-| `api_test.go` | Authentication and general API tests | ~10-20 |
-| `ip_test.go` | IP route operation tests | ~15-30 |
-| `dns_routing_test.go` | DNS-routing operation tests | ~15-30 |
-| `awg_test.go` | AWG configuration tests | ~10-20 |
-| `interface_test.go` | Interface query tests | ~5-10 |
-
-## Workflow: Adding New Endpoint Support
-
-Example: Adding DNS record deletion support
-
-1. **Add handler to `mock_router.go`**:
-```go
-func (m *MockRouterServer) handleDeleteDnsRecord(w http.ResponseWriter, r *http.Request) {
-    if r.Method != http.MethodDelete {
-        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-        return
-    }
-    
-    var req DeleteDNSRecordRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, "Invalid request", http.StatusBadRequest)
-        return
-    }
-    
-    m.mu.Lock()
-    defer m.mu.Unlock()
-    
-    // Remove from state
-    filtered := []DNSRecord{}
-    for _, record := range m.state.DNSRecords {
-        if record.Domain != req.Domain {
-            filtered = append(filtered, record)
-        }
-    }
-    m.state.DNSRecords = filtered
-    
-    w.WriteHeader(http.StatusOK)
-}
-```
-
-2. **Register in `NewMockRouterServer()`**:
-```go
-mux.HandleFunc("/api/dns/record", server.handleDeleteDnsRecord)
-```
-
-3. **Add to smoke test in `mock_router_test.go`**:
-```go
-It("should respond to DNS record deletion endpoint", func() {
-    resp, err := http.Delete(server.URL + "/api/dns/record")
-    Expect(err).NotTo(HaveOccurred())
-    Expect(resp.StatusCode).NotTo(Equal(http.StatusNotFound))
-})
-```
-
-4. **Write API client test in `dns_routing_test.go`**:
-```go
-It("should delete a DNS record", func() {
-    Expect(DnsRouting.DeleteRecord("test.local")).To(Succeed())
-})
-```
-
-5. **Done** - No need for mock unit test since API client test covers the behavior
-
-## Anti-Patterns to Avoid
-
-❌ **Creating separate mock implementations**
-```go
-// DON'T DO THIS
-type MyCustomMock struct {}
-func (m *MyCustomMock) GetRoutes() []Route { ... }
-```
-
-❌ **Testing mock behavior in mock tests when API tests cover it**
-```go
-// DON'T DO THIS in mock_router_test.go
-func TestMockHandlesRouteAddition(t *testing.T) {
-    // This belongs in ip_test.go, not mock_router_test.go
-}
-```
-
-❌ **Not using the cleanup pattern**
-```go
-// DON'T DO THIS
-BeforeEach(func() {
-    SetupMockRouterForTest() // Missing AfterEach cleanup
-})
-```
-
-❌ **Manually managing mock server lifecycle**
-```go
-// DON'T DO THIS
-server := httptest.NewServer(...)
-defer server.Close()
-// Use SetupMockRouterForTest() instead
-```
-
-## Integration with Property-Based Tests
-
-The mock router works seamlessly with property-based tests using `rapid` + Ginkgo:
-
-```go
-var _ = Describe("Property: Route Operations", func() {
-    var server *httptest.Server
-
-    BeforeEach(func() {
-        server = SetupMockRouterForTest()
-    })
-
-    AfterEach(func() {
-        if server != nil {
-            server.Close()
-        }
-        CleanupTestConfig()
-    })
-
-    It("should be idempotent when adding routes", func() {
-        rapid.Check(GinkgoT(), func(t *rapid.T) {
-            route := rapid.String().Draw(t, "route")
-            iface := rapid.String().Draw(t, "interface")
-
-            err1 := gokeenrestapi.Ip.AddRoute(route, iface)
-            err2 := gokeenrestapi.Ip.AddRoute(route, iface)
-
-            // Both should succeed or both should fail
-            Expect(err1 == nil).To(Equal(err2 == nil))
-        })
-    })
-})
-```
-
-## Summary
-
-- Use the unified mock at `pkg/gokeenrestapi/mock_router.go` for all tests
-- Extend the mock by adding handlers and registering endpoints
-- Test API behavior through client tests, not mock unit tests
-- Keep mock infrastructure tests minimal and focused
-- Follow the cleanup pattern with `defer cleanup()`
-- Use state management methods when you need custom initial state
+- Separate mock types (`type MyCustomMock struct {}`)
+- Testing business logic only in `mock_router_test.go`
+- Skipping `AfterEach` cleanup
+- Hand-rolling `httptest.NewServer` instead of `SetupMockRouterForTest`
+- Calling `Auth()` in `cmd` tests after `setupMockRouter` (already authenticated)
