@@ -68,10 +68,10 @@ YAML credentials are allowed; env vars override YAML and are the recommended way
 
 | Env var | Role |
 |---|---|
-| `GOKEENAPI_CONFIG` | Config path (alternative to `--config`) |
+| `GOKEENAPI_CONFIG` | Config path (alternative to `--config`). The official image sets `/etc/gokeenapi/config.yaml`. An explicit `--config` wins. |
 | `GOKEENAPI_KEENETIC_LOGIN` | Overrides `keenetic.login` |
 | `GOKEENAPI_KEENETIC_PASSWORD` | Overrides `keenetic.password` |
-| `GOKEENAPI_INSIDE_DOCKER` | Forces `dataDir` to `/etc/gokeenapi` (set in the official image) |
+| `GOKEENAPI_INSIDE_DOCKER` | Forces `dataDir` to `/etc/gokeenapi` (set in the official image). The session cache directory is `/etc/gokeenapi/.gokeenapi` and must be a directory, not a file. |
 
 Other router-config fields: `keenetic.tls_skip_verify`, `keenetic.timeout` (default `30s`), `dataDir`, `routes[]`, `dns.records[]`, `dns.routes.groups[]`, `logs.debug`, `cache.urlTtl`.
 

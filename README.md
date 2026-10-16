@@ -56,10 +56,15 @@ export GOKEENAPI_IMAGE="noksa/gokeenapi:stable"
 # export GOKEENAPI_IMAGE="noksa/gokeenapi:1.7.0"
 docker pull "${GOKEENAPI_IMAGE}"
 
-# Run a command
-docker run --rm -ti -v "$(pwd)/config_example.yaml":/gokeenapi/config.yaml \
-  "${GOKEENAPI_IMAGE}" show-interfaces --config /gokeenapi/config.yaml
+# Run a command. The image reads /etc/gokeenapi/config.yaml when --config is omitted.
+docker run --rm -ti \
+  -v "$(pwd)/config_example.yaml":/etc/gokeenapi/config.yaml \
+  "${GOKEENAPI_IMAGE}" show-interfaces
 ```
+
+The image loads `/etc/gokeenapi/config.yaml` when `--config` is omitted. `--config` and a runtime `GOKEENAPI_CONFIG` both override that path.
+
+`/etc/gokeenapi/.gokeenapi` is the session-cookie directory and must stay writable. Mounting only the config file leaves that directory in the container. Mounting a directory on `/etc/gokeenapi` hides it, so that mount has to be writable. The process runs as user `gokeenapi`. On Linux, mode `0644` lets that user read the file; keep the password in `GOKEENAPI_KEENETIC_PASSWORD`.
 
 ### 📦 Latest Release
 
@@ -77,7 +82,7 @@ Download the latest release for your platform:
 
 `gokeenapi` is configured using a `yaml` file. You can find an example [here](https://github.com/Noksa/gokeenapi/blob/main/config_example.yaml). For a complete description of every field, see the [Config Reference](docs/config-reference.md).
 
-To use your configuration file, pass the `--config <path>` flag with your command.
+To use your configuration file, pass the `--config <path>` flag with your command. The Docker image already points at `/etc/gokeenapi/config.yaml`.
 
 ### Reusable Bat-File and Bat-URL Lists
 
@@ -113,12 +118,12 @@ All configuration options can be set via environment variables:
 
 | Variable | Description |
 |---|---|
-| `GOKEENAPI_CONFIG` | Path to config file (alternative to `--config`) |
+| `GOKEENAPI_CONFIG` | Path to the config file (alternative to `--config`). The official image sets `/etc/gokeenapi/config.yaml` |
 | `GOKEENAPI_KEENETIC_LOGIN` | Router admin login |
 | `GOKEENAPI_KEENETIC_PASSWORD` | Router admin password |
 | `GOKEENAPI_INSIDE_DOCKER` | When set, uses `/etc/gokeenapi` as the data directory |
 
-`GOKEENAPI_KEENETIC_LOGIN` and `GOKEENAPI_KEENETIC_PASSWORD` are particularly useful for keeping sensitive credentials out of config files. `GOKEENAPI_INSIDE_DOCKER` is set automatically in the official Docker image.
+`GOKEENAPI_KEENETIC_LOGIN` and `GOKEENAPI_KEENETIC_PASSWORD` are particularly useful for keeping sensitive credentials out of config files. The official image sets `GOKEENAPI_INSIDE_DOCKER` and `GOKEENAPI_CONFIG=/etc/gokeenapi/config.yaml`.
 
 > **Security recommendation**: Store credentials using environment variables instead of writing them directly into the config file. Config files stored with world-readable permissions (e.g. `0644`) will trigger a runtime warning. Restrict permissions with `chmod 600 config.yaml` and use `GOKEENAPI_KEENETIC_LOGIN` / `GOKEENAPI_KEENETIC_PASSWORD` to pass credentials. Add `config.yaml` and `config_*.yaml` to your `.gitignore` to prevent accidental commits (the project's default `.gitignore` already includes these patterns).
 

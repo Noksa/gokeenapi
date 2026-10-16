@@ -56,10 +56,15 @@ export GOKEENAPI_IMAGE="noksa/gokeenapi:stable"
 # export GOKEENAPI_IMAGE="noksa/gokeenapi:1.7.0"
 docker pull "${GOKEENAPI_IMAGE}"
 
-# Запускаем команду
-docker run --rm -ti -v "$(pwd)/config_example.yaml":/gokeenapi/config.yaml \
-  "${GOKEENAPI_IMAGE}" show-interfaces --config /gokeenapi/config.yaml
+# Запуск команды. Без --config образ читает /etc/gokeenapi/config.yaml.
+docker run --rm -ti \
+  -v "$(pwd)/config_example.yaml":/etc/gokeenapi/config.yaml \
+  "${GOKEENAPI_IMAGE}" show-interfaces
 ```
+
+Если `--config` не указан, образ берёт конфиг из `/etc/gokeenapi/config.yaml`. Свой путь задаётся флагом `--config` или переменной `GOKEENAPI_CONFIG` при запуске.
+
+`/etc/gokeenapi/.gokeenapi` — каталог cookie сессии, он должен быть доступен на запись. Если смонтировать только файл конфига, каталог останется в контейнере. Если смонтировать каталог на `/etc/gokeenapi`, он закроет каталог из образа, поэтому такое монтирование должно быть с правом записи. Процесс работает от пользователя `gokeenapi`. На Linux файлу обычно ставят права `0644`, чтобы этот пользователь мог его прочитать, а пароль передают через `GOKEENAPI_KEENETIC_PASSWORD`.
 
 ### 📦 Последний релиз
 
@@ -77,7 +82,7 @@ docker run --rm -ti -v "$(pwd)/config_example.yaml":/gokeenapi/config.yaml \
 
 `gokeenapi` настраивается с помощью `yaml` файла. Пример можно найти [здесь](https://github.com/Noksa/gokeenapi/blob/main/config_example.yaml). Полное описание каждого поля смотрите в [Справочнике конфигурации](docs/config-reference-ru.md).
 
-Чтобы использовать ваш конфигурационный файл, передайте флаг `--config <путь>` с вашей командой.
+Чтобы использовать свой файл конфигурации, передайте флаг `--config <путь>`. В Docker-образе этот путь уже задан: `/etc/gokeenapi/config.yaml`.
 
 ### Переиспользуемые списки Bat-файлов и Bat-URL
 
@@ -113,12 +118,12 @@ routes:
 
 | Переменная | Описание |
 |---|---|
-| `GOKEENAPI_CONFIG` | Путь к файлу конфигурации (альтернатива флагу `--config`) |
+| `GOKEENAPI_CONFIG` | Путь к файлу конфигурации (альтернатива флагу `--config`). В официальном образе задан `/etc/gokeenapi/config.yaml` |
 | `GOKEENAPI_KEENETIC_LOGIN` | Логин администратора роутера |
 | `GOKEENAPI_KEENETIC_PASSWORD` | Пароль администратора роутера |
 | `GOKEENAPI_INSIDE_DOCKER` | Если задана, использует `/etc/gokeenapi` в качестве директории данных |
 
-`GOKEENAPI_KEENETIC_LOGIN` и `GOKEENAPI_KEENETIC_PASSWORD` позволяют не хранить чувствительные данные в конфигурационном файле. `GOKEENAPI_INSIDE_DOCKER` задаётся автоматически в официальном Docker-образе.
+`GOKEENAPI_KEENETIC_LOGIN` и `GOKEENAPI_KEENETIC_PASSWORD` позволяют не хранить чувствительные данные в конфигурационном файле. Официальный образ сам задаёт `GOKEENAPI_INSIDE_DOCKER` и `GOKEENAPI_CONFIG=/etc/gokeenapi/config.yaml`.
 
 > **Рекомендация по безопасности**: Храните учётные данные в переменных окружения, а не в конфигурационном файле. При запуске программа предупредит, если файл конфигурации доступен для чтения группой или другими пользователями (права `0644` и шире). Ограничьте права командой `chmod 600 config.yaml` и передавайте логин/пароль через `GOKEENAPI_KEENETIC_LOGIN` / `GOKEENAPI_KEENETIC_PASSWORD`. Добавьте `config.yaml` и `config_*.yaml` в `.gitignore`, чтобы не допустить случайного попадания в репозиторий (`.gitignore` проекта уже содержит эти паттерны).
 

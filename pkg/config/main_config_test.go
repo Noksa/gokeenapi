@@ -67,6 +67,15 @@ dns:`), 0644)).To(Succeed())
 			Expect(err.Error()).To(ContainSubstring("config path is empty"))
 		})
 
+		It("should fail when GOKEENAPI_CONFIG is empty", func() {
+			_ = os.Setenv("GOKEENAPI_CONFIG", "")
+			DeferCleanup(func() { _ = os.Unsetenv("GOKEENAPI_CONFIG") })
+
+			err := LoadConfig("")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("config path is empty"))
+		})
+
 		It("should load from GOKEENAPI_CONFIG env var", func() {
 			tmpDir := GinkgoT().TempDir()
 			configPath := filepath.Join(tmpDir, "env_config.yaml")
@@ -80,6 +89,30 @@ dns:`), 0644)).To(Succeed())
 
 			Expect(LoadConfig("")).To(Succeed())
 			Expect(Cfg.Keenetic.URL).To(Equal("http://192.168.1.1"))
+		})
+
+		It("should prefer an explicit path over GOKEENAPI_CONFIG", func() {
+			tmpDir := GinkgoT().TempDir()
+			fromFlag := filepath.Join(tmpDir, "flag.yaml")
+			fromEnv := filepath.Join(tmpDir, "env.yaml")
+			Expect(os.WriteFile(fromFlag, []byte(`keenetic:
+  url: "http://192.168.1.1"
+  login: "from-flag"
+  password: "password"`), 0644)).To(Succeed())
+			Expect(os.WriteFile(fromEnv, []byte(`keenetic:
+  url: "http://192.168.1.2"
+  login: "from-env"
+  password: "password"`), 0644)).To(Succeed())
+
+			_ = os.Setenv("GOKEENAPI_CONFIG", fromEnv)
+			DeferCleanup(func() { _ = os.Unsetenv("GOKEENAPI_CONFIG") })
+
+			resolved, err := ResolveConfigPath(fromFlag)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resolved).To(Equal(fromFlag))
+
+			Expect(LoadConfig(fromFlag)).To(Succeed())
+			Expect(Cfg.Keenetic.Login).To(Equal("from-flag"))
 		})
 
 		It("should override credentials from env vars", func() {

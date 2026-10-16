@@ -59,7 +59,11 @@ Can also be set via GOKEENAPI_CONFIG environment variable.`)
 				return nil
 			}
 		}
-		err := config.LoadConfig(configFile)
+		configPath, err := config.ResolveConfigPath(configFile)
+		if err != nil {
+			return err
+		}
+		err = config.LoadConfig(configPath)
 		if err != nil {
 			return err
 		}
@@ -76,7 +80,7 @@ Can also be set via GOKEENAPI_CONFIG environment variable.`)
 		}
 		gokeenlog.Info("🏗️  Configuration loaded:")
 		gokeenlog.InfoSubStepf("%v: %v", color.BlueString("Keenetic URL"), config.Cfg.Keenetic.URL)
-		gokeenlog.InfoSubStepf("%v: %v", color.BlueString("Config"), color.CyanString(configFile))
+		gokeenlog.InfoSubStepf("%v: %v", color.BlueString("Config"), color.CyanString(configPath))
 		gokeenlog.HorizontalLine()
 		return gokeenrestapi.Common.Auth()
 	}

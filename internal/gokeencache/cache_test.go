@@ -2,6 +2,7 @@ package gokeencache
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/noksa/gokeenapi/pkg/config"
@@ -25,6 +26,21 @@ var _ = Describe("GetGokeenDir", func() {
 		info, err := os.Stat(gokeenDir)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(info.Mode().Perm()).To(Equal(os.FileMode(0700)))
+	})
+
+	It("should fail when .gokeenapi exists as a file", func() {
+		tmpDir, err := os.MkdirTemp("", "gokeencache-file-test-*")
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() {
+			_ = os.RemoveAll(tmpDir)
+			config.Cfg.DataDir = ""
+		})
+		config.Cfg.DataDir = tmpDir
+		Expect(os.WriteFile(filepath.Join(tmpDir, ".gokeenapi"), []byte("{}"), 0600)).To(Succeed())
+
+		_, err = GetGokeenDir()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("not a directory"))
 	})
 })
 

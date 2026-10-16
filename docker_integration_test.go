@@ -53,6 +53,38 @@ var _ = Describe("Docker Integration", func() {
 			Entry("version", []string{"version"}, "Version:", false),
 			Entry("show-interfaces without config", []string{"show-interfaces"}, "", true),
 		)
+
+		It("should look for the image default config when --config is omitted", func() {
+			cmd := exec.CommandContext(ctx, "docker", "run", "--rm", testImageName, "show-interfaces")
+			output, err := cmd.CombinedOutput()
+			Expect(err).To(HaveOccurred())
+			outputStr := string(output)
+			Expect(outputStr).To(ContainSubstring("/etc/gokeenapi/config.yaml"))
+			Expect(outputStr).To(ContainSubstring("no such file"))
+			Expect(outputStr).NotTo(ContainSubstring("config path is empty"))
+		})
+	})
+
+	Context("image layout", func() {
+		BeforeEach(func() {
+			ensureDockerImage(ctx)
+		})
+
+		It("should set GOKEENAPI_CONFIG to the default config path", func() {
+			cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "--entrypoint", "sh",
+				testImageName, "-c", `printf '%s' "$GOKEENAPI_CONFIG"`)
+			output, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), string(output))
+			Expect(string(output)).To(Equal("/etc/gokeenapi/config.yaml"))
+		})
+
+		It("should provide a session cache directory writable by the image user", func() {
+			cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "--entrypoint", "sh",
+				testImageName, "-c",
+				"test -d /etc/gokeenapi/.gokeenapi && touch /etc/gokeenapi/.gokeenapi/probe && test -f /etc/gokeenapi/.gokeenapi/probe")
+			output, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), "session cache directory is not writable: %s", string(output))
+		})
 	})
 
 	Context("config mount", func() {
@@ -142,6 +174,54 @@ logs:
 			), "Expected connection error, got: %s", outputStr)
 			Expect(outputStr).NotTo(ContainSubstring("failed to load config"))
 			Expect(outputStr).NotTo(ContainSubstring("config path is empty"))
+		})
+
+		It("should load the default config path without --config", func() {
+			cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
+				"-v", fmt.Sprintf("%s:/etc/gokeenapi", tmpDir),
+				testImageName,
+				"show-interfaces",
+			)
+			output, err := cmd.CombinedOutput()
+			outputStr := string(output)
+
+			Expect(err).To(HaveOccurred(), "Expected connection failure")
+			Expect(outputStr).To(SatisfyAny(
+				ContainSubstring("connection refused"),
+				ContainSubstring("no such host"),
+				ContainSubstring("dial tcp"),
+				ContainSubstring("context deadline exceeded"),
+				ContainSubstring("i/o timeout"),
+			), "Expected connection error, got: %s", outputStr)
+			Expect(outputStr).To(ContainSubstring("/etc/gokeenapi/config.yaml"))
+			Expect(outputStr).NotTo(ContainSubstring("config path is empty"))
+			Expect(outputStr).NotTo(ContainSubstring("not a directory"))
+		})
+
+		It("should let --config override the image default", func() {
+			cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
+				"-v", fmt.Sprintf("%s/config.yaml:/etc/gokeenapi/config.yaml", tmpDir),
+				testImageName,
+				"--config", "/no/such/router.yaml",
+				"show-interfaces",
+			)
+			output, err := cmd.CombinedOutput()
+			outputStr := string(output)
+
+			Expect(err).To(HaveOccurred())
+			Expect(outputStr).To(ContainSubstring("/no/such/router.yaml"))
+			Expect(outputStr).NotTo(ContainSubstring("dial tcp"))
+			Expect(outputStr).NotTo(ContainSubstring("connection refused"))
+		})
+
+		It("should keep a writable session cache when only the config file is mounted", func() {
+			cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "--entrypoint", "sh",
+				"-v", fmt.Sprintf("%s/config.yaml:/etc/gokeenapi/config.yaml", tmpDir),
+				testImageName,
+				"-c", "test -d /etc/gokeenapi/.gokeenapi && touch /etc/gokeenapi/.gokeenapi/probe && test -f /etc/gokeenapi/.gokeenapi/probe",
+			)
+			output, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), "session cache directory is not writable beside a mounted config file: %s", string(output))
 		})
 	})
 
@@ -277,5 +357,11 @@ var _ = Describe("Dockerfile Validity", func() {
 	It("should have build args for version and build date", func() {
 		Expect(dockerfile).To(ContainSubstring("ARG GOKEENAPI_VERSION"))
 		Expect(dockerfile).To(ContainSubstring("ARG GOKEENAPI_BUILDDATE"))
+	})
+
+	It("should set the default config path and a session cache directory", func() {
+		Expect(dockerfile).To(ContainSubstring("ENV GOKEENAPI_CONFIG=/etc/gokeenapi/config.yaml"))
+		Expect(dockerfile).To(ContainSubstring("mkdir -p /etc/gokeenapi/.gokeenapi"))
+		Expect(dockerfile).NotTo(ContainSubstring("> /etc/gokeenapi/.gokeenapi"))
 	})
 })

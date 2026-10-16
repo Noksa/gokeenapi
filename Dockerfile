@@ -26,8 +26,11 @@ WORKDIR /opt/gokeenapi
 COPY --from=builder /workspace/gokeenapi ./gokeenapi
 ENV PATH="${PATH}:/opt/gokeenapi"
 ENV GOKEENAPI_INSIDE_DOCKER=true
+ENV GOKEENAPI_CONFIG=/etc/gokeenapi/config.yaml
+# Cookie cache. GetGokeenDir calls MkdirAll on this path, so it has to be a directory.
 RUN addgroup -S gokeenapi && adduser -S gokeenapi -G gokeenapi && \
-    mkdir -p /etc/gokeenapi && echo "{}" > /etc/gokeenapi/.gokeenapi && \
+    mkdir -p /etc/gokeenapi/.gokeenapi && \
+    chmod 700 /etc/gokeenapi/.gokeenapi && \
     chown -R gokeenapi:gokeenapi /etc/gokeenapi /opt/gokeenapi
 VOLUME [ "/etc/gokeenapi" ]
 USER gokeenapi

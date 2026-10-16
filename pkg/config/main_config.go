@@ -381,14 +381,23 @@ func ValidateDomainList(domains []string, groupName string) error {
 	return nil
 }
 
+// ResolveConfigPath returns the config file path from the flag, or from
+// GOKEENAPI_CONFIG when the flag is empty. An explicit flag wins.
+func ResolveConfigPath(configPath string) (string, error) {
+	if configPath != "" {
+		return configPath, nil
+	}
+	v, ok := os.LookupEnv("GOKEENAPI_CONFIG")
+	if !ok || v == "" {
+		return "", errors.New("config path is empty. Specify it via --config flag or GOKEENAPI_CONFIG environment variable")
+	}
+	return v, nil
+}
+
 func LoadConfig(configPath string) error {
-	if configPath == "" {
-		v, ok := os.LookupEnv("GOKEENAPI_CONFIG")
-		if ok {
-			configPath = v
-		} else {
-			return errors.New("config path is empty. Specify it via --config flag or GOKEENAPI_CONFIG environment variable")
-		}
+	configPath, err := ResolveConfigPath(configPath)
+	if err != nil {
+		return err
 	}
 	info, err := os.Stat(configPath)
 	if err != nil {
