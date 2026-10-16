@@ -26,7 +26,7 @@ Required by every command.
 | `url` | string | ✅ | — | Router URL. Accepts IP address or KeenDNS hostname. Supports `http://` and `https://`. Example: `http://192.168.1.1` |
 | `login` | string | ✅ | — | Router admin username. Overridden by `GOKEENAPI_KEENETIC_LOGIN` env var. |
 | `password` | string | ✅ | — | Router admin password. Overridden by `GOKEENAPI_KEENETIC_PASSWORD` env var. |
-| `tls_skip_verify` | bool | ❌ | `false` | Disable TLS certificate verification. Enable when the router uses a self-signed certificate. |
+| `tls_skip_verify` | bool | ❌ | `false` | Disable TLS certificate verification for the router connection only. External URL lists still require valid certificates. Enable when the router uses a self-signed certificate. |
 | `timeout` | duration | ❌ | `30s` | HTTP request timeout for router API calls. Increase for routers with large IP route tables where requests (e.g. fetching static routes) exceed the default. Accepts Go duration strings: `30s`, `1m`, `2m`. |
 
 ---
@@ -98,13 +98,17 @@ Each entry is one of:
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `name` | string | ✅ | Unique name for the object-group on the router. |
+| `name` | string | ✅ | Unique name for the object-group on the router; whitespace and router command separators are rejected. |
 | `interfaceId` | string | ✅ | Target interface for routing matched domain traffic (e.g. `Wireguard0`). Run `show-interfaces` to list available IDs. |
-| `domain-file` | list of strings | ❌ | Paths to local `.txt` files with one domain per line (lines starting with `#` are comments). A `.yaml`/`.yml` path is expanded to the `domain-file` list it contains. |
-| `domain-url` | list of strings | ❌ | Remote URLs serving domain lists (one domain per line). A `.yaml`/`.yml` path is expanded to the `domain-url` list it contains. |
+| `domain-file` | list of strings | ❌ | Paths to local `.txt` files with one domain, IPv4 address, or IPv4 subnet per line (lines starting with `#` are comments). A `.yaml`/`.yml` path is expanded to the `domain-file` list it contains. |
+| `domain-url` | list of strings | ❌ | Remote URLs serving lists in the same format. A `.yaml`/`.yml` path is expanded to the `domain-url` list it contains. |
 | `file` | string | ❌ | Path to a YAML file with a `groups:` list. When set, this entry is an import, not a group. Combined with `interfaceId`, every imported group uses that interface. |
 
 At least one of `domain-file` or `domain-url` is required per real group (not per import).
+
+`add-dns-routing` sorts and deduplicates all entries in a group, then places at most 300 in each router object-group. For example, 397 domains in `facebook` create `facebook` (300) and `facebook-2` (97), both routed through the configured interface. If the source changes, the command reconciles both groups; when it shrinks to 300 or fewer, it removes the obsolete `facebook-2` route and object-group. An empty source leaves existing groups unchanged. A drop of at least 100 domains and at least 50% of the current router group stops before mutation; use `add-dns-routing --allow-large-shrink` for an intentional one-run override. Names such as `facebook-2` are reserved for automatic chunks of `facebook`. Existing suffix groups are checked for contiguous names, plausible domain partitioning, and matching routes before updates or cleanup. An empty suffix group left by an interrupted run can be resumed. Changing `interfaceId` migrates both routes.
+
+Domain entries are normalized to lowercase ASCII with IDNA; a trailing dot is removed. IPv4 addresses and subnets are supported; subnets are normalized to the network address. `full:` and `domain:` rules are accepted; `regexp:`, `keyword:`, and `include:` rules are skipped. A nonempty source with no usable entries is an error. Relative local paths in `domain-file` and `domain-url` inside imported groups files are resolved from the imported file's directory. A duplicate dns-proxy route for a group stops reconciliation until the ambiguous router state is resolved.
 
 Example:
 

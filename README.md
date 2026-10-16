@@ -139,7 +139,7 @@ keenetic:
   tls_skip_verify: true  # Disable TLS verification for self-signed certificates
 ```
 
-> **Note**: Only use `tls_skip_verify` on trusted local networks. Disabling certificate verification exposes the connection to man-in-the-middle attacks.
+> **Note**: Only use `tls_skip_verify` on trusted local networks. Disabling certificate verification exposes the router connection to man-in-the-middle attacks. External domain-list URLs still require valid TLS certificates.
 
 ---
 
@@ -183,6 +183,8 @@ The scheduler allows you to automate router management by running tasks at speci
 - **Multi-router support**: Manage multiple routers with a single task
 - **Retry mechanism**: Automatically retry failed tasks with configurable delay
 - **Sequential execution**: Tasks run in a queue to avoid conflicts
+
+Stopping the scheduler cancels pending retry delays and waits for task producers to exit safely.
 
 ### Quick Start
 
@@ -323,13 +325,19 @@ Adds DNS-routing rules (policy-based routing by domain) to your router. This fea
 
 **How it works:**
 - Loads domains from local .txt files and remote URLs
-- Creates domain groups (object-groups) containing your specified domains and IP addresses
+- Creates domain groups (object-groups) containing your specified domains, IPv4 addresses, and IPv4 subnets
 - Associates each group with a network interface via dns-proxy routes
 - Traffic for domains in a group is automatically routed through the specified interface
 
+Groups with more than 300 unique entries are split automatically after sorting: `facebook` with 397 domains becomes `facebook` (300) and `facebook-2` (97). Later runs update the chunks, migrate their routes if `interfaceId` changes, and remove unused overflow groups. An empty source leaves existing groups unchanged. Keep generated names such as `facebook-2` free in your config.
+
+If the desired list drops by at least 100 domains and at least half of the router's current domains, the command stops before changing the router. Check the source, then use `--allow-large-shrink` for that run if the reduction is intentional.
+
+Domain entries are normalized to lowercase ASCII (IDNA); trailing dots and duplicate entries are removed. IPv4 subnets are normalized to their network address, so `10.0.0.1/24` becomes `10.0.0.0/24`. `full:` and `domain:` list rules are accepted. `regexp:`, `keyword:`, and `include:` rules are skipped because the router cannot represent them as plain domains. A nonempty source containing only unsupported or invalid entries produces an error. Group names cannot contain whitespace or router command separators. A duplicate dns-proxy route for one group stops reconciliation so the ambiguous router state can be inspected. If an API batch fails, the command stops before later batches or saving; commands already accepted in that batch may remain in the router's running configuration.
+
 **Domain sources:**
-- Local .txt files with one domain per line (supports comments with #)
-- Remote URLs serving domain lists
+- Local .txt files with one domain, IPv4 address, or IPv4 subnet per line (supports comments with #)
+- Remote URLs serving the same kind of lists
 - YAML files containing lists of domain-file or domain-url paths (for organization)
 
 **YAML expansion:** The tool automatically detects `.yaml`/`.yml` files in the `domain-file` and `domain-url` arrays and expands them to their contained domain paths (similar to bat-file/bat-url expansion).
@@ -406,6 +414,8 @@ groups:
 
 The `file:` + `interfaceId` form is useful when the same common groups file is shared across routers that use different WireGuard interfaces (e.g., `Wireguard0` on one router, `Wireguard1` on another) — you define interface names once per router config rather than duplicating the entire groups file.
 
+Relative local paths in `domain-file` and `domain-url` inside an imported groups file are resolved from that imported file's directory.
+
 **Example use cases:**
 - Route social media traffic through a VPN (Wireguard0)
 - Route streaming services through a different connection
@@ -416,7 +426,7 @@ The `file:` + `interfaceId` form is useful when the same common groups file is s
 
 *Aliases: `deletednsrouting`, `ddnsr`, `deletednsroutes`, `delete-dns-routes`*
 
-Deletes DNS-routing rules that match your configuration file.
+Deletes every DNS-routing group routed through an interface named in your configuration, including groups not named there. Use `--interface-id` to target one interface.
 
 ```shell
 # Delete DNS-routing rules with confirmation prompt
@@ -427,7 +437,7 @@ Deletes DNS-routing rules that match your configuration file.
 ```
 
 The command will:
-1. Identify dns-proxy routes and object-groups matching your configuration
+1. Identify all dns-proxy routes and object-groups on the selected interfaces
 2. Display the rules to be deleted
 3. Request confirmation (unless `--force` flag is used)
 4. Remove dns-proxy routes first, then object-groups
@@ -446,7 +456,7 @@ Deletes **all** DNS-routing groups from the router in a single operation, regard
 ./gokeenapi delete-all-dns-routing --config my_config.yaml --force
 ```
 
-> **Warning:** This removes every DNS-routing group on the router. Use before re-applying after renaming or reorganising groups.
+> **Warning:** This removes every DNS-routing group and dns-proxy route on the router, including groups without routes and routes without groups. Use before re-applying after renaming or reorganising groups.
 
 **Requirements:** Keenetic firmware version 5.0.1 or higher
 

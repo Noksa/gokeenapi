@@ -15,6 +15,12 @@ var _ = Describe("TLS skip-verify", func() {
 	var tlsServer *httptest.Server
 
 	BeforeEach(func() {
+		// Other specs share package-level clients; random order must not retain
+		// a client configured for a router that has already been shut down.
+		restyClient = nil
+		restyClientOnce = sync.Once{}
+		urlClient = nil
+		urlClientOnce = sync.Once{}
 		// Create an HTTPS test server with a self-signed certificate.
 		// The /rci/show/version endpoint is the one Ping calls first.
 		tlsServer = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -22,6 +28,8 @@ var _ = Describe("TLS skip-verify", func() {
 			case "/rci/show/version":
 				w.Header().Set("Content-Type", "application/json")
 				_ = json.NewEncoder(w).Encode(map[string]string{"model": "KN-test", "title": "1.0"})
+			case "/rci/show/failure":
+				w.WriteHeader(http.StatusServiceUnavailable)
 			case "/auth":
 				if r.Method == http.MethodGet {
 					w.WriteHeader(http.StatusOK)
@@ -39,6 +47,8 @@ var _ = Describe("TLS skip-verify", func() {
 		CleanupTestConfig()
 		restyClient = nil
 		restyClientOnce = sync.Once{}
+		urlClient = nil
+		urlClientOnce = sync.Once{}
 	})
 
 	Context("Ping", func() {
@@ -120,5 +130,22 @@ var _ = Describe("TLS skip-verify", func() {
 			_, err = client.R().Get("/rci/show/version")
 			Expect(err).To(HaveOccurred())
 		})
+	})
+
+	It("returns a router GET HTTP failure as an error", func() {
+		config.Cfg = config.GokeenapiConfig{Keenetic: config.Keenetic{
+			URL: tlsServer.URL, TLSSkipVerify: true,
+		}, DataDir: GinkgoT().TempDir()}
+		body, err := Common.ExecuteGetSubPath("/rci/show/failure")
+		Expect(err).To(MatchError(ContainSubstring("HTTP 503")))
+		Expect(body).To(BeNil())
+	})
+
+	It("keeps external URL certificate verification enabled when router TLS verification is disabled", func() {
+		config.Cfg = config.GokeenapiConfig{Keenetic: config.Keenetic{
+			URL: tlsServer.URL, TLSSkipVerify: true,
+		}, DataDir: GinkgoT().TempDir()}
+		_, err := GetURLClient().R().Get(tlsServer.URL)
+		Expect(err).To(HaveOccurred())
 	})
 })

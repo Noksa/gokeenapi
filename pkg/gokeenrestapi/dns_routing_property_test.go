@@ -36,6 +36,7 @@ func genValidDomain() *rapid.Generator[string] {
 				labels[i] = start + middle + end
 			}
 		}
+		labels[numLabels-1] = rapid.StringMatching(`[a-z]{2,8}`).Draw(t, "tld")
 
 		return strings.Join(labels, ".")
 	})
@@ -45,10 +46,7 @@ func genValidDomain() *rapid.Generator[string] {
 func genV2flyPrefix() *rapid.Generator[string] {
 	return rapid.SampledFrom([]string{
 		"full:",
-		"regexp:",
 		"domain:",
-		"keyword:",
-		"include:",
 	})
 }
 

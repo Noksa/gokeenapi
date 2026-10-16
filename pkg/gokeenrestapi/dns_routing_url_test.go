@@ -67,6 +67,14 @@ var _ = Describe("LoadDomainsFromURL", func() {
 		Expect(domains).To(ConsistOf("example.com", "test.com"))
 	})
 
+	It("should reject a nonempty source with no usable domains", func() {
+		ds := newDomainServer("regexp:.*\\.example\\.com\ninvalid..domain\n")
+		DeferCleanup(ds.Close)
+		_, err := DnsRouting.LoadDomainsFromURL(ds.URL)
+		Expect(err).To(MatchError(ContainSubstring("no usable domains")))
+		Expect(gokeencache.GetURLChecksum(ds.URL)).To(BeEmpty())
+	})
+
 	It("should return error on non-200 response", func() {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
@@ -135,5 +143,46 @@ var _ = Describe("LoadDomainsFromURL", func() {
 		// "full:example.com" → "example.com", "domain:test.com" → "test.com",
 		// "notvalid" skipped (no TLD), "google.com" kept
 		Expect(domains).To(ConsistOf("example.com", "test.com", "google.com"))
+	})
+
+	It("should normalize case, IDNA, wildcard, and trailing dots consistently", func() {
+		ds := newDomainServer("EXAMPLE.COM\nexample.com.\n*.ПРИМЕР.РФ\n*.xn--e1afmkfd.xn--p1ai\n")
+		DeferCleanup(ds.Close)
+
+		domains, err := DnsRouting.LoadDomainsFromURL(ds.URL)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(domains).To(Equal([]string{"example.com", "example.com", "*.xn--e1afmkfd.xn--p1ai", "*.xn--e1afmkfd.xn--p1ai"}))
+	})
+
+	It("should retain IPv4 addresses and canonicalize IP subnets", func() {
+		ds := newDomainServer("example.com\n192.0.2.1\n10.0.0.1/24\n999.999.999.999\n")
+		DeferCleanup(ds.Close)
+		domains, err := DnsRouting.LoadDomainsFromURL(ds.URL)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(domains).To(Equal([]string{"example.com", "192.0.2.1", "10.0.0.0/24"}))
+	})
+
+	It("should skip v2fly rules whose meaning cannot be represented by a domain", func() {
+		ds := newDomainServer("full:example.com\ndomain:sub.example.com\nregexp:example.com\nkeyword:example.com\ninclude:example.com\n")
+		DeferCleanup(ds.Close)
+
+		domains, err := DnsRouting.LoadDomainsFromURL(ds.URL)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(domains).To(Equal([]string{"example.com", "sub.example.com"}))
+	})
+})
+
+var _ = Describe("prefetchURLsWithSpinner", func() {
+	It("reports every failed source before router reconciliation", func() {
+		server := httptest.NewServer(http.NotFoundHandler())
+		DeferCleanup(server.Close)
+		config.Cfg.DataDir = GinkgoT().TempDir()
+		DeferCleanup(func() { config.Cfg.DataDir = "" })
+		first := server.URL + "/first"
+		second := server.URL + "/second"
+		_, err := prefetchURLsWithSpinner([]config.DnsRoutingGroup{{DomainURL: []string{first, second}}})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(first))
+		Expect(err.Error()).To(ContainSubstring(second))
 	})
 })

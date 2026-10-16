@@ -117,6 +117,10 @@ Interface IDs are case-sensitive: `Wireguard0`, `Wireguard1`, `ISP`, `HomeNetwor
 - **Fail-fast validation**: `gokeenrestapi.Checks` before other API calls
 - **Error aggregation**: `multierr.Append()` when iterating lists — collect all errors
 - **DNS-routing firmware**: Keenetic OS 5.0.1+
+- **DNS-routing group size**: after sorting and deduplication, `add-dns-routing` splits each source into groups of at most 300 domains. The configured name holds the first chunk; later chunks use `name-2`, `name-3`, etc. Repeated runs reconcile each chunk and remove obsolete overflow groups. These suffix names are reserved for the source group.
+- **DNS-routing shrink guard**: a reduction of at least 100 domains and at least 50% of the router's current group is refused before mutation unless `add-dns-routing --allow-large-shrink` is used for that run.
+- **DNS-routing sources and safety**: normalize domains to lowercase ASCII with IDNA and IPv4 subnets to their network address; skip unsupported `regexp:`, `keyword:`, and `include:` rules; resolve relative paths in imported group files from the imported file's directory. Reject duplicate dns-proxy routes for a group, failed router GETs, and invalid source group names before reconciliation. Router-only `tls_skip_verify` does not disable certificate checks for external URL lists.
+- **Scheduler shutdown**: cancellation interrupts retry delays and waits for queue producers to stop safely.
 - **AWG**: `update-awg` supports standard WireGuard, AmneziaWG 1.0 (Jc, Jmin, Jmax, S1, S2, H1–H4), and AWG 2.0 (S3, S4, I1–I5; needs Keenetic OS 5.1+). `--dry-run` prints a unified diff and does not apply changes
 - **Config save**: mutating RCI batches end with `system configuration save` via `Common.EnsureSaveConfigAtEnd`
 

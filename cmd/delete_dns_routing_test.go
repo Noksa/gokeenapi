@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -176,5 +177,39 @@ var _ = Describe("DeleteDnsRouting", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(groups).NotTo(HaveKey("social-media"))
 		Expect(groups).To(HaveKey("streaming"))
+	})
+
+	It("deletes every group on a configured interface through the root command", func() {
+		cleanupMockRouter(server)
+		server = setupMockRouter(
+			gokeenrestapi.WithVersion("5.0.1"),
+			gokeenrestapi.WithDnsRoutingGroups(
+				[]gokeenrestapi.MockDnsRoutingGroup{
+					{Name: "configured", Domains: []string{"a.example.com"}},
+					{Name: "not-configured", Domains: []string{"b.example.com"}},
+					{Name: "other-interface", Domains: []string{"c.example.com"}},
+				},
+				[]gokeenrestapi.MockDnsProxyRoute{
+					{GroupName: "configured", InterfaceID: "Wireguard0", Mode: "auto"},
+					{GroupName: "not-configured", InterfaceID: "Wireguard0", Mode: "auto"},
+					{GroupName: "other-interface", InterfaceID: "ISP", Mode: "auto"},
+				},
+			),
+		)
+		tmpDir := GinkgoT().TempDir()
+		groupsYAML := fmt.Sprintf("      - name: configured\n        domain-file: [%q]\n        interfaceId: Wireguard0\n", filepath.Join(tmpDir, "unused.txt"))
+		configPath := writeDnsRoutingRootConfig(tmpDir, server.URL, groupsYAML)
+
+		Expect(executeDnsRoutingRoot("ddnsr", configPath, "--force")).To(Succeed())
+		groups, err := gokeenrestapi.DnsRouting.GetExistingDnsRoutingGroups()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(groups).To(HaveKey("other-interface"))
+		Expect(groups).NotTo(HaveKey("configured"))
+		Expect(groups).NotTo(HaveKey("not-configured"))
+		routes, err := gokeenrestapi.DnsRouting.GetExistingDnsProxyRoutes()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(routes).To(HaveKey("other-interface"))
+		Expect(routes).NotTo(HaveKey("configured"))
+		Expect(routes).NotTo(HaveKey("not-configured"))
 	})
 })

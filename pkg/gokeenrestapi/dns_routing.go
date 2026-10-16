@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,7 +22,6 @@ import (
 	"github.com/noksa/gokeenapi/pkg/config"
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
 	"go.uber.org/multierr"
-	"golang.org/x/net/idna"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -118,30 +118,21 @@ func (*keeneticDnsRouting) GetExistingDnsRoutingGroups() (map[string][]string, e
 	return groups, err
 }
 
-// GetExistingDnsProxyRoutes retrieves current dns-proxy routes from router via REST API
-// Returns a map of group names to their interface IDs
-func (*keeneticDnsRouting) GetExistingDnsProxyRoutes() (map[string]string, error) {
-	var routes map[string]string
+// getExistingDnsProxyRoutes retrieves every route, including multiple routes for one group.
+func getExistingDnsProxyRoutes() (gokeenrestapimodels.DnsProxyRouteResponse, error) {
+	var routes gokeenrestapimodels.DnsProxyRouteResponse
 
 	err := gokeenspinner.WrapWithSpinner(
 		fmt.Sprintf("Fetching existing %v", color.CyanString("dns-proxy routes")),
 		func() error {
-			var dnsProxyRoutes gokeenrestapimodels.DnsProxyRouteResponse
-
 			body, fetchErr := Common.ExecuteGetSubPath("/rci/dns-proxy/route")
 			if fetchErr != nil {
 				return fetchErr
 			}
 
-			if fetchErr := json.Unmarshal(body, &dnsProxyRoutes); fetchErr != nil {
+			if fetchErr := json.Unmarshal(body, &routes); fetchErr != nil {
 				return fmt.Errorf("failed to parse dns-proxy route response: %w", fetchErr)
 			}
-
-			routes = make(map[string]string)
-			for _, route := range dnsProxyRoutes {
-				routes[route.Group] = route.Interface
-			}
-
 			return nil
 		},
 	)
@@ -149,10 +140,24 @@ func (*keeneticDnsRouting) GetExistingDnsProxyRoutes() (map[string]string, error
 	return routes, err
 }
 
-// validateDomainWithIDNA validates a domain name using IDNA (Internationalized Domain Names in Applications)
-// This handles both ASCII and internationalized domain names correctly
-// Returns true if valid, false otherwise. If debug logging is enabled, logs the reason for rejection.
-// Results are cached in memory to avoid redundant IDNA lookups.
+// GetExistingDnsProxyRoutes returns a map of group names to interface IDs.
+// Multiple routes for one group cannot be represented by the map, so fail safely.
+func (*keeneticDnsRouting) GetExistingDnsProxyRoutes() (map[string]string, error) {
+	routeList, err := getExistingDnsProxyRoutes()
+	if err != nil {
+		return nil, err
+	}
+	routes := make(map[string]string, len(routeList))
+	for _, route := range routeList {
+		if previous, exists := routes[route.Group]; exists {
+			return nil, fmt.Errorf("multiple dns-proxy routes for group %q (%q and %q)", route.Group, previous, route.Interface)
+		}
+		routes[route.Group] = route.Interface
+	}
+	return routes, nil
+}
+
+// validateDomainWithIDNA uses the same rules as final config validation.
 func validateDomainWithIDNA(domain string) (bool, string) {
 	// Check cache first - but still need to recompute reason for invalid domains
 	if valid, cached := gokeencache.GetDomainValidation(domain); cached {
@@ -162,25 +167,10 @@ func validateDomainWithIDNA(domain string) (bool, string) {
 		// For invalid cached domains, fall through to recompute the reason
 	}
 
-	// Skip empty domains
-	if domain == "" {
-		gokeencache.SetDomainValidation(domain, false)
-		return false, "empty domain"
-	}
-
-	// Domain must contain at least one dot (have a TLD)
-	// This rejects bare names like "youtube", "instagram"
-	if !strings.Contains(domain, ".") {
-		gokeencache.SetDomainValidation(domain, false)
-		return false, "missing TLD (no dot)"
-	}
-
-	// Try to convert to ASCII using IDNA
-	// This validates the domain structure and handles internationalized domains
-	_, err := idna.Lookup.ToASCII(domain)
+	_, err := config.NormalizeDnsRoutingDomain(domain)
 	if err != nil {
 		gokeencache.SetDomainValidation(domain, false)
-		return false, fmt.Sprintf("IDNA validation failed: %v", err)
+		return false, err.Error()
 	}
 
 	gokeencache.SetDomainValidation(domain, true)
@@ -213,13 +203,18 @@ func parseDomainLines(lines []string, source string) ([]string, int) {
 			}
 		}
 
-		// Strip v2fly domain-list-community prefixes (full:, regexp:, domain:, keyword:, include:)
-		// These are routing rule modifiers that aren't valid domain names
-		// Example: "full:d1unuk07s6td74.cloudfront.net" -> "d1unuk07s6td74.cloudfront.net"
+		// Only full: and domain: carry a domain usable by the router. Regex,
+		// keyword and include rules cannot be translated without changing meaning.
 		if idx := strings.Index(processedLine, ":"); idx > 0 {
 			prefix := processedLine[:idx]
-			// Check if it's a known v2fly prefix
-			if prefix == "full" || prefix == "regexp" || prefix == "domain" || prefix == "keyword" || prefix == "include" {
+			if prefix == "regexp" || prefix == "keyword" || prefix == "include" {
+				skipped++
+				if config.Cfg.Logs.Debug {
+					gokeenlog.InfoSubStepf("Skipped unsupported domain rule from %s: %s", source, originalLine)
+				}
+				continue
+			}
+			if prefix == "full" || prefix == "domain" {
 				processedLine = processedLine[idx+1:]
 			}
 		}
@@ -229,19 +224,26 @@ func parseDomainLines(lines []string, source string) ([]string, int) {
 		// - Bare names without TLD (youtube, instagram)
 		// - Lines starting with @ or other invalid characters
 		// - regexp patterns (after prefix removal, these will fail IDNA validation)
-		valid, reason := validateDomainWithIDNA(processedLine)
-		if !valid {
+		canonical, err := config.NormalizeDnsRoutingDomain(processedLine)
+		if err != nil {
 			skipped++
 			if config.Cfg.Logs.Debug {
-				gokeenlog.InfoSubStepf("Skipped invalid domain from %s: %s (%s)", source, originalLine, reason)
+				gokeenlog.InfoSubStepf("Skipped invalid domain from %s: %s (%s)", source, originalLine, err)
 			}
 			continue
 		}
 
-		domains = append(domains, processedLine)
+		domains = append(domains, canonical)
 	}
 
 	return domains, skipped
+}
+
+func rejectAllInvalidDomains(domains []string, skipped int, source string) error {
+	if len(domains) == 0 && skipped > 0 {
+		return fmt.Errorf("%s contains no usable domains: %d invalid domain or IP address entries were skipped", source, skipped)
+	}
+	return nil
 }
 
 // LoadDomainsFromFile reads domains from a .txt file (one domain per line)
@@ -254,6 +256,9 @@ func (*keeneticDnsRouting) LoadDomainsFromFile(filePath string) ([]string, error
 
 	lines := strings.Split(string(b), "\n")
 	domains, skipped := parseDomainLines(lines, fmt.Sprintf("file %s", filepath.Base(filePath)))
+	if err := rejectAllInvalidDomains(domains, skipped, fmt.Sprintf("file '%s'", filePath)); err != nil {
+		return nil, err
+	}
 
 	if skipped > 0 {
 		gokeenlog.InfoSubStepf("Skipped %v invalid domain(s) from file: %v",
@@ -270,7 +275,10 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 	// Check cache first
 	if cached, ok := gokeencache.GetURLContent(url); ok {
 		lines := strings.Split(cached, "\n")
-		domains, _ := parseDomainLines(lines, "URL")
+		domains, skipped := parseDomainLines(lines, "URL")
+		if err := rejectAllInvalidDomains(domains, skipped, fmt.Sprintf("URL '%s'", url)); err != nil {
+			return nil, err
+		}
 		gokeenlog.InfoSubStepf("Loaded %v domains from cache, URL: %v",
 			color.GreenString("%d", len(domains)),
 			color.CyanString(url))
@@ -281,7 +289,7 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 	// Get previous checksum to detect changes
 	previousChecksum := gokeencache.GetURLChecksum(url)
 
-	rClient := GetURLClient() // shared client (see GetURLClient in common.go) - avoids per-call resty.New, honors TLS skip-verify
+	rClient := GetURLClient() // shared client for external URLs; always verifies TLS certificates
 
 	var domains []string
 	var skipped int
@@ -299,6 +307,11 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 			}
 
 			content := string(response.Body())
+			lines := strings.Split(content, "\n")
+			domains, skipped = parseDomainLines(lines, "URL")
+			if err := rejectAllInvalidDomains(domains, skipped, fmt.Sprintf("URL '%s'", url)); err != nil {
+				return err
+			}
 
 			// Calculate checksum and compare with previous
 			currentChecksum := fmt.Sprintf("%x", gokeencache.ComputeChecksum([]byte(content)))
@@ -310,9 +323,6 @@ func (*keeneticDnsRouting) LoadDomainsFromURL(url string) ([]string, error) {
 			if err := gokeencache.SetURLContent(url, content, config.GetURLCacheTTL()); err != nil {
 				gokeenlog.InfoSubStepf("Warning: failed to cache URL content for %v: %v", url, err)
 			}
-
-			lines := strings.Split(content, "\n")
-			domains, skipped = parseDomainLines(lines, "URL")
 
 			opts.AddActionAfterSpinner(func() {
 				if checksumChanged {
@@ -346,6 +356,9 @@ func fetchURLDomainsRaw(rawURL string) (urlFetchResult, error) {
 	if cached, ok := gokeencache.GetURLContent(rawURL); ok {
 		lines := strings.Split(cached, "\n")
 		domains, skipped := parseDomainLines(lines, "URL")
+		if err := rejectAllInvalidDomains(domains, skipped, fmt.Sprintf("URL '%s'", rawURL)); err != nil {
+			return urlFetchResult{}, err
+		}
 		return urlFetchResult{domains: domains, skipped: skipped, fromCache: true}, nil
 	}
 
@@ -370,15 +383,17 @@ func fetchURLDomainsRaw(rawURL string) (urlFetchResult, error) {
 		}
 
 		content := string(response.Body())
+		lines := strings.Split(content, "\n")
+		domains, skipped := parseDomainLines(lines, "URL")
+		if err := rejectAllInvalidDomains(domains, skipped, fmt.Sprintf("URL '%s'", rawURL)); err != nil {
+			return urlFetchResult{}, err
+		}
 		currentChecksum := fmt.Sprintf("%x", gokeencache.ComputeChecksum([]byte(content)))
 		checksumChanged := previousChecksum != "" && previousChecksum != currentChecksum
 
 		if err := gokeencache.SetURLContent(rawURL, content, config.GetURLCacheTTL()); err != nil {
 			gokeenlog.InfoSubStepf("Warning: failed to cache URL content for %v: %v", rawURL, err)
 		}
-
-		lines := strings.Split(content, "\n")
-		domains, skipped := parseDomainLines(lines, "URL")
 
 		return urlFetchResult{
 			domains:         domains,
@@ -412,6 +427,7 @@ func prefetchURLsWithSpinner(groups []config.DnsRoutingGroup) (map[string]urlFet
 
 	results := make(map[string]urlFetchResult, len(orderedURLs))
 	var mu sync.Mutex
+	var fetchErr error
 
 	err := gokeenspinner.WrapWithSpinnerAndOptions(
 		fmt.Sprintf("Fetching %v domain URL(s)", color.CyanString("%d", len(orderedURLs))),
@@ -422,17 +438,18 @@ func prefetchURLsWithSpinner(groups []config.DnsRoutingGroup) (map[string]urlFet
 			for _, u := range orderedURLs {
 				g.Go(func() error {
 					res, err := fetchURLDomainsRaw(u)
-					if err != nil {
-						return err
-					}
 					mu.Lock()
+					defer mu.Unlock()
+					if err != nil {
+						fetchErr = multierr.Append(fetchErr, err)
+						return nil
+					}
 					results[u] = res
-					mu.Unlock()
 					return nil
 				})
 			}
 
-			fetchErr := g.Wait()
+			_ = g.Wait()
 
 			// Register substep logging — show results for all successfully fetched URLs
 			opts.AddActionAfterSpinner(func() {
@@ -501,9 +518,65 @@ func validateNoDuplicateDomainsAcrossGroups(groupDomains map[string][]string) {
 	}
 }
 
+// splitDnsRoutingGroups gives each sorted chunk a stable name. The configured
+// name remains the first group so existing routes survive the first split.
+func splitDnsRoutingGroups(groups []config.DnsRoutingGroup, domainsByGroup map[string][]string) ([]config.DnsRoutingGroup, map[string][]string, error) {
+	configured := make(map[string]bool, len(groups))
+	for _, group := range groups {
+		configured[group.Name] = true
+	}
+	for _, group := range groups {
+		for name := range configured {
+			if name != group.Name && splitGroupIndex(group.Name, name) >= 2 {
+				return nil, nil, fmt.Errorf("group '%s': name '%s' is reserved for an automatic split", group.Name, name)
+			}
+		}
+	}
+
+	var expanded []config.DnsRoutingGroup
+	chunks := make(map[string][]string)
+	for _, group := range groups {
+		domains, ok := domainsByGroup[group.Name]
+		if !ok {
+			continue // An empty source is skipped, as before.
+		}
+		for start, index := 0, 1; start < len(domains); start, index = start+maxDomainsPerGroup, index+1 {
+			name := group.Name
+			if index > 1 {
+				name = fmt.Sprintf("%s-%d", group.Name, index)
+			}
+			expanded = append(expanded, config.DnsRoutingGroup{Name: name, InterfaceID: group.InterfaceID})
+			chunks[name] = domains[start:min(start+maxDomainsPerGroup, len(domains))]
+		}
+	}
+	return expanded, chunks, nil
+}
+
+func splitGroupIndex(base, name string) int {
+	suffix, ok := strings.CutPrefix(name, base+"-")
+	if !ok {
+		return 0
+	}
+	index, err := strconv.Atoi(suffix)
+	if err != nil || index < 2 || strconv.Itoa(index) != suffix {
+		return 0
+	}
+	return index
+}
+
+// DnsRoutingApplyOptions controls explicit exceptions to the normal safety checks.
+type DnsRoutingApplyOptions struct {
+	AllowLargeShrink bool
+}
+
 // AddDnsRoutingGroups creates object-groups and dns-proxy routes for the specified groups
 // This function is idempotent - it only creates groups/domains/routes that don't already exist
-func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) error {
+func (d *keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) error {
+	return d.AddDnsRoutingGroupsWithOptions(groups, DnsRoutingApplyOptions{})
+}
+
+// AddDnsRoutingGroupsWithOptions applies groups with an explicit one-run override.
+func (*keeneticDnsRouting) AddDnsRoutingGroupsWithOptions(groups []config.DnsRoutingGroup, options DnsRoutingApplyOptions) error {
 	if len(groups) == 0 {
 		gokeenlog.Info("No DNS-routing groups to add")
 		return nil
@@ -588,12 +661,6 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 			}
 		}
 
-		// Check router limit: maximum domains per group
-		if len(allDomains) > maxDomainsPerGroup {
-			mErr = multierr.Append(mErr, fmt.Errorf("group '%s': exceeds router limit of %d domains (has %d domains)", group.Name, maxDomainsPerGroup, len(allDomains)))
-			continue
-		}
-
 		// Validate loaded domains
 		if err := config.ValidateDomainList(allDomains, group.Name); err != nil {
 			mErr = multierr.Append(mErr, err)
@@ -610,6 +677,21 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 
 	// Validate no domain appears in multiple groups (configuration error)
 	validateNoDuplicateDomainsAcrossGroups(groupDomains)
+	groupsToApply, splitDomains, err := splitDnsRoutingGroups(groups, groupDomains)
+	if err != nil {
+		return err
+	}
+	for _, group := range groups {
+		if len(groupDomains[group.Name]) > maxDomainsPerGroup {
+			var parts []string
+			for _, chunk := range groupsToApply {
+				if chunk.Name == group.Name || splitGroupIndex(group.Name, chunk.Name) >= 2 {
+					parts = append(parts, fmt.Sprintf("%s (%d)", chunk.Name, len(splitDomains[chunk.Name])))
+				}
+			}
+			gokeenlog.InfoSubStepf("Split group %s: %s", group.Name, strings.Join(parts, ", "))
+		}
+	}
 
 	// Get existing groups from router to make operation idempotent
 
@@ -624,6 +706,18 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 		return fmt.Errorf("failed to get existing dns-proxy routes: %w", err)
 	}
 
+	stale, oldCounts, err := inspectExistingSplits(groups, groupDomains, splitDomains, existingGroups, existingRoutes)
+	if err != nil {
+		return err
+	}
+	for _, source := range groups {
+		oldCount, newCount := oldCounts[source.Name], len(groupDomains[source.Name])
+		removed := oldCount - newCount
+		if !options.AllowLargeShrink && removed >= 100 && newCount*2 <= oldCount {
+			return fmt.Errorf("group '%s': domain list shrank from %d to %d; refusing to remove %d domains without --allow-large-shrink", source.Name, oldCount, newCount, removed)
+		}
+	}
+
 	var parseSlice []gokeenrestapimodels.ParseRequest
 
 	// Track changes for summary
@@ -632,8 +726,8 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 
 	// Generate commands for each group
 	// Order: object-group creation, domain cleanup (remove unwanted), domain adds, then dns-proxy routes
-	for _, group := range groups {
-		domains := groupDomains[group.Name]
+	for _, group := range groupsToApply {
+		domains := splitDomains[group.Name]
 		existingDomains, groupExists := existingGroups[group.Name]
 
 		// Create object-group only if it doesn't exist
@@ -680,14 +774,28 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 
 	// Add dns-proxy routes after all object-groups are created
 	// Only add routes that don't already exist or have different interface
-	for _, group := range groups {
+	for _, group := range groupsToApply {
 		existingInterface, routeExists := existingRoutes[group.Name]
 		// Add route if it doesn't exist or if the interface changed
 		if !routeExists || existingInterface != group.InterfaceID {
+			if routeExists {
+				parseSlice = append(parseSlice, gokeenrestapimodels.ParseRequest{
+					Parse: fmt.Sprintf("no dns-proxy route object-group %s %s", group.Name, existingInterface),
+				})
+			}
 			parseSlice = append(parseSlice, gokeenrestapimodels.ParseRequest{
 				Parse: fmt.Sprintf("dns-proxy route object-group %s %s auto", group.Name, group.InterfaceID),
 			})
 		}
+	}
+	// Remove overflow groups that are no longer needed after shrinking a source.
+	// Routes go first, then their object-groups.
+	for _, group := range stale {
+		gokeenlog.InfoSubStepf("Removing obsolete split group %s", group.Name)
+		parseSlice = append(parseSlice,
+			gokeenrestapimodels.ParseRequest{Parse: fmt.Sprintf("no dns-proxy route object-group %s %s", group.Name, group.InterfaceID)},
+			gokeenrestapimodels.ParseRequest{Parse: fmt.Sprintf("no object-group fqdn %s", group.Name)},
+		)
 	}
 
 	// If no commands to execute, we're done
@@ -709,7 +817,7 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 
 	var parseResponse []gokeenrestapimodels.ParseResponse
 	err = gokeenspinner.WrapWithSpinnerAndOptions(
-		fmt.Sprintf("Applying %v DNS-routing groups", color.CyanString("%d", len(groups))),
+		fmt.Sprintf("Applying %v DNS-routing groups", color.CyanString("%d", len(groupsToApply))),
 		func(opts *gokeenspinner.SpinnerOptions) error {
 			var executeErr error
 			parseResponse, executeErr = Common.ExecutePostParse(parseSlice...)
@@ -717,7 +825,7 @@ func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) 
 			opts.AddActionAfterSpinner(func() {
 				gokeenlog.PrintParseResponse(parseResponse)
 				if executeErr == nil {
-					gokeenlog.InfoSubStepf("Successfully applied %v DNS-routing groups", len(groups))
+					gokeenlog.InfoSubStepf("Successfully applied %v DNS-routing groups", len(groupsToApply))
 				}
 			})
 
@@ -743,32 +851,54 @@ func (d *keeneticDnsRouting) DeleteAllDnsRoutingGroups() error {
 		return fmt.Errorf("failed to get existing DNS-routing groups: %w", err)
 	}
 
-	existingRoutes, err := d.GetExistingDnsProxyRoutes()
+	existingRoutes, err := getExistingDnsProxyRoutes()
 	if err != nil {
 		return fmt.Errorf("failed to get existing dns-proxy routes: %w", err)
 	}
 
-	if len(existingGroups) == 0 {
+	if len(existingGroups) == 0 && len(existingRoutes) == 0 {
 		gokeenlog.Info("No DNS-routing groups found on router")
 		return nil
 	}
 
-	// Build config.DnsRoutingGroup slice from live router state
+	// Remove all live routes, including orphan routes and multiple routes per group.
 	groups := make([]config.DnsRoutingGroup, 0, len(existingGroups))
 	for groupName := range existingGroups {
-		interfaceID := existingRoutes[groupName] // empty string is fine — DeleteDnsRoutingGroups handles it
-		groups = append(groups, config.DnsRoutingGroup{
-			Name:        groupName,
-			InterfaceID: interfaceID,
-		})
+		groups = append(groups, config.DnsRoutingGroup{Name: groupName})
 	}
-
-	return d.DeleteDnsRoutingGroups(groups)
+	return deleteDnsRoutingGroups(groups, existingRoutes)
 }
 
 // DeleteDnsRoutingGroups removes dns-proxy routes and object-groups for the specified groups
 func (*keeneticDnsRouting) DeleteDnsRoutingGroups(groups []config.DnsRoutingGroup) error {
 	if len(groups) == 0 {
+		gokeenlog.Info("No DNS-routing groups to delete")
+		return nil
+	}
+	if err := DnsRouting.CheckDnsRoutingSupport(); err != nil {
+		return err
+	}
+	// A group can have multiple routes, or its live interface may differ from
+	// the caller's snapshot. Remove every route that still references it.
+	existingRoutes, err := getExistingDnsProxyRoutes()
+	if err != nil {
+		return fmt.Errorf("failed to get existing dns-proxy routes: %w", err)
+	}
+	names := make(map[string]struct{}, len(groups))
+	for _, group := range groups {
+		names[group.Name] = struct{}{}
+	}
+	routes := make(gokeenrestapimodels.DnsProxyRouteResponse, 0, len(existingRoutes))
+	for _, route := range existingRoutes {
+		if _, selected := names[route.Group]; selected {
+			routes = append(routes, route)
+		}
+	}
+	return deleteDnsRoutingGroups(groups, routes)
+}
+
+func deleteDnsRoutingGroups(groups []config.DnsRoutingGroup, routes gokeenrestapimodels.DnsProxyRouteResponse) error {
+	if len(groups) == 0 && len(routes) == 0 {
 		gokeenlog.Info("No DNS-routing groups to delete")
 		return nil
 	}
@@ -782,9 +912,9 @@ func (*keeneticDnsRouting) DeleteDnsRoutingGroups(groups []config.DnsRoutingGrou
 
 	// Generate deletion commands
 	// Order: dns-proxy routes first, then object-groups
-	for _, group := range groups {
+	for _, route := range routes {
 		parseSlice = append(parseSlice, gokeenrestapimodels.ParseRequest{
-			Parse: fmt.Sprintf("no dns-proxy route object-group %s %s", group.Name, group.InterfaceID),
+			Parse: fmt.Sprintf("no dns-proxy route object-group %s %s", route.Group, route.Interface),
 		})
 	}
 
@@ -800,7 +930,7 @@ func (*keeneticDnsRouting) DeleteDnsRoutingGroups(groups []config.DnsRoutingGrou
 
 	var parseResponse []gokeenrestapimodels.ParseResponse
 	err := gokeenspinner.WrapWithSpinnerAndOptions(
-		fmt.Sprintf("Deleting %v DNS-routing groups", color.CyanString("%d", len(groups))),
+		fmt.Sprintf("Deleting DNS-routing state (groups: %v, routes: %v)", color.CyanString("%d", len(groups)), color.CyanString("%d", len(routes))),
 		func(opts *gokeenspinner.SpinnerOptions) error {
 			var executeErr error
 			parseResponse, executeErr = Common.ExecutePostParse(parseSlice...)
@@ -808,7 +938,7 @@ func (*keeneticDnsRouting) DeleteDnsRoutingGroups(groups []config.DnsRoutingGrou
 			opts.AddActionAfterSpinner(func() {
 				gokeenlog.PrintParseResponse(parseResponse)
 				if executeErr == nil {
-					gokeenlog.InfoSubStepf("Successfully deleted %v DNS-routing groups", len(groups))
+					gokeenlog.InfoSubStepf("Deleted DNS-routing state: groups: %v, routes: %v", len(groups), len(routes))
 				}
 			})
 

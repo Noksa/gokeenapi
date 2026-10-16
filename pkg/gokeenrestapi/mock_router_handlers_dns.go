@@ -136,6 +136,9 @@ func (m *MockRouter) parseAddDomainToGroup(groupName, domain string) gokeenresta
 
 	for i := range m.dnsRoutingGroups {
 		if m.dnsRoutingGroups[i].Name == groupName {
+			if len(m.dnsRoutingGroups[i].Domains) >= maxDomainsPerGroup {
+				return m.errorResponse(fmt.Sprintf("Object-group '%s' exceeds %d domains", groupName, maxDomainsPerGroup))
+			}
 			m.dnsRoutingGroups[i].Domains = append(m.dnsRoutingGroups[i].Domains, domain)
 			return m.successResponse(fmt.Sprintf("Domain '%s' added to object-group '%s'", domain, groupName))
 		}

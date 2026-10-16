@@ -28,6 +28,47 @@ var _ = Describe("ExecutePostParse", func() {
 		// No partial results should leak through on unmarshal failure
 		Expect(responses).To(BeEmpty())
 	})
+
+	It("should stop after an error instead of executing later batches", func() {
+		server := SetupMockRouterForTest()
+		DeferCleanup(server.Close)
+
+		requests := []gokeenrestapimodels.ParseRequest{{Parse: "unknown command"}}
+		for range maxParseRequests - 1 {
+			requests = append(requests, gokeenrestapimodels.ParseRequest{Parse: "interface Wireguard0 up"})
+		}
+		requests = append(requests, gokeenrestapimodels.ParseRequest{Parse: "object-group fqdn should-not-exist"})
+
+		responses, err := Common.ExecutePostParse(requests...)
+		Expect(err).To(HaveOccurred())
+		Expect(responses).To(HaveLen(maxParseRequests))
+		groups, err := DnsRouting.GetExistingDnsRoutingGroups()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(groups).NotTo(HaveKey("should-not-exist"))
+	})
+
+	It("should reject a truncated parse response", func() {
+		server := SetupMockRouterForTest(WithRciBody([]byte("[]")))
+		DeferCleanup(server.Close)
+
+		responses, err := Common.ExecutePostParse(
+			gokeenrestapimodels.ParseRequest{Parse: "interface Wireguard0 up"},
+		)
+		Expect(err).To(MatchError(ContainSubstring("1 commands")))
+		Expect(responses).To(BeEmpty())
+	})
+
+	It("should keep the save command out of a failing command batch", func() {
+		server := SetupMockRouterForTest()
+		DeferCleanup(server.Close)
+
+		responses, err := Common.ExecutePostParse(
+			gokeenrestapimodels.ParseRequest{Parse: "unknown command"},
+			Common.SaveConfigParseRequest(),
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(responses).To(HaveLen(1))
+	})
 })
 
 var _ = Describe("CheckRouterMode", func() {

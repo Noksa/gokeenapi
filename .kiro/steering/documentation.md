@@ -37,6 +37,6 @@ Read `AGENTS.md`, then `.kiro/steering/`. Those files describe how to change thi
 | Make target or Go version | `tech.md`, `CONTRIBUTING.md`, `.github/workflows/` |
 | User-visible behavior | README (and RU) plus the relevant `docs/` or `SCHEDULER.md` page |
 
-English and Russian pairs must stay equivalent. Change both in the same edit.
+Every user-visible behavior change or fix must update both `README.md` and `README_RU.md` in the same change. English and Russian pairs must stay equivalent; update relevant scheduler guides, config references, and tracked example YAMLs together.
 
 Do not invent new top-level user manuals. Prefer extending README, `docs/config-reference.md`, or `SCHEDULER.md`.

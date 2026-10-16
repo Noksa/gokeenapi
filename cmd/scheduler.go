@@ -93,38 +93,48 @@ Cannot use both in the same task.`,
 			gokeenlog.HorizontalLine()
 			gokeenlog.Infof("Total tasks: %v", color.CyanString("%v", len(schedulerCfg.Tasks)))
 
-			ctx := cmd.Context()
-
-			// 100 is more than enough
-			queue := make(chan config.ScheduledTask, 100)
-
-			go func() {
-				for {
-					select {
-					case <-ctx.Done():
-						close(queue)
-						return
-					case task := <-queue:
-						executeTask(ctx, task)
-						if len(queue) == 0 {
-							gokeenlog.HorizontalLine()
-							gokeenlog.Info("Waiting for next task")
-						}
-					}
-				}
-			}()
-
-			for _, task := range schedulerCfg.Tasks {
-				go runTask(ctx, task, queue)
-			}
-
-			<-ctx.Done()
+			runScheduledTasks(cmd.Context(), schedulerCfg.Tasks)
 			gokeenlog.HorizontalLine()
 			gokeenlog.Info(color.YellowString("🛑 Scheduler stopped"))
 			return nil
 		},
 	}
 	return cmd
+}
+
+func runScheduledTasks(ctx context.Context, tasks []config.ScheduledTask) {
+	// Producers only send. Closing the queue during cancellation can panic a
+	// producer whose send races with the close, even inside a select on ctx.Done.
+	queue := make(chan config.ScheduledTask, 100)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case task := <-queue:
+				if ctx.Err() != nil {
+					return
+				}
+				executeTask(ctx, task)
+				if len(queue) == 0 {
+					gokeenlog.HorizontalLine()
+					gokeenlog.Info("Waiting for next task")
+				}
+			}
+		}
+	}()
+
+	var producers sync.WaitGroup
+	for _, task := range tasks {
+		producers.Add(1)
+		go func(task config.ScheduledTask) {
+			defer producers.Done()
+			runTask(ctx, task, queue)
+		}(task)
+	}
+
+	<-ctx.Done()
+	producers.Wait()
 }
 
 // validateTask validates task configuration
@@ -340,10 +350,17 @@ func executeCommandsForConfig(ctx context.Context, task config.ScheduledTask, co
 			}
 
 			gokeenlog.InfoSubStepf("Error: %v", color.RedString(lastErr.Error()))
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("command %q for config %q cancelled: %w", command.Name, configPath, err)
+			}
 
 			if attempt < maxAttempts {
 				gokeenlog.InfoSubStepf("Retrying in %s...", color.YellowString("%v", retryDelay))
-				time.Sleep(retryDelay)
+				select {
+				case <-ctx.Done():
+					return fmt.Errorf("command %q for config %q cancelled: %w", command.Name, configPath, ctx.Err())
+				case <-time.After(retryDelay):
+				}
 			}
 		}
 

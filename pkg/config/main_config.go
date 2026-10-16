@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/noksa/gokeenapi/pkg/gokeenrestapimodels"
+	"golang.org/x/net/idna"
 	"gopkg.in/yaml.v3"
 )
 
@@ -230,63 +233,59 @@ type Cache struct {
 	URLTTL time.Duration `yaml:"urlTtl,omitempty"`
 }
 
-// isValidDomain validates a domain name according to RFC 1035 and RFC 1123
-func isValidDomain(domain string) bool {
-	// Domain must not be empty
-	if len(domain) == 0 || len(domain) > 253 {
-		return false
-	}
+var dnsLabelRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-	// Remove trailing dot if present (FQDN)
+// NormalizeDnsRoutingDomain validates and canonicalizes a DNS-routing source
+// entry. The router receives ASCII names or IPv4 entries; a leading wildcard
+// on a domain is preserved.
+func NormalizeDnsRoutingDomain(domain string) (string, error) {
+	if domain == "" {
+		return "", errors.New("empty domain")
+	}
+	if address, err := netip.ParseAddr(domain); err == nil && address.Is4() {
+		return address.String(), nil
+	}
+	if prefix, err := netip.ParsePrefix(domain); err == nil && prefix.Addr().Is4() {
+		return prefix.Masked().String(), nil
+	}
+	wildcard := strings.HasPrefix(domain, "*.")
+	if wildcard {
+		domain = strings.TrimPrefix(domain, "*.")
+	}
 	domain = strings.TrimSuffix(domain, ".")
-
-	// Domain must contain at least one dot (have a TLD)
 	if !strings.Contains(domain, ".") {
-		return false
+		return "", errors.New("missing TLD (no dot)")
 	}
-
-	// Split into labels
-	labels := strings.Split(domain, ".")
-
-	// Must have at least 2 labels (domain + TLD)
-	if len(labels) < 2 {
-		return false
+	ascii, err := idna.Lookup.ToASCII(domain)
+	if err != nil {
+		return "", fmt.Errorf("IDNA validation failed: %w", err)
 	}
-
-	// Validate each label
-	labelRegex := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$`)
+	ascii = strings.ToLower(ascii)
+	length := len(ascii)
+	if wildcard {
+		length += 2
+	}
+	if length > 253 {
+		return "", errors.New("domain exceeds 253 bytes")
+	}
+	labels := strings.Split(ascii, ".")
 	for _, label := range labels {
-		// Label must not be empty
-		if len(label) == 0 {
-			return false
-		}
-
-		// Label must not exceed 63 characters
-		if len(label) > 63 {
-			return false
-		}
-
-		// Label must match the pattern: start with alphanumeric, end with alphanumeric,
-		// middle can contain hyphens
-		if !labelRegex.MatchString(label) {
-			return false
+		if len(label) > 63 || !dnsLabelRegex.MatchString(label) {
+			return "", errors.New("invalid DNS label")
 		}
 	}
-
-	// TLD (last label) should not be all numeric
-	tld := labels[len(labels)-1]
-	allNumeric := true
-	for _, r := range tld {
-		if r < '0' || r > '9' {
-			allNumeric = false
-			break
-		}
+	if strings.Trim(labels[len(labels)-1], "0123456789") == "" {
+		return "", errors.New("numeric TLD")
 	}
-	if allNumeric {
-		return false
+	if wildcard {
+		return "*." + ascii, nil
 	}
+	return ascii, nil
+}
 
-	return true
+func isValidDomain(domain string) bool {
+	_, err := NormalizeDnsRoutingDomain(domain)
+	return err == nil
 }
 
 // isValidIP validates an IPv4 address
@@ -329,9 +328,17 @@ func ValidateDnsRoutingGroups(groups []DnsRoutingGroup) error {
 			return errors.New("DNS routing group name cannot be empty")
 		}
 
-		// Check if name contains only whitespace
 		if len(strings.TrimSpace(group.Name)) == 0 {
 			return errors.New("DNS routing group name cannot contain only whitespace")
+		}
+		// Names are inserted into RCI commands as unquoted tokens.
+		if strings.IndexFunc(group.Name, func(r rune) bool {
+			return unicode.IsSpace(r) || unicode.IsControl(r)
+		}) >= 0 {
+			return errors.New("DNS routing group name cannot contain whitespace or control characters: " + strconv.Quote(group.Name))
+		}
+		if strings.ContainsAny(group.Name, "\"';\\") {
+			return errors.New("DNS routing group name contains unsafe command characters: " + strconv.Quote(group.Name))
 		}
 
 		// Check for duplicate group names
@@ -641,6 +648,12 @@ func loadGroupsListFromYAML(listPath, configPath string) (*GroupsList, error) {
 		configDir := filepath.Dir(configPath)
 		listPath = filepath.Join(configDir, listPath)
 	}
+	// Keep imported list references absolute even when --config itself was relative.
+	var err error
+	listPath, err = filepath.Abs(listPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve groups-list path %q: %w", listPath, err)
+	}
 
 	b, err := os.ReadFile(listPath)
 	if err != nil {
@@ -658,22 +671,18 @@ func loadGroupsListFromYAML(listPath, configPath string) (*GroupsList, error) {
 		return nil, errors.New("groups-list file " + listPath + " contains no groups")
 	}
 
-	// Resolve relative paths in domain-file arrays relative to the YAML file's directory
-	// This ensures that domain-file paths in imported groups are resolved correctly
-	// We make paths absolute here to prevent double resolution in expandDomainLists
+	// Resolve local paths, including YAML list references, against the imported
+	// group file before expandDomainLists processes them.
 	yamlDir := filepath.Dir(listPath)
 	for i := range groupsList.Groups {
 		for j, domainFile := range groupsList.Groups[i].DomainFile {
-			if !filepath.IsAbs(domainFile) && filepath.Ext(domainFile) != ".yaml" && filepath.Ext(domainFile) != ".yml" {
-				// Only resolve non-YAML files (actual domain files, not references)
-				// YAML references will be resolved later by expandDomainLists
-				// Make the path absolute to prevent double resolution
-				joined := filepath.Join(yamlDir, domainFile)
-				absPath, err := filepath.Abs(joined)
-				if err != nil {
-					return nil, errors.New("failed to resolve absolute path for " + joined + ": " + err.Error())
-				}
-				groupsList.Groups[i].DomainFile[j] = absPath
+			if !filepath.IsAbs(domainFile) {
+				groupsList.Groups[i].DomainFile[j] = filepath.Join(yamlDir, domainFile)
+			}
+		}
+		for j, domainURL := range groupsList.Groups[i].DomainURL {
+			if !filepath.IsAbs(domainURL) && (filepath.Ext(domainURL) == ".yaml" || filepath.Ext(domainURL) == ".yml") {
+				groupsList.Groups[i].DomainURL[j] = filepath.Join(yamlDir, domainURL)
 			}
 		}
 	}

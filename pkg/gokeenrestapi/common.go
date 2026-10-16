@@ -350,7 +350,7 @@ func (c *keeneticCommon) VersionContext(ctx context.Context) (gokeenrestapimodel
 }
 
 // ExecutePostParse executes one or more CLI commands on the router via RCI interface
-// Automatically batches commands in groups of 50 for optimal performance.
+// Automatically batches commands in groups of maxParseRequests.
 // For context-aware version use ExecutePostParseContext.
 func (c *keeneticCommon) ExecutePostParse(parse ...gokeenrestapimodels.ParseRequest) ([]gokeenrestapimodels.ParseResponse, error) {
 	return c.ExecutePostParseContext(context.Background(), parse...)
@@ -360,7 +360,6 @@ func (c *keeneticCommon) ExecutePostParse(parse ...gokeenrestapimodels.ParseRequ
 func (c *keeneticCommon) ExecutePostParseContext(ctx context.Context, parse ...gokeenrestapimodels.ParseRequest) ([]gokeenrestapimodels.ParseResponse, error) {
 	parseCopy := parse
 	var parseResponses []gokeenrestapimodels.ParseResponse
-	var mErr error
 	for len(parseCopy) > 0 {
 		apiClient, err := c.GetApiClient()
 		if err != nil {
@@ -372,38 +371,55 @@ func (c *keeneticCommon) ExecutePostParseContext(ctx context.Context, parse ...g
 		if currentLen < maxParse {
 			maxParse = currentLen
 		}
-		var parseRequest []gokeenrestapimodels.ParseRequest
-		for i := 0; i < maxParse; i++ {
-			parseRequest = append(parseRequest, parseCopy[i])
+		// Send a save separately so an earlier command error in the same
+		// batch cannot persist a partially applied configuration.
+		for i := range maxParse {
+			if parseCopy[i].Parse == c.SaveConfigParseRequest().Parse {
+				if i > 0 {
+					maxParse = i
+				} else {
+					maxParse = 1
+				}
+				break
+			}
 		}
+		parseRequest := parseCopy[:maxParse]
 		parseCopy = parseCopy[maxParse:]
 		request.SetBody(parseRequest)
 		response, err := request.Post("/rci/")
-		if response != nil {
-			if response.StatusCode() != http.StatusOK {
-				mErr = multierr.Append(mErr, fmt.Errorf("wrong status code in response from api: %s", response.Status()))
-			}
-			var parseResponse []gokeenrestapimodels.ParseResponse
-			decodeErr := json.Unmarshal(response.Body(), &parseResponse)
-			if decodeErr != nil {
-				mErr = multierr.Append(mErr, decodeErr)
-				continue
-			}
-			for i, myParse := range parseResponse {
-				if i == 0 {
-					parseResponse[i].Parse.DynamicData = string(response.Body())
-				}
-				for _, status := range myParse.Parse.Status {
-					if status.Status == StatusError {
-						mErr = multierr.Append(mErr, fmt.Errorf("%s - %s - %s - %s", status.Status, status.Code, status.Ident, status.Message))
-					}
-				}
-			}
-			parseResponses = append(parseResponses, parseResponse...)
+		if err != nil {
+			return parseResponses, err
 		}
-		mErr = multierr.Append(mErr, err)
+		if response == nil {
+			return parseResponses, errors.New("no response from keenetic api")
+		}
+		if response.StatusCode() != http.StatusOK {
+			return parseResponses, fmt.Errorf("wrong status code in response from api: %s", response.Status())
+		}
+		var parseResponse []gokeenrestapimodels.ParseResponse
+		if err := json.Unmarshal(response.Body(), &parseResponse); err != nil {
+			return parseResponses, err
+		}
+		if len(parseResponse) != len(parseRequest) {
+			return parseResponses, fmt.Errorf("router returned %d parse responses for %d commands", len(parseResponse), len(parseRequest))
+		}
+		var batchErr error
+		for i, myParse := range parseResponse {
+			if i == 0 {
+				parseResponse[i].Parse.DynamicData = string(response.Body())
+			}
+			for _, status := range myParse.Parse.Status {
+				if status.Status == StatusError {
+					batchErr = multierr.Append(batchErr, fmt.Errorf("%s - %s - %s - %s", status.Status, status.Code, status.Ident, status.Message))
+				}
+			}
+		}
+		parseResponses = append(parseResponses, parseResponse...)
+		if batchErr != nil {
+			return parseResponses, batchErr
+		}
 	}
-	return parseResponses, mErr
+	return parseResponses, nil
 }
 
 // ExecuteGetSubPath performs a GET request to the specified API endpoint.
@@ -423,6 +439,9 @@ func (c *keeneticCommon) ExecuteGetSubPathContext(ctx context.Context, path stri
 		return nil, err
 	}
 	if response != nil {
+		if response.IsError() {
+			return nil, fmt.Errorf("keenetic api GET %s returned HTTP %d", path, response.StatusCode())
+		}
 		return response.Body(), nil
 	}
 	return []byte{}, errors.New("no response from keenetic api")
@@ -541,15 +560,12 @@ func (c *keeneticCommon) GetApiClient() (*resty.Client, error) {
 }
 
 // GetURLClient returns a shared resty.Client for external URL fetches (e.g. domain lists).
-// Initialized once with short timeout and honoring TLSSkipVerify from config.
+// Initialized once with a short timeout. Router TLS settings do not apply to external URLs.
 func GetURLClient() *resty.Client {
 	urlClientOnce.Do(func() {
 		client := resty.New()
 		client.SetDisableWarn(true)
 		client.SetTimeout(time.Second * 5)
-		if config.Cfg.Keenetic.TLSSkipVerify {
-			client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec
-		}
 		urlClient = client
 	})
 	return urlClient

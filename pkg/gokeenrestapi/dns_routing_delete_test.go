@@ -148,4 +148,81 @@ var _ = Describe("DeleteDnsRoutingGroups", func() {
 		Expect(existing).To(HaveKey("keep-group"))
 		Expect(existing).NotTo(HaveKey("remove-group"))
 	})
+
+	It("should delete an object-group without a route", func() {
+		server.Close()
+		CleanupTestConfig()
+		server = NewMockRouterServer(WithVersion("5.0.1"), WithDnsRoutingGroups(
+			[]MockDnsRoutingGroup{{Name: "unrouted", Domains: []string{"example.com"}}}, nil,
+		))
+		SetupTestConfig(server.URL)
+		Expect(Common.Auth()).To(Succeed())
+
+		Expect(DnsRouting.DeleteAllDnsRoutingGroups()).To(Succeed())
+		groups, err := DnsRouting.GetExistingDnsRoutingGroups()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(groups).To(BeEmpty())
+	})
+
+	It("should delete an orphan route even when there are no object-groups", func() {
+		server.Close()
+		CleanupTestConfig()
+		server = NewMockRouterServer(WithVersion("5.0.1"), WithDnsRoutingGroups(nil,
+			[]MockDnsProxyRoute{{GroupName: "orphan", InterfaceID: "Wireguard0"}},
+		))
+		SetupTestConfig(server.URL)
+		Expect(Common.Auth()).To(Succeed())
+
+		Expect(DnsRouting.DeleteAllDnsRoutingGroups()).To(Succeed())
+		routes, err := getExistingDnsProxyRoutes()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(routes).To(BeEmpty())
+	})
+
+	It("should reject ambiguous routes during reconciliation but delete all of them", func() {
+		server.Close()
+		CleanupTestConfig()
+		server = NewMockRouterServer(WithVersion("5.0.1"), WithDnsRoutingGroups(
+			[]MockDnsRoutingGroup{{Name: "ambiguous", Domains: []string{"example.com"}}},
+			[]MockDnsProxyRoute{
+				{GroupName: "ambiguous", InterfaceID: "Wireguard0"},
+				{GroupName: "ambiguous", InterfaceID: "ISP"},
+			},
+		))
+		SetupTestConfig(server.URL)
+		Expect(Common.Auth()).To(Succeed())
+
+		routes, err := DnsRouting.GetExistingDnsProxyRoutes()
+		Expect(err).To(MatchError(ContainSubstring("multiple dns-proxy routes")))
+		Expect(routes).To(BeNil())
+
+		Expect(DnsRouting.DeleteAllDnsRoutingGroups()).To(Succeed())
+		rawRoutes, err := getExistingDnsProxyRoutes()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rawRoutes).To(BeEmpty())
+		groups, err := DnsRouting.GetExistingDnsRoutingGroups()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(groups).To(BeEmpty())
+	})
+
+	It("should delete every live route for a selected group despite stale interface data", func() {
+		server.Close()
+		CleanupTestConfig()
+		server = NewMockRouterServer(WithVersion("5.0.1"), WithDnsRoutingGroups(
+			[]MockDnsRoutingGroup{{Name: "selected", Domains: []string{"example.com"}}},
+			[]MockDnsProxyRoute{
+				{GroupName: "selected", InterfaceID: "Wireguard0"},
+				{GroupName: "selected", InterfaceID: "ISP"},
+			},
+		))
+		SetupTestConfig(server.URL)
+		Expect(Common.Auth()).To(Succeed())
+
+		Expect(DnsRouting.DeleteDnsRoutingGroups([]config.DnsRoutingGroup{
+			{Name: "selected", InterfaceID: "old-interface"},
+		})).To(Succeed())
+		routes, err := getExistingDnsProxyRoutes()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(routes).To(BeEmpty())
+	})
 })

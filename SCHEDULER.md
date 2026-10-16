@@ -289,6 +289,8 @@ The retry mechanism helps handle transient failures like network issues or route
 4. **Success**: Stop retrying on first success
 5. **Final Failure**: After all attempts exhausted, task fails
 
+Stopping the scheduler cancels any pending retry delay and waits for task producers to stop safely.
+
 > **Retry guidance:** Enable retry for network-dependent operations. A `retryDelay` of 30s–2m and no more than 3–5 attempts is usually appropriate. Test individual commands manually before scheduling to catch configuration errors early (`./gokeenapi add-routes --config router.yaml`).
 
 ### Example Output

@@ -28,6 +28,13 @@ var _ = Describe("ValidateDnsRoutingGroups", func() {
 		Expect(err.Error()).To(ContainSubstring("cannot contain only whitespace"))
 	})
 
+	It("should reject embedded whitespace and command separators in names", func() {
+		for _, name := range []string{"facebook 2", "facebook\n2", "facebook\t2", "facebook;other"} {
+			group := DnsRoutingGroup{Name: name, DomainFile: []string{"domains.txt"}, InterfaceID: "Wireguard0"}
+			Expect(ValidateDnsRoutingGroups([]DnsRoutingGroup{group})).To(HaveOccurred(), "name %q", name)
+		}
+	})
+
 	It("should reject duplicate names", func() {
 		groups := []DnsRoutingGroup{
 			{Name: "youtube", DomainFile: []string{"/path/to/youtube.txt"}, InterfaceID: "Wireguard0"},
@@ -67,12 +74,36 @@ var _ = Describe("ValidateDnsRoutingGroups", func() {
 })
 
 var _ = Describe("ValidateDomainList", func() {
+	It("should accept wildcard and internationalized names after normalization", func() {
+		Expect(ValidateDomainList([]string{"*.example.com", "пример.рф", "xn--e1afmkfd.xn--p1ai"}, "testgroup")).To(Succeed())
+		canonical, err := NormalizeDnsRoutingDomain("*.ПРИМЕР.РФ.")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(canonical).To(Equal("*.xn--e1afmkfd.xn--p1ai"))
+	})
+
+	It("should reject malformed wildcards and DNS labels", func() {
+		for _, domain := range []string{"*example.com", "foo.*.example.com", "-foo.example.com", "foo-.example.com", "example..com"} {
+			Expect(ValidateDomainList([]string{domain}, "testgroup")).To(HaveOccurred(), "domain %q", domain)
+		}
+	})
+
 	It("should accept valid domains", func() {
 		Expect(ValidateDomainList([]string{"example.com", "sub.example.com", "another-domain.org"}, "testgroup")).To(Succeed())
 	})
 
 	It("should accept valid IPs", func() {
 		Expect(ValidateDomainList([]string{"192.168.1.1", "10.0.0.1", "8.8.8.8"}, "testgroup")).To(Succeed())
+	})
+
+	It("should canonicalize IPv4 addresses and subnets used in DNS routing", func() {
+		Expect(ValidateDomainList([]string{"10.0.0.1/24", "192.0.2.1"}, "testgroup")).To(Succeed())
+		canonical, err := NormalizeDnsRoutingDomain("10.0.0.1/24")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(canonical).To(Equal("10.0.0.0/24"))
+		canonical, err = NormalizeDnsRoutingDomain("192.0.2.1")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(canonical).To(Equal("192.0.2.1"))
+		Expect(ValidateDomainList([]string{"10.0.0.1/99"}, "testgroup")).To(HaveOccurred())
 	})
 
 	It("should accept mixed domains and IPs", func() {

@@ -12,7 +12,7 @@ Compact rules for coding agents. Deep project rules live in **`.kiro/steering/`*
 | [release-procedure.md](.kiro/steering/release-procedure.md) | Cutting a release |
 | [documentation.md](.kiro/steering/documentation.md) | README, `docs/`, SCHEDULER, CONTRIBUTING, example YAMLs |
 
-`docs/`, `README*.md`, `SCHEDULER*.md`, and `CONTRIBUTING.md` are human-facing, not coding rules. Keep EN+RU pairs and `*_example.yaml` in sync when user-visible behavior or config schema changes.
+`docs/`, `README*.md`, `SCHEDULER*.md`, and `CONTRIBUTING.md` are human-facing, not coding rules. **Mandatory:** every user-visible behavior change or fix must update both `README.md` and `README_RU.md` in the same change. Update the relevant EN+RU `SCHEDULER*.md`, `docs/*.md`, and tracked `*_example.yaml` files whenever that behavior or schema appears there. Keep each language pair equivalent.
 
 ## Checks
 
@@ -53,3 +53,4 @@ One mock: `pkg/gokeenrestapi/mock_router.go` plus `mock_router_handlers_*.go`. E
 - `custom/` is gitignored (local operator data, not public API). `config.yaml` and `config_*.yaml` are ignored; `config_example.yaml` is tracked. `generated/` is release output.
 - Commits: Conventional Commits (`feat`/`fix`/`refactor`/`docs`/`test`/`chore`/`ci`).
 - Command/alias/flag, env var, or `pkg/config` schema changes: update `product.md` plus the matching human docs (both languages).
+- Before finishing any user-visible change, verify that `README.md` and `README_RU.md` describe it and that relevant scheduler guides, config references, and example YAMLs match.

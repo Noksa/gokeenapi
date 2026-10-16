@@ -391,6 +391,9 @@ var _ = Describe("MockRouter DNS Routing", func() {
 			existingRoutes, err := DnsRouting.GetExistingDnsProxyRoutes()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(existingRoutes["test-group"]).To(Equal("ISP"))
+			Expect(currentDnsProxyRoutes()).To(ConsistOf(
+				gokeenrestapimodels.DnsProxyRoute{Group: "test-group", Interface: "ISP"},
+			))
 		})
 	})
 })

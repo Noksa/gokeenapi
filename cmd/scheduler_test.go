@@ -400,6 +400,25 @@ var _ = Describe("Scheduler", func() {
 		})
 	})
 
+	Describe("scheduler cancellation", func() {
+		It("stops all task producers without closing their queue", func() {
+			for range 5 {
+				ctx, cancel := context.WithCancel(context.Background())
+				tasks := make([]config.ScheduledTask, 16)
+				for i := range tasks {
+					tasks[i] = config.ScheduledTask{Name: "cancelled", Interval: "1h"}
+				}
+				done := make(chan struct{})
+				go func() {
+					runScheduledTasks(ctx, tasks)
+					close(done)
+				}()
+				cancel()
+				Eventually(done).WithTimeout(time.Second).WithPolling(time.Millisecond).Should(BeClosed())
+			}
+		})
+	})
+
 	Describe("runIntervalTask cancellation", func() {
 		It("should exit promptly on context cancellation even when queue is full", func() {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -427,6 +446,26 @@ var _ = Describe("Scheduler", func() {
 	})
 
 	Describe("executeCommandsForConfig", func() {
+		It("stops waiting for a retry when the scheduler is cancelled", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			task := config.ScheduledTask{
+				Name:       "cancel-retry",
+				Commands:   cmds("nonexistent-gokeenapi-command-xyz"),
+				Configs:    []string{"/some/config.yaml"},
+				Retry:      1,
+				RetryDelay: "5s",
+			}
+			done := make(chan error, 1)
+			go func() {
+				done <- executeCommandsForConfig(ctx, task, task.Configs[0])
+			}()
+			time.Sleep(100 * time.Millisecond)
+			cancel()
+			Eventually(done).WithTimeout(time.Second).WithPolling(time.Millisecond).
+				Should(Receive(MatchError(ContainSubstring("context canceled"))))
+		})
+
 		It("should return error when command fails", func() {
 			task := config.ScheduledTask{
 				Name:     "test-task",

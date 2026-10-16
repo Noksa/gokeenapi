@@ -9,6 +9,42 @@ import (
 )
 
 var _ = Describe("Groups Expansion", func() {
+	It("should resolve domain-list YAML references relative to an imported groups file", func() {
+		tmpDir := GinkgoT().TempDir()
+		sharedDir := filepath.Join(tmpDir, "shared")
+		Expect(os.MkdirAll(filepath.Join(sharedDir, "lists"), 0755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(sharedDir, "lists", "files.yaml"), []byte("domain-file: [local.txt]\n"), 0644)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(sharedDir, "lists", "urls.yaml"), []byte("domain-url: [https://example.com/list.txt]\n"), 0644)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(sharedDir, "lists", "local.txt"), []byte("example.com\n"), 0644)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(sharedDir, "groups.yaml"), []byte(`groups:
+  - name: imported
+    interfaceId: Wireguard0
+    domain-file: [lists/files.yaml]
+    domain-url: [lists/urls.yaml]
+`), 0644)).To(Succeed())
+		configPath := filepath.Join(tmpDir, "config.yaml")
+		Expect(os.WriteFile(configPath, []byte(`keenetic:
+  url: http://192.168.1.1
+  login: admin
+  password: password
+dns:
+  routes:
+    groups: [shared/groups.yaml]
+`), 0644)).To(Succeed())
+
+		Expect(LoadConfig(configPath)).To(Succeed())
+		Expect(Cfg.DNS.Routes.Groups).To(HaveLen(1))
+		Expect(Cfg.DNS.Routes.Groups[0].DomainFile).To(Equal([]string{filepath.Join(sharedDir, "lists", "local.txt")}))
+		Expect(Cfg.DNS.Routes.Groups[0].DomainURL).To(Equal([]string{"https://example.com/list.txt"}))
+
+		workingDir, err := os.Getwd()
+		Expect(err).NotTo(HaveOccurred())
+		relativeConfig, err := filepath.Rel(workingDir, configPath)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(LoadConfig(relativeConfig)).To(Succeed())
+		Expect(Cfg.DNS.Routes.Groups[0].DomainFile).To(Equal([]string{filepath.Join(sharedDir, "lists", "local.txt")}))
+	})
+
 	It("should expand groups from YAML file", func() {
 		tmpDir := GinkgoT().TempDir()
 		domainsDir := filepath.Join(tmpDir, "domains")
