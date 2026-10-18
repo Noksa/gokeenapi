@@ -224,6 +224,6 @@ PublicKey = gN65BkIKy1eCE9pP1wdc8ROUunkiVXrBvGAKBEKdOQI=
 		commands, err := AwgConf.PlanUpdate(path, "Wireguard0")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(commands).NotTo(BeEmpty())
-		Expect(commands[0].Parse).To(ContainSubstring("wireguard asc"))
+		Expect(commands[0].Parse).To(Equal("interface Wireguard0 wireguard asc 40 5 95 10 20 1 2 3 4 50 0 0 0 0 0 0"))
 	})
 })
