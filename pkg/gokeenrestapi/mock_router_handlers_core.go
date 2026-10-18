@@ -183,8 +183,17 @@ func (m *MockRouter) handleParse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var body json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if len(body) > 0 && body[0] == '{' {
+		m.handleStructuredASC(w, body)
+		return
+	}
 	var requests []gokeenrestapimodels.ParseRequest
-	if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
+	if err := json.Unmarshal(body, &requests); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}

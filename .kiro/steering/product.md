@@ -121,7 +121,7 @@ Interface IDs are case-sensitive: `Wireguard0`, `Wireguard1`, `ISP`, `HomeNetwor
 - **DNS-routing source reconciliation**: every valid nonempty source is reconciled regardless of how much its domain count changed. Empty or unreadable sources do not remove existing router state.
 - **DNS-routing sources and safety**: normalize domains to lowercase ASCII with IDNA and IPv4 subnets to their network address; skip unsupported `regexp:`, `keyword:`, and `include:` rules; resolve relative paths in imported group files from the imported file's directory. Reject duplicate dns-proxy routes for a group, failed router GETs, and invalid source group names before reconciliation. Router-only `tls_skip_verify` does not disable certificate checks for external URL lists.
 - **Scheduler shutdown**: cancellation interrupts retry delays and waits for queue producers to stop safely.
-- **AWG**: `update-awg` supports standard WireGuard, AmneziaWG 1.0 (Jc, Jmin, Jmax, S1, S2, H1–H4), and AWG 2.0 (S3, S4, I1–I5; needs Keenetic OS 5.1+). `--dry-run` prints a unified diff and does not apply changes
+- **AWG**: `add-awg` and `update-awg` detect standard WireGuard, AmneziaWG 1.0 (Jc, Jmin, Jmax, S1, S2, H1–H4), AWG 2.0 (S3, S4, I1–I5; KeeneticOS 5.1+), and AWG 3.1 (header protection, six ranges, random trailers, disable cookies; KeeneticOS 5.02.A.11+). AWG 3.1 uses a complete structured RCI ASC block; peer keepalive ranges use their lower bound on all config types because native Keenetic stores one interval. `--dry-run` prints a unified diff without applying changes and masks the header key with a SHA-256 fingerprint
 - **Config save**: mutating RCI batches end with `system configuration save` via `Common.EnsureSaveConfigAtEnd`
 
 ## Target Use Cases

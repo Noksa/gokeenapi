@@ -75,6 +75,7 @@ type MockAsc struct {
 	I3   string
 	I4   string
 	I5   string
+	AWG3 map[string]any
 }
 
 // MockPeer represents a WireGuard peer configuration.
@@ -391,6 +392,8 @@ func NewMockRouterServer(opts ...MockRouterOption) *httptest.Server {
 	mux.HandleFunc("/rci/show/interface/", m.handleInterface)
 	mux.HandleFunc("/rci/show/sc/interface", m.handleScInterfaces)
 	mux.HandleFunc("/rci/show/sc/interface/", m.handleScInterface)
+	mux.HandleFunc("/rci/show/rc/interface/", m.handleRcInterface)
+	mux.HandleFunc("/rci/interface/wireguard/import", m.handleWireguardImport)
 	mux.HandleFunc("/rci/ip/route", m.handleRoutes)
 	mux.HandleFunc("/rci/show/ip/route", m.handleShowIpRoute)
 	mux.HandleFunc("/rci/show/ip/name-server", m.handleDnsRecords)

@@ -472,7 +472,9 @@ Adds a new WireGuard connection from a `.conf` file.
 
 *Aliases: `updateawg`, `uawg`*
 
-Updates an existing WireGuard connection from a `.conf` file. Supports AmneziaWG (AWG 2.0) parameters.
+Updates an existing WireGuard connection from a `.conf` file. The utility detects standard WireGuard, AWG 1.0/2.0, and AWG 3.1 from the fields in the file. AWG 3.1 accepts `HeaderProtectionKey`, `ContentPaddingAddition`, `RekeyAfterTime`, `RekeyTimeout`, `RejectAfterTime`, `KeepaliveTimeout`, `MaxHandshakeAttempts`, `RandomTrailers`, and `DisableCookies`; `H1`–`H4` may also be ranges. It requires KeeneticOS 5.02.A.11 or later. The new ASC parameters are sent as one complete RCI block. `add-awg` accepts the same files. AWG 3.1 support is experimental until tested on a real router.
+
+Keenetic's native peer setting is a single keepalive interval. For `PersistentKeepalive = 25-35`, the utility uses the lower bound (`25`) for import and update. `--dry-run` shows the 3.1 fields but displays only a short SHA-256 fingerprint of `HeaderProtectionKey`.
 
 ```shell
 ./gokeenapi update-awg --config my_config.yaml --conf-file <path-to-conf> --interface-id <interface-id>

@@ -1,6 +1,7 @@
 package gokeenrestapi
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -77,13 +78,14 @@ type ascParams struct {
 	H3   string
 	H4   string
 	// AWG 2.0
-	S3 string
-	S4 string
-	I1 string
-	I2 string
-	I3 string
-	I4 string
-	I5 string
+	S3   string
+	S4   string
+	I1   string
+	I2   string
+	I3   string
+	I4   string
+	I5   string
+	AWG3 awg3Params
 }
 
 // hasAnyASC returns true if at least one AWG 1.0 ASC parameter is present
@@ -105,6 +107,7 @@ type peerParams struct {
 	Endpoint            string
 	AllowedIPs          []string
 	PersistentKeepalive int
+	KeepaliveRange      bool
 	PresharedKey        string
 }
 
@@ -176,6 +179,9 @@ func parseConfFile(confPath string) (ascParams, peerParams, error) {
 	if key, err := interfaceSection.GetKey("I5"); err == nil {
 		asc.I5 = key.String()
 	}
+	if err := asc.parseAWG3(interfaceSection); err != nil {
+		return asc, peer, err
+	}
 
 	// Parse [Peer] section
 	peerSection, err := cfg.GetSection("Peer")
@@ -196,6 +202,13 @@ func parseConfFile(confPath string) (ascParams, peerParams, error) {
 		val, parseErr := strconv.Atoi(key.String())
 		if parseErr == nil {
 			peer.PersistentKeepalive = val
+		} else if asc.hasAWG3() || strings.Contains(key.String(), "-") {
+			bounds, err := parseAWGRange("PersistentKeepalive", key.String())
+			if err != nil {
+				return asc, peer, err
+			}
+			peer.PersistentKeepalive = bounds.Start
+			peer.KeepaliveRange = true
 		}
 	}
 	if key, err := peerSection.GetKey("AllowedIPs"); err == nil {
@@ -423,8 +436,18 @@ func buildPeerCommands(interfaceId string, parsed peerParams, currentPeers []gok
 // Supports:
 //   - ASC obfuscation parameters (AWG 1.0: Jc, Jmin, Jmax, S1, S2, H1-H4) — optional
 //   - AWG 2.0 parameters (S3, S4, I1-I5) — optional, requires KeeneticOS 5.1+
+//   - AWG 3.1 header protection, ranges, and flags — requires KeeneticOS 5.02.A.11+
 //   - Peer endpoint, allowed IPs, keepalive interval, preshared key
 func (*keeneticAwgconf) ConfigureOrUpdateInterface(confPath, interfaceId string) error {
+	if confPath != "" {
+		asc, peer, err := parseConfFile(confPath)
+		if err != nil {
+			return err
+		}
+		if asc.hasAWG3() {
+			return configureAWG3(interfaceId, asc, peer)
+		}
+	}
 	commands, err := AwgConf.PlanUpdate(confPath, interfaceId)
 	if err != nil {
 		return err
@@ -466,6 +489,9 @@ func (*keeneticAwgconf) PlanUpdate(confPath, interfaceId string) ([]gokeenrestap
 	if err != nil {
 		return nil, err
 	}
+	if asc.hasAWG3() {
+		return nil, fmt.Errorf("AWG 3.1 requires structured RCI; use ConfigureOrUpdateInterface or DiffUpdate")
+	}
 
 	warnIfAWG2Unsupported(asc)
 
@@ -494,6 +520,31 @@ func (*keeneticAwgconf) AddInterface(confFile string, name string) (gokeenrestap
 	b, err := os.ReadFile(confFile)
 	if err != nil {
 		return gokeenrestapimodels.CreatedInterface{}, err
+	}
+	asc, peer, err := parseConfFile(confFile)
+	if err == nil && asc.hasAWG3() {
+		if err := requireAWG3Firmware(); err != nil {
+			return gokeenrestapimodels.CreatedInterface{}, err
+		}
+		if _, err := asc.awg3Payload(); err != nil {
+			return gokeenrestapimodels.CreatedInterface{}, err
+		}
+	} else if err != nil && confHasAWG3Fields(b) {
+		return gokeenrestapimodels.CreatedInterface{}, err
+	}
+	if err == nil && peer.KeepaliveRange {
+		cfg, err := ini.Load(b)
+		if err != nil {
+			return gokeenrestapimodels.CreatedInterface{}, err
+		}
+		section, _ := cfg.GetSection("Peer")
+		key, _ := section.GetKey("PersistentKeepalive")
+		key.SetValue(strconv.Itoa(peer.PersistentKeepalive))
+		var normalized bytes.Buffer
+		if _, err := cfg.WriteTo(&normalized); err != nil {
+			return gokeenrestapimodels.CreatedInterface{}, err
+		}
+		b = normalized.Bytes()
 	}
 	if name == "" {
 		name = filepath.Base(confFile)
@@ -546,6 +597,9 @@ func (*keeneticAwgconf) DiffUpdate(confPath, interfaceId string) (string, error)
 	asc, peer, err := parseConfFile(confPath)
 	if err != nil {
 		return "", err
+	}
+	if asc.hasAWG3() {
+		return diffAWG3(confPath, interfaceId, asc, peer)
 	}
 
 	warnIfAWG2Unsupported(asc)
@@ -632,7 +686,7 @@ func renderCanonicalConfFromParams(current gokeenrestapimodels.RciShowScInterfac
 	}
 
 	// ASC: use new params if present, otherwise current
-	if asc.hasAnyASC() {
+	if asc.hasAnyASC() || asc.hasAWG3() {
 		writeASCParamsBlock(&b, asc)
 	} else {
 		writeASCBlock(&b, current.Wireguard.Asc)

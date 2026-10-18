@@ -22,7 +22,8 @@ a standard WireGuard configuration file. It compares current router state with
 the conf file and applies only the changes.
 
 Supports standard WireGuard, AmneziaWG 1.0 (Jc, Jmin, Jmax, S1, S2, H1-H4),
-and AWG 2.0 (S3, S4, I1-I5) parameters. ASC fields are optional.
+AWG 2.0 (S3, S4, I1-I5), and AWG 3.1 parameters (KeeneticOS 5.02.A.11+).
+The configuration type is detected from its fields. ASC fields are optional.
 
 Use --dry-run to preview what would be changed without applying.
 
