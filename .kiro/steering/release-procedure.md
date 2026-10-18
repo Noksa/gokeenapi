@@ -29,6 +29,16 @@ For each commit, check the diff if needed:
 git show <sha> --stat
 ```
 
+Before pushing a release tag, wait for the CI run on the exact `main` commit
+to pass. Its `security` job scans the built Docker image with Trivy and fails
+on `CRITICAL` vulnerabilities. Review any behavior changes for the release
+notes before tagging.
+
+```bash
+gh run list --workflow=ci.yml --commit <main-sha> --limit 1
+gh run watch <ci-run-id> --exit-status
+```
+
 ## Step 2 — Push the tag
 
 ```bash
@@ -115,6 +125,7 @@ rm release_notes_vX.Y.Z.md
 - [ ] `make lint` passes locally
 - [ ] `make test` passes locally  
 - [ ] All changes pushed to `main`
+- [ ] CI on the exact `main` commit passed, including `security`
 - [ ] Tag pushed: `git tag vX.Y.Z && git push origin vX.Y.Z`
 - [ ] Workflow completed successfully: `gh run watch <id> --exit-status`
 - [ ] Docker image verified: `docker buildx imagetools inspect noksa/gokeenapi:X.Y.Z` (should show `linux/amd64` + `linux/arm64`)

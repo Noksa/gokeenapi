@@ -60,3 +60,31 @@ jobs:
 
       - name: Run tests (includes Docker integration tests)
         run: make test-ci
+
+  security:
+    name: Critical vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: gokeenapi:ci
+
+      - name: Scan image for critical vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: gokeenapi:ci
+          scanners: vuln
+          severity: CRITICAL
+          format: table
+          exit-code: '1'

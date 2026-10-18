@@ -12,7 +12,7 @@ Go version and local make targets: `tech.md`.
 
 | File | Trigger | Role |
 |------|---------|------|
-| `.github/workflows/ci.yml` | push/PR to `main`, `master`, `develop` | Parallel `build`, `lint`, `test` |
+| `.github/workflows/ci.yml` | push/PR to `main`, `master`, `develop` | Parallel `build`, `lint`, `test`, `security` |
 | `.github/workflows/release.yml` | push of `v*` tags | Cross-compile 6 binaries, GitHub release, multi-arch Docker push |
 
 ## CI jobs (`ci.yml`)
@@ -22,8 +22,12 @@ Go version and local make targets: `tech.md`.
 | `build` | Compile verification | `go build -v ./...` | ~1–2 min |
 | `lint` | Code quality | `golangci-lint-action` | ~5–15 min |
 | `test` | Unit + Docker integration | `make test-ci` | ~3–5 min |
+| `security` | Scan the built Linux image for critical OS and Go vulnerabilities | Docker Buildx + Trivy | Varies with the vulnerability DB cache |
 
-All three run in parallel on `ubuntu-latest`.
+All four run in parallel on `ubuntu-latest`. The security job builds a local
+`linux/amd64` image and fails on any `CRITICAL` vulnerability in the final image.
+`HIGH` findings are outside this release gate. Trivy scans both Alpine packages
+and Go modules embedded in the binary.
 
 ## Required Action Versions (CI)
 
