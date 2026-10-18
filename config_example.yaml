@@ -104,7 +104,6 @@ dns:
       # Each group creates an object-group and dns-proxy route on the router
       # More than 300 unique entries are split into name, name-2, name-3, ...
       # Generated suffix names are reserved; later runs remove unused chunks.
-      # A shrink of 100+ domains and 50%+ requires --allow-large-shrink for that run.
       # Domains are normalized with IDNA; IPv4 subnets use network addresses.
       # regexp:/keyword:/include: rules are skipped.
       

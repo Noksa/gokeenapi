@@ -564,19 +564,9 @@ func splitGroupIndex(base, name string) int {
 	return index
 }
 
-// DnsRoutingApplyOptions controls explicit exceptions to the normal safety checks.
-type DnsRoutingApplyOptions struct {
-	AllowLargeShrink bool
-}
-
 // AddDnsRoutingGroups creates object-groups and dns-proxy routes for the specified groups
 // This function is idempotent - it only creates groups/domains/routes that don't already exist
-func (d *keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) error {
-	return d.AddDnsRoutingGroupsWithOptions(groups, DnsRoutingApplyOptions{})
-}
-
-// AddDnsRoutingGroupsWithOptions applies groups with an explicit one-run override.
-func (*keeneticDnsRouting) AddDnsRoutingGroupsWithOptions(groups []config.DnsRoutingGroup, options DnsRoutingApplyOptions) error {
+func (*keeneticDnsRouting) AddDnsRoutingGroups(groups []config.DnsRoutingGroup) error {
 	if len(groups) == 0 {
 		gokeenlog.Info("No DNS-routing groups to add")
 		return nil
@@ -706,16 +696,9 @@ func (*keeneticDnsRouting) AddDnsRoutingGroupsWithOptions(groups []config.DnsRou
 		return fmt.Errorf("failed to get existing dns-proxy routes: %w", err)
 	}
 
-	stale, oldCounts, err := inspectExistingSplits(groups, groupDomains, splitDomains, existingGroups, existingRoutes)
+	stale, err := inspectExistingSplits(groups, groupDomains, splitDomains, existingGroups, existingRoutes)
 	if err != nil {
 		return err
-	}
-	for _, source := range groups {
-		oldCount, newCount := oldCounts[source.Name], len(groupDomains[source.Name])
-		removed := oldCount - newCount
-		if !options.AllowLargeShrink && removed >= 100 && newCount*2 <= oldCount {
-			return fmt.Errorf("group '%s': domain list shrank from %d to %d; refusing to remove %d domains without --allow-large-shrink", source.Name, oldCount, newCount, removed)
-		}
 	}
 
 	var parseSlice []gokeenrestapimodels.ParseRequest

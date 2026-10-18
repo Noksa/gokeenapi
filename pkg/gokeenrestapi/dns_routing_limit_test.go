@@ -259,26 +259,23 @@ var _ = Describe("DNS routing domain-per-group router limit", func() {
 		Expect(existing["facebook-99"]).To(ConsistOf("manual.example.com"))
 	})
 
-	It("should guard against a drastic shrink and allow an explicit one-run override", func() {
+	It("should reconcile a drastically shorter valid local list", func() {
 		groups := []config.DnsRoutingGroup{{Name: "facebook", DomainFile: []string{makeDomainFile(tmpDir, "397.txt", 397)}, InterfaceID: "Wireguard0"}}
 		Expect(DnsRouting.AddDnsRoutingGroups(groups)).To(Succeed())
 		smallFile := filepath.Join(tmpDir, "small.txt")
 		Expect(os.WriteFile(smallFile, []byte("d0000.example.com\n"), 0644)).To(Succeed())
 		groups[0].DomainFile = []string{smallFile}
-		Expect(DnsRouting.AddDnsRoutingGroups(groups)).To(MatchError(ContainSubstring("--allow-large-shrink")))
+		Expect(DnsRouting.AddDnsRoutingGroups(groups)).To(Succeed())
 		existing, err := DnsRouting.GetExistingDnsRoutingGroups()
-		Expect(err).NotTo(HaveOccurred())
-		Expect(existing["facebook"]).To(HaveLen(300))
-		Expect(existing["facebook-2"]).To(HaveLen(97))
-
-		Expect(DnsRouting.AddDnsRoutingGroupsWithOptions(groups, DnsRoutingApplyOptions{AllowLargeShrink: true})).To(Succeed())
-		existing, err = DnsRouting.GetExistingDnsRoutingGroups()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(existing).To(HaveLen(1))
 		Expect(existing["facebook"]).To(ConsistOf("d0000.example.com"))
+		routes, err := DnsRouting.GetExistingDnsProxyRoutes()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(routes).To(Equal(map[string]string{"facebook": "Wireguard0"}))
 	})
 
-	It("should preserve router state when a remote source suddenly returns a short valid list", func() {
+	It("should reconcile a short valid list returned by a remote source", func() {
 		config.Cfg.DataDir = tmpDir
 		contents, err := os.ReadFile(makeDomainFile(tmpDir, "remote-397.txt", 397))
 		Expect(err).NotTo(HaveOccurred())
@@ -290,11 +287,14 @@ var _ = Describe("DNS routing domain-per-group router limit", func() {
 		Expect(gokeencache.SetURLContent(domainSource.URL, string(contents), time.Millisecond)).To(Succeed())
 		time.Sleep(5 * time.Millisecond)
 		domainSource.setBody("d0000.example.com\n")
-		Expect(DnsRouting.AddDnsRoutingGroups(groups)).To(MatchError(ContainSubstring("--allow-large-shrink")))
+		Expect(DnsRouting.AddDnsRoutingGroups(groups)).To(Succeed())
 		existing, err := DnsRouting.GetExistingDnsRoutingGroups()
 		Expect(err).NotTo(HaveOccurred())
-		Expect(existing["remote"]).To(HaveLen(300))
-		Expect(existing["remote-2"]).To(HaveLen(97))
+		Expect(existing).To(HaveLen(1))
+		Expect(existing["remote"]).To(ConsistOf("d0000.example.com"))
+		routes, err := DnsRouting.GetExistingDnsProxyRoutes()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(routes).To(Equal(map[string]string{"remote": "Wireguard0"}))
 	})
 
 	It("should reject a generated route without an object-group", func() {

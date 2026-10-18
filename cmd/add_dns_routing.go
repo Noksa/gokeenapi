@@ -7,7 +7,6 @@ import (
 )
 
 func newAddDnsRoutingCmd() *cobra.Command {
-	var allowLargeShrink bool
 	cmd := &cobra.Command{
 		Use:     CmdAddDnsRouting,
 		Aliases: AliasesAddDnsRouting,
@@ -45,12 +44,8 @@ Examples:
 The command automatically validates interface IDs and saves the configuration 
 after adding rules.`,
 	}
-	cmd.Flags().BoolVar(&allowLargeShrink, "allow-large-shrink", false,
-		"Allow a one-run DNS domain-list reduction of at least 100 domains and 50%")
-
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return gokeenrestapi.DnsRouting.AddDnsRoutingGroupsWithOptions(config.Cfg.DNS.Routes.Groups,
-			gokeenrestapi.DnsRoutingApplyOptions{AllowLargeShrink: allowLargeShrink})
+		return gokeenrestapi.DnsRouting.AddDnsRoutingGroups(config.Cfg.DNS.Routes.Groups)
 	}
 
 	return cmd

@@ -331,8 +331,6 @@ Adds DNS-routing rules (policy-based routing by domain) to your router. This fea
 
 Groups with more than 300 unique entries are split automatically after sorting: `facebook` with 397 domains becomes `facebook` (300) and `facebook-2` (97). Later runs update the chunks, migrate their routes if `interfaceId` changes, and remove unused overflow groups. An empty source leaves existing groups unchanged. Keep generated names such as `facebook-2` free in your config.
 
-If the desired list drops by at least 100 domains and at least half of the router's current domains, the command stops before changing the router. Check the source, then use `--allow-large-shrink` for that run if the reduction is intentional.
-
 Domain entries are normalized to lowercase ASCII (IDNA); trailing dots and duplicate entries are removed. IPv4 subnets are normalized to their network address, so `10.0.0.1/24` becomes `10.0.0.0/24`. `full:` and `domain:` list rules are accepted. `regexp:`, `keyword:`, and `include:` rules are skipped because the router cannot represent them as plain domains. A nonempty source containing only unsupported or invalid entries produces an error. Group names cannot contain whitespace or router command separators. A duplicate dns-proxy route for one group stops reconciliation so the ambiguous router state can be inspected. If an API batch fails, the command stops before later batches or saving; commands already accepted in that batch may remain in the router's running configuration.
 
 **Domain sources:**

@@ -17,9 +17,8 @@ func inspectExistingSplits(
 	wantedChunks map[string][]string,
 	existingGroups map[string][]string,
 	existingRoutes map[string]string,
-) ([]config.DnsRoutingGroup, map[string]int, error) {
+) ([]config.DnsRoutingGroup, error) {
 	var stale []config.DnsRoutingGroup
-	oldCounts := make(map[string]int, len(sources))
 
 	for _, source := range sources {
 		desired, loaded := wantedDomains[source.Name]
@@ -28,7 +27,6 @@ func inspectExistingSplits(
 		}
 
 		baseDomains, baseExists := existingGroups[source.Name]
-		oldCounts[source.Name] = len(baseDomains)
 		baseInterface, baseRouteExists := existingRoutes[source.Name]
 		indexed := make(map[int]string)
 		for name, domains := range existingGroups {
@@ -37,20 +35,19 @@ func inspectExistingSplits(
 				continue
 			}
 			if !baseExists {
-				return nil, nil, fmt.Errorf("group '%s': generated name '%s' exists without its base object-group", source.Name, name)
+				return nil, fmt.Errorf("group '%s': generated name '%s' exists without its base object-group", source.Name, name)
 			}
 			indexed[index] = name
-			oldCounts[source.Name] += len(domains)
 			interfaceID, routeExists := existingRoutes[name]
 			if !routeExists {
 				chunk, wanted := wantedChunks[name]
 				if !wanted || len(baseDomains) != maxDomainsPerGroup || !allDomainsIn(domains, chunk) {
-					return nil, nil, fmt.Errorf("group '%s': generated name '%s' has no route and cannot be safely resumed", source.Name, name)
+					return nil, fmt.Errorf("group '%s': generated name '%s' has no route and cannot be safely resumed", source.Name, name)
 				}
 				continue
 			}
 			if interfaceID != source.InterfaceID && (!baseRouteExists || interfaceID != baseInterface) {
-				return nil, nil, fmt.Errorf("group '%s': generated name '%s' already exists without a matching route on '%s' or the base group", source.Name, name, source.InterfaceID)
+				return nil, fmt.Errorf("group '%s': generated name '%s' already exists without a matching route on '%s' or the base group", source.Name, name, source.InterfaceID)
 			}
 			if _, wanted := wantedChunks[name]; !wanted {
 				stale = append(stale, config.DnsRoutingGroup{Name: name, InterfaceID: interfaceID})
@@ -59,14 +56,14 @@ func inspectExistingSplits(
 		for name, interfaceID := range existingRoutes {
 			if splitGroupIndex(source.Name, name) >= 2 {
 				if _, groupExists := existingGroups[name]; !groupExists {
-					return nil, nil, fmt.Errorf("group '%s': generated route '%s' exists without an object-group on '%s'", source.Name, name, interfaceID)
+					return nil, fmt.Errorf("group '%s': generated route '%s' exists without an object-group on '%s'", source.Name, name, interfaceID)
 				}
 			}
 		}
 
 		for index := 2; index <= len(indexed)+1; index++ {
 			if _, ok := indexed[index]; !ok {
-				return nil, nil, fmt.Errorf("group '%s': noncontiguous generated group names; refusing automatic cleanup", source.Name)
+				return nil, fmt.Errorf("group '%s': noncontiguous generated group names; refusing automatic cleanup", source.Name)
 			}
 		}
 		if len(indexed) == 0 {
@@ -81,7 +78,7 @@ func inspectExistingSplits(
 			allExisting = append(allExisting, existingGroups[indexed[index]]...)
 		}
 		if !isSortedPartition(source.Name, indexed, allExisting, existingGroups) && !allDomainsIn(allExisting, desired) {
-			return nil, nil, fmt.Errorf("group '%s': existing split does not match a previous sorted partition or current source; refusing to adopt it", source.Name)
+			return nil, fmt.Errorf("group '%s': existing split does not match a previous sorted partition or current source; refusing to adopt it", source.Name)
 		}
 	}
 
@@ -94,7 +91,7 @@ func inspectExistingSplits(
 		}
 		return 0
 	})
-	return stale, oldCounts, nil
+	return stale, nil
 }
 
 func allDomainsIn(domains, allowed []string) bool {
