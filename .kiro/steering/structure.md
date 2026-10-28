@@ -26,6 +26,7 @@ gokeenapi/
 │   ├── gokeenrestapi/           # API singletons + unified mock router
 │   └── gokeenrestapimodels/     # Request/response structs — always use these types
 ├── internal/
+│   ├── exporter/                # Background polling, snapshots, Prometheus HTTP server
 │   ├── gokeenlog/               # The only allowed logging package
 │   ├── gokeencache/             # In-memory API / URL-content cache
 │   ├── gokeenspinner/           # CLI progress spinners
@@ -60,7 +61,7 @@ Never instantiate — use package-level values only. Method names: `product.md`.
 
 Authentication is automatic via `PersistentPreRunE` in `root.go`. Commands must **never** call `Auth()` directly.
 
-`PersistentPreRunE` skips config load and auth for: `completion`, `help`, `scheduler`, `version`.
+`PersistentPreRunE` skips config load and auth for: `completion`, `help`, `scheduler`, `exporter`, `version`.
 
 ## Global Config
 
@@ -197,3 +198,5 @@ var _ = Describe("MyCommand", func() {
 - `writeTempFile(dir, name, content string) string`
 
 `setupMockRouter` accepts `gokeenrestapi.WithInterfaces(...)`, `WithRoutes(...)`, and other options listed in `mock-testing-guidelines.md`.
+
+Exporter uses isolated read-only sessions obtained through `Common.NewMonitoringSession`. These sessions own per-router resty/auth state and must not access `config.Cfg` or the CLI caches. The factory on the existing singleton is the entry point; commands do not instantiate clients.

@@ -16,6 +16,8 @@ func main() {
 	ctx := context.Background()
 	cmdCtx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	selected, _, findErr := rootCmd.Find(os.Args[1:])
+	waitForShutdown := findErr == nil && (selected.Name() == cmd.CmdExporter || selected.Name() == cmd.CmdScheduler)
 	var err error
 	errChan := make(chan error, 1)
 	go func() {
@@ -25,7 +27,13 @@ func main() {
 	select {
 	case err = <-errChan:
 	case <-cmdCtx.Done():
-		err = cmdCtx.Err()
+		// Services cooperate with cancellation and must drain their workers.
+		// Other commands may be blocked on interactive input or legacy API calls.
+		if waitForShutdown {
+			err = <-errChan
+		} else {
+			err = cmdCtx.Err()
+		}
 	}
 	cmd.RestoreCursor()
 	if err != nil {

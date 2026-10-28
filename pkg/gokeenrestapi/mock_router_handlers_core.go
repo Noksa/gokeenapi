@@ -38,6 +38,16 @@ func (m *MockRouter) handleAuth(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if m.monitoringLogin != "" {
+			m.mu.Lock()
+			valid := authRequest.Login == m.monitoringLogin && authRequest.Password == monitoringPassword(m.monitoringLogin, m.monitoringPassword, realm, challenge) && r.Header.Get("Cookie") == cookie
+			m.monitoringAuthenticated = valid
+			m.mu.Unlock()
+			if !valid {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+		}
 		if authRequest.Login == "" || authRequest.Password == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -183,8 +193,22 @@ func (m *MockRouter) handleParse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var raw []json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if len(raw) > 0 && strings.Contains(string(raw[0]), `"show"`) {
+		m.handleMonitoringBatch(w, r, raw)
+		return
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
 	var requests []gokeenrestapimodels.ParseRequest
-	if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
+	if err := json.Unmarshal(encoded, &requests); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}

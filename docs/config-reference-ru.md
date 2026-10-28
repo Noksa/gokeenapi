@@ -184,3 +184,63 @@ AllowedIPs = 0.0.0.0/0
 - [config_example.yaml](../config_example.yaml) — аннотированный конфиг роутера
 - [SCHEDULER_RU.md](../SCHEDULER_RU.md) — `scheduler.yaml` (отдельный файл, не часть `config.yaml` роутера)
 - [README_RU.md](../README_RU.md) — переменные окружения и руководства по командам
+
+## Prometheus exporter
+
+`gokeenapi exporter --config exporter.yaml` (алиас `metrics`) загружает отдельный YAML exporter. Поддерживается `GOKEENAPI_CONFIG`; явный `--config` имеет приоритет. Файл ссылается на обычные YAML роутеров, но загружает только настройки подключения `keenetic`, без раскрытия маршрутов, файлов доменов и URL. Выполняются только операции чтения RCI; конфигурация роутера не сохраняется.
+
+| Поле | По умолчанию | Значение |
+|---|---|---|
+| `listen` | `127.0.0.1:9479` | Адрес HTTP-сервера; endpoint — `GET /metrics` |
+| `timeout` | `10s` | Ограничение времени полного цикла сбора с роутера; диапазон `1s`–`5m` |
+| `max_concurrent_routers` | `4` | Одновременные циклы опроса роутеров; диапазон 1–64 |
+| `max_backoff` | `5m` | Предел экспоненциальной задержки после ошибок; повторы не чаще обычного интервала коллектора; диапазон `1s`–`24h` |
+| `routers[].name` | обязательно | Уникальное стабильное имя, попадает в метку `router` |
+| `routers[].config` | обязательно | Путь к YAML роутера относительно YAML exporter |
+| `routers[].interfaces` | автоматически | Необязательный список ID интерфейсов с учётом регистра |
+| `collectors.<name>.enabled` | `true` | Включение или отключение группы сбора |
+| `collectors.<name>.interval` | ниже | Интервал опроса; диапазон `5s`–`24h` |
+| `collectors.<name>.max_age` | двойной интервал | Срок хранения успешного снимка; не меньше интервала, не больше `168h` |
+
+Группы `system`, `dns`, `interfaces` по умолчанию опрашиваются раз в `30s`, `hosts` — `1m`, `routing` — `5m`, `info` — `1h`. Неизвестные поля exporter и имена групп отклоняются. Обязательны хотя бы один роутер и одна включённая группа. Переменные `GOKEENAPI_KEENETIC_LOGIN` и `GOKEENAPI_KEENETIC_PASSWORD` переопределяют учётные данные **всех** указанных роутеров. Для разных аккаунтов используйте отдельные YAML с ограниченным доступом. URL роутера должен содержать HTTP(S) origin без встроенных учётных данных, пути, query и fragment. Положительный `keenetic.timeout` может уменьшить тайм-аут HTTP-запроса внутри цикла exporter.
+
+Без списка интерфейсов выбираются интерфейсы с IP-адресом, шлюзом по умолчанию или типом `Wireguard`. Явный список рекомендуется для ограничения количества команд. Получение списка и статистики выбранных интерфейсов объединяется в пакеты, где это поддерживается; в пакете не больше 100 команд чтения. Конфигурационные пути читаются через GET. Если прошивка не поддерживает пакеты, используются отдельные GET. Маршрутизация разделена на независимые коллекторы `static_routes`, `dns_groups`, `dns_routes`, поэтому отсутствие DNS-routing не скрывает статические маршруты.
+
+Опрос не зависит от обращений к метрикам. На роутер приходится не больше одного активного цикла; опоздавшие циклы не накапливаются. Запуск опросов распределён по периоду до 30 секунд, параллелизм ограничен. Сессии и соединения переиспользуются; авторизация повторяется только при необходимости. Ошибка удваивает интервал соответствующего коллектора до `max_backoff`, но не сокращает его обычный интервал. Остальные коллекторы продолжают работать по своему расписанию. Exporter не выполняет собственные DNS-запросы, не читает полный running-config и не собирает данные отдельных клиентов.
+
+`GET /metrics` отдаёт последний успешный снимок до истечения `max_age`; ошибка обновления не превращает значения в нули. Просроченные метрики исчезают. `keenetic_collector_success` показывает результат последней попытки, `keenetic_collector_fresh` — свежесть снимка. При настройке алертов учитывайте обе метрики и `keenetic_collector_last_success_timestamp_seconds`. До первого успешного чтения значения и время последнего успеха отсутствуют. Метрики состояния сбора и `keenetic_api_requests_total` доступны и при недоступном роутере.
+
+| Метрики | Значение |
+|---|---|
+| `keenetic_dns_requests_total`, `keenetic_dns_forwarded_requests_total`, `keenetic_dns_cache_hits_total` | Счётчики DNS по `proxy`; `rate(...[5m])` даёт QPS, `increase(...[24h])` — число за сутки |
+| `keenetic_dns_upstream_requests_total`, `keenetic_dns_upstream_responses_total`, `keenetic_dns_upstream_nxdomain_total` | Счётчики upstream с метками `proxy`, `server`, `port` |
+| `keenetic_dns_upstream_response_duration_seconds` | Среднее время upstream, сообщённое роутером; не гистограмма и не перцентиль |
+| `keenetic_hosts`, `keenetic_hosts_active`, `keenetic_hosts_registered` | Общие количества хостов; активные/зарегистрированные публикуются только при наличии нужных полей в ответе |
+| `keenetic_static_routes_count`, `keenetic_static_routes{interface}` | Общее количество настроенных статических маршрутов и количество по интерфейсам |
+| `keenetic_dns_groups`, `keenetic_dns_group_entries{group,entry_type}` | Количество групп и настроенных доменных/IP-записей; **не** число разрешённых IP или совпавших соединений |
+| `keenetic_dns_routes_count`, `keenetic_dns_routes{group,interface}` | Количество настроенных системных DNS-правил маршрутизации |
+| `keenetic_interface_up`, `keenetic_interface_connected` | Административное состояние и фактическая связность выбранных интерфейсов |
+| `keenetic_interface_receive_bytes_total`, `keenetic_interface_transmit_bytes_total` | Счётчики байтов; `8 * rate(...[5m])` даёт бит/с |
+| `keenetic_interface_receive_packets_total`, `keenetic_interface_transmit_packets_total` | Счётчики пакетов; соответствующие `*_errors_total` и `*_dropped_total` публикуются при наличии |
+| `keenetic_cpu_load_ratio`, `keenetic_uptime_seconds`, `keenetic_memory_{total,free,cache,buffers}_bytes` | CPU, uptime и память в базовых единицах |
+| `keenetic_connections_capacity`, `keenetic_connections_free` | Вместимость таблицы соединений и свободные записи |
+| `keenetic_router_info{model,version}` | Модель и версия роутера, значение 1 |
+| `keenetic_collector_success`, `keenetic_collector_fresh`, `keenetic_collector_duration_seconds`, `keenetic_collector_errors_total` | Успешность, свежесть, длительность цикла до этого коллектора и количество ошибок |
+| `keenetic_collector_last_attempt_timestamp_seconds`, `keenetic_collector_last_success_timestamp_seconds` | Unix-время с меткой `collector` |
+| `keenetic_api_requests_total` | Число HTTP-попыток по роутеру, включая авторизацию и повторы |
+
+У всех перечисленных метрик есть метка `router`. Сбросы счётчиков при перезапуске роутера или DNS proxy учитываются функциями Prometheus `rate`/`increase`. Интервал scrape должен быть не больше интервала опроса, а окно rate — охватывать несколько опросов. Exporter не хранит историю; её хранит Prometheus.
+
+Пример задания Prometheus:
+
+```yaml
+scrape_configs:
+  - job_name: gokeenapi
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["127.0.0.1:9479"]
+```
+
+Пример предполагает запуск Prometheus на том же хосте. Для других хостов или контейнеров задайте доступные адреса `listen` и target; встроенной аутентификации у endpoint нет. Импортируйте [дашборд Grafana](../grafana/keenetic.json) и выберите источник Prometheus. См. [exporter_example.yaml](../exporter_example.yaml).
+
+Ответы роутера ограничены 8 MiB после распаковки на HTTP-запрос. Более крупный ответ считается ошибкой сбора. Stat-панели дашборда используют Instant-запросы; текущие DNS QPS и доля кэша дополнительно проверяют успешность и свежесть DNS-коллектора.

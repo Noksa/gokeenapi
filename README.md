@@ -224,6 +224,23 @@ See also: [scheduler_example.yaml](scheduler_example.yaml)
 
 ---
 
+## 📊 Prometheus exporter
+
+Run a single exporter for multiple routers using their existing connection YAML files:
+
+```bash
+./gokeenapi exporter --config exporter_example.yaml
+curl http://127.0.0.1:9479/metrics
+```
+
+Alias: `metrics`. The exporter polls in the background and serves cached snapshots; scraping `/metrics` adds no router API requests. Defaults are 30 seconds for DNS/system/interfaces, 1 minute for hosts, 5 minutes for routing, and 1 hour for identity. Each router has an isolated session, staggered polling, and bounded retries/concurrency.
+
+Metrics cover DNS requests/cache/upstreams, host counts, configured routes and DNS groups, selected interface state/traffic, CPU, memory, and uptime. Missing measurements are omitted; successful snapshots expire after `max_age`. Collection health and timestamps remain available. Detailed domain names and individual client identities are not exported.
+
+Import [grafana/keenetic.json](grafana/keenetic.json) into Grafana and select your Prometheus datasource. See the [exporter configuration and metric reference](docs/config-reference.md#prometheus-exporter) and [example YAML](exporter_example.yaml). The default metrics listener is local-only; configure a trusted listening address when scraping from another host or container.
+
+---
+
 ### 📚 Commands
 
 Here are some of the things you can do with `gokeenapi`. For a full list of commands and options, use the `--help` flag.

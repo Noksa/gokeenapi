@@ -28,11 +28,12 @@ Names and aliases are defined in `cmd/constants.go`. Always add both `CmdXxx` (k
 | `update-awg` | `updateawg`, `uawg` | Update an existing AWG interface (`--conf-file`, `--interface-id`, optional `--dry-run`) |
 | `delete-known-hosts` | `deleteknownhosts`, `dkh` | Remove known host entries (regex supported) |
 | `exec` | `e` | Execute arbitrary Keenetic RCI parse commands |
+| `exporter` | `metrics` | Serve cached Prometheus metrics from multiple routers |
 | `scheduler` | `schedule`, `sched` | Run automated scheduled tasks from a scheduler YAML |
 | `show-interfaces` | `showinterfaces`, `si`, `showinterface`, `show-interface` | List router interfaces |
 | `version` | — | Print build version info |
 
-`PersistentPreRunE` in `cmd/root.go` skips config load and auth for `completion`, `help`, `scheduler`, and `version`.
+`PersistentPreRunE` in `cmd/root.go` skips config load and auth for `completion`, `help`, `scheduler`, `exporter`, and `version`.
 
 Route and DNS-routing commands take the interface from the YAML config, not from a CLI argument. `add-awg` / `update-awg` take `--conf-file` (and `update-awg` requires `--interface-id`).
 
@@ -130,3 +131,15 @@ Interface IDs are case-sensitive: `Wireguard0`, `Wireguard1`, `ISP`, `HomeNetwor
 - Selective routing: different traffic through different interfaces
 - Automated updates: scheduler refreshes route/domain lists from remote URLs
 - Multi-site management: one binary, many Keenetic routers
+
+## Exporter YAML (`exporter.yaml`)
+
+Schema: `pkg/config/exporter_config.go`. Example: `exporter_example.yaml`. EN/RU configuration references contain the full field and metric reference. Dashboard: `grafana/keenetic.json`.
+
+`exporter` / `metrics` skips normal root config/auth initialization. It loads its own YAML via `LoadExporterConfig`, accepts `GOKEENAPI_CONFIG`, and reads only connection settings from existing router YAMLs. Never mutate `config.Cfg` or use the CLI's global cookies/caches to poll multiple routers. Obtain isolated read-only sessions via `gokeenrestapi.Common.NewMonitoringSession`; construction does no network I/O.
+
+Defaults: `listen: 127.0.0.1:9479`, `timeout: 10s`, `max_concurrent_routers: 4`, `max_backoff: 5m`. Router entries require unique `name` and `config`; optional `interfaces` selects case-sensitive interface IDs. Paths resolve relative to exporter YAML. The existing credential environment overrides apply to all referenced routers.
+
+Collector settings are `enabled`, `interval`, `max_age`. Defaults: system/DNS/interfaces 30s, hosts 1m, routing 5m, info 1h; max_age is twice interval. Routing is scheduled/reported as independent static_routes/dns_groups/dns_routes collectors. Polling is serialized per router and bounded across routers; failures back off. HTTP `/metrics` only exposes cached successful snapshots, with health/freshness/timestamps; expired or unavailable measurements must never become fabricated zeroes. RCI `show` reads are batched in groups of at most 100; configuration paths use GET. Never resolve domain lists, read full running-config, or invoke mutating commands from exporter.
+
+Exporter HTTP serving uses `net/http`; outgoing router HTTP continues to use resty. Signal shutdown must drain command cleanup before main exits.

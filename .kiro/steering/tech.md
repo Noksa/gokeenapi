@@ -16,7 +16,7 @@ Product behavior: `product.md`. Layout and adding a command: `structure.md`. Moc
 | Package | Import Path | Purpose |
 |---------|-------------|---------|
 | cobra | `github.com/spf13/cobra` | CLI — always `RunE`, never `Run` |
-| resty | `github.com/go-resty/resty/v2` | HTTP — never use `net/http` directly in production code |
+| resty | `github.com/go-resty/resty/v2` | Outgoing HTTP — use resty; `net/http` is allowed for the exporter HTTP server |
 | yaml.v3 | `gopkg.in/yaml.v3` | YAML parsing via `yaml.Unmarshal()` |
 | ginkgo/v2 | `github.com/onsi/ginkgo/v2` | Test framework — all tests use Ginkgo `Describe`/`It` |
 | gomega | `github.com/onsi/gomega` | Matchers — `Expect(x).To(Equal(y))`, never testify |
@@ -79,7 +79,7 @@ Use only `internal/gokeenlog` — never `fmt.Println()`, `log.Println()`, or `pr
 
 Never instantiate. Full method list: `product.md`. Adding a command: `structure.md`.
 
-Auth is automatic via `PersistentPreRunE`. Commands must never call `Auth()` directly. Skip list: `completion`, `help`, `scheduler`, `version`.
+Auth is automatic via `PersistentPreRunE`. Commands must never call `Auth()` directly. Skip list: `completion`, `help`, `scheduler`, `exporter`, `version`.
 
 ## Configuration
 
@@ -117,7 +117,7 @@ Auth is automatic via `PersistentPreRunE`. Commands must never call `Auth()` dir
 | Never do this | Do this instead |
 |---------------|----------------|
 | `fmt.Println()` / `log.Println()` / `print()` | `gokeenlog` functions |
-| `net/http` directly in production code | `resty` via `gokeenrestapi.Common.GetApiClient()` |
+| `net/http` for outgoing router requests | `resty` via `Common.GetApiClient()` or isolated `Common.NewMonitoringSession`; `net/http` serves exporter metrics |
 | `os.Exit()` in command functions | return errors from `RunE` |
 | `Run` in cobra commands | `RunE` |
 | Collect only first error when iterating | `multierr.Append()` |

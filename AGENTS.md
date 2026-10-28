@@ -33,7 +33,8 @@ make test-ci                 # what CI runs: race + randomized + cover; needs Do
 
 - `cmd/` is Cobra only (`RunE`, never `Run` or `os.Exit`). Logic lives in `pkg/` / `internal/`.
 - API clients are package-level singletons (`gokeenrestapi.Common`, `.Ip`, `.DnsRouting`, `.AwgConf`, `.Checks`, `.Interface`, `.Components`). Never instantiate. Types: `pkg/gokeenrestapimodels`. Production HTTP: resty, not `net/http`.
-- `config.Cfg` is loaded once in `PersistentPreRunE`. Touch it only inside `RunE`, never in constructors. Commands must not call `Auth()` (automatic). Skip load/auth: `completion`, `help`, `scheduler`, `version`.
+- `config.Cfg` is loaded once in `PersistentPreRunE`. Touch it only inside `RunE`, never in constructors. Commands must not call `Auth()` (automatic). Skip normal router load/auth: `completion`, `help`, `scheduler`, `exporter`, `version`.
+- Exporter uses `config.LoadExporterConfig` and isolated read-only sessions from `Common.NewMonitoringSession`; never poll multiple routers through global config/cookies/caches. `net/http` is allowed for serving metrics; outgoing router requests use resty.
 - Scheduler uses `config.LoadSchedulerConfig` and re-execs `os.Executable()` per command with `--config <router.yaml>`.
 - `update-awg` is implemented in `cmd/configure_awg.go`. Do not add `update_awg.go`.
 - Logging: only `internal/gokeenlog`. Exception: `confirmAction` in `cmd/common.go`.
@@ -43,6 +44,8 @@ make test-ci                 # what CI runs: race + randomized + cover; needs Do
 - New command: `CmdXxx` + `AliasesXxx` in `cmd/constants.go` → `cmd/<snake>.go` → `rootCmd.AddCommand` in `NewRootCmd()`.
 
 ## Tests
+
+**Mandatory: use TDD when adding or fixing code.** Write tests for the expected behavior first; run them and confirm they fail for the intended behavioral reason before implementing the change. Compilation errors, missing dependencies, and broken test setup do not count as the red stage. For a bug fix, the test must reproduce the bug. Then implement the change, verify the tests pass, and refactor with the tests staying green. Retain both red and green verification evidence in the work report.
 
 Ginkgo v2 + Gomega. Never testify. Every package has `suite_test.go`. Property tests: `*_property_test.go` with `rapid.Check(GinkgoT(), …)` inside `It`. Use `Eventually(…).WithTimeout(…).WithPolling(…)`, not positional args.
 

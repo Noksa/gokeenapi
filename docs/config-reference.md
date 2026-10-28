@@ -184,3 +184,63 @@ AllowedIPs = 0.0.0.0/0
 - [config_example.yaml](../config_example.yaml) — annotated router config
 - [SCHEDULER.md](../SCHEDULER.md) — `scheduler.yaml` (separate file; not part of router `config.yaml`)
 - [README.md](../README.md) — environment variables and command tutorials
+
+## Prometheus exporter
+
+`gokeenapi exporter --config exporter.yaml` (alias `metrics`) loads a separate exporter YAML. `GOKEENAPI_CONFIG` is also supported; an explicit `--config` wins. It references ordinary router YAML files but reads only their `keenetic` connection settings, without expanding routes, domain files, or URLs. It performs read-only RCI operations and never saves router configuration.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `listen` | `127.0.0.1:9479` | HTTP listening address; endpoint is `GET /metrics` |
+| `timeout` | `10s` | Deadline for an entire router collection cycle; range `1s`–`5m` |
+| `max_concurrent_routers` | `4` | Simultaneous router cycles; range 1–64 |
+| `max_backoff` | `5m` | Exponential failure retry cap; a collector never retries faster than its normal interval; range `1s`–`24h` |
+| `routers[].name` | required | Unique stable name, exposed as the `router` label |
+| `routers[].config` | required | Router YAML path, relative to the exporter YAML |
+| `routers[].interfaces` | automatic | Optional list of case-sensitive interface IDs to monitor |
+| `collectors.<name>.enabled` | `true` | Enable or disable one collection group |
+| `collectors.<name>.interval` | below | Poll interval; range `5s`–`24h` |
+| `collectors.<name>.max_age` | twice the interval | Maximum lifetime of a successful snapshot; at least its interval, at most `168h` |
+
+Groups: `system`, `dns`, and `interfaces` default to `30s`; `hosts` to `1m`; `routing` to `5m`; `info` to `1h`. Unknown exporter fields and collector names are rejected. At least one router and one enabled group are required. Router credentials can use `GOKEENAPI_KEENETIC_LOGIN` and `GOKEENAPI_KEENETIC_PASSWORD`; these overrides apply to **all** referenced routers. Use separate YAML credentials when routers require different accounts, and keep those files private. Router URLs must be HTTP(S) origins without embedded credentials, paths, queries, or fragments. A positive `keenetic.timeout` can shorten the exporter cycle's HTTP request timeout.
+
+Without an interface list, the exporter selects interfaces with an IP address, a default gateway, or type `Wireguard`. Explicit selection is recommended to control the command budget. Interface discovery and all selected interface statistics are batched where supported; batches contain at most 100 read commands. Router configuration paths use GET. Firmware without batch support falls back to individual GETs. Routing state uses three independent collectors (`static_routes`, `dns_groups`, `dns_routes`), so unsupported DNS-routing does not hide static routes.
+
+Polling is independent of scraping. At most one cycle per router is active; late cycles do not accumulate. Router starts are spread across up to 30 seconds, with bounded concurrency. Sessions and connections are reused; authentication is repeated only when required. Failures double the failed collector's interval up to `max_backoff`, with a floor at its normal interval. Other collectors keep their schedules. No synthetic DNS queries, full running-config reads, or per-client details are collected.
+
+`GET /metrics` serves the latest successful snapshot until its `max_age`; a failed refresh does not turn measurements into zeroes. Expired measurements disappear. `keenetic_collector_success` reports the last attempt, while `keenetic_collector_fresh` reports snapshot freshness. Check both, plus `keenetic_collector_last_success_timestamp_seconds`, when alerting. Before the first successful read, measurements and the last-success timestamp are absent. Health metrics and `keenetic_api_requests_total` remain available even when a router is offline.
+
+| Metrics | Meaning |
+|---|---|
+| `keenetic_dns_requests_total`, `keenetic_dns_forwarded_requests_total`, `keenetic_dns_cache_hits_total` | Native DNS counters per `proxy`; use `rate(...[5m])` for QPS and `increase(...[24h])` for daily counts |
+| `keenetic_dns_upstream_requests_total`, `keenetic_dns_upstream_responses_total`, `keenetic_dns_upstream_nxdomain_total` | Native upstream counters, labelled by `proxy`, `server`, and `port` |
+| `keenetic_dns_upstream_response_duration_seconds` | Router-reported upstream average, not a histogram or percentile |
+| `keenetic_hosts`, `keenetic_hosts_active`, `keenetic_hosts_registered` | Aggregate host counts; optional activity/registration counts appear only if the response supplies the needed fields |
+| `keenetic_static_routes_count`, `keenetic_static_routes{interface}` | Total and per-interface counts of configured static routes |
+| `keenetic_dns_groups`, `keenetic_dns_group_entries{group,entry_type}` | Group count and configured domain/IP entry counts; **not** the number of resolved IPs or matched connections |
+| `keenetic_dns_routes_count`, `keenetic_dns_routes{group,interface}` | Counts of configured system DNS-routing rules |
+| `keenetic_interface_up`, `keenetic_interface_connected` | Administrative state and operational connectivity of selected interfaces |
+| `keenetic_interface_receive_bytes_total`, `keenetic_interface_transmit_bytes_total` | Native byte counters; use `8 * rate(...[5m])` for bits/s |
+| `keenetic_interface_receive_packets_total`, `keenetic_interface_transmit_packets_total` | Packet counters; corresponding `*_errors_total` and `*_dropped_total` are exported where present |
+| `keenetic_cpu_load_ratio`, `keenetic_uptime_seconds`, `keenetic_memory_{total,free,cache,buffers}_bytes` | CPU utilization, uptime, and memory in base units |
+| `keenetic_connections_capacity`, `keenetic_connections_free` | Connection tracking capacity and free entries |
+| `keenetic_router_info{model,version}` | Router identity, value 1 |
+| `keenetic_collector_success`, `keenetic_collector_fresh`, `keenetic_collector_duration_seconds`, `keenetic_collector_errors_total` | Collector health, freshness, cycle duration through that collector, and failure count |
+| `keenetic_collector_last_attempt_timestamp_seconds`, `keenetic_collector_last_success_timestamp_seconds` | Unix timestamps, labelled by `collector` |
+| `keenetic_api_requests_total` | Actual HTTP attempts per router, including authentication and retries |
+
+All metrics above have a `router` label. Counter resets on router/proxy restart are handled by Prometheus `rate`/`increase`. Keep scrape intervals at or below poll intervals, and use rate windows spanning several polls. No historical data is stored by the exporter; Prometheus stores history.
+
+Example Prometheus scrape job:
+
+```yaml
+scrape_configs:
+  - job_name: gokeenapi
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["127.0.0.1:9479"]
+```
+
+The example assumes Prometheus runs on the same host. Set a reachable `listen` address and target for other hosts or containers; the endpoint has no built-in authentication. Import [the Grafana dashboard](../grafana/keenetic.json) and select the Prometheus datasource. See [exporter_example.yaml](../exporter_example.yaml).
+
+Router responses are limited to 8 MiB of decompressed data per HTTP request. Larger responses become collection errors. Dashboard stat panels use Instant queries; current DNS QPS and cache ratio also require successful, fresh DNS collection.
