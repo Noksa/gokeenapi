@@ -84,7 +84,8 @@ This project follows [Conventional Commits](https://www.conventionalcommits.org/
 ## Build
 
 ```bash
-make build              # lint + compile binary
+go build .              # compile a local binary
+make build              # lint + multi-arch Docker build and PUSH; publishing only
 make binaries VERSION=x.y.z   # cross-platform release binaries
 ```
 
@@ -112,11 +113,22 @@ make lint               # runs scripts/check.sh via golangci-lint
 make docker-build-test  # builds gokeenapi-test:local (no push)
 ```
 
+Local exporter monitoring (Docker Compose v2.24+):
+
+```bash
+make exporter-local-up EXPORTER_CONFIG=/path/to/exporter.yaml
+make exporter-local-status
+make exporter-local-logs
+make exporter-local-down
+```
+
+See [docker/infra-exporter-local/README.md](docker/infra-exporter-local/README.md) for configuration mounts, port overrides, provisioning, and preserved history.
+
 ## Pull Requests
 
 1. Fork the repository and create a feature branch.
 2. Write tests for new behaviour.
-3. Ensure `make build` and `make test` pass locally.
+3. Ensure `make lint` and `make test` pass locally; use `go build .` for a local binary.
 4. Open a PR against `main` with a clear description of the change.
 
 ## Versioning

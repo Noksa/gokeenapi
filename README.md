@@ -241,6 +241,17 @@ Import [grafana/keenetic.json](grafana/keenetic.json) into Grafana and select yo
 
 ---
 
+Local stack with automatic datasource and dashboard provisioning:
+
+```bash
+make exporter-local-up EXPORTER_CONFIG=/path/to/exporter.yaml
+make exporter-local-down
+```
+
+Open <http://127.0.0.1:3000/d/gokeenapi-keenetic>. See the [local Compose stack](docker/infra-exporter-local/README.md). `exporter --listen <host:port>` overrides the YAML listener without changing the file.
+
+---
+
 ### 📚 Commands
 
 Here are some of the things you can do with `gokeenapi`. For a full list of commands and options, use the `--help` flag.

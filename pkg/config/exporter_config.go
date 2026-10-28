@@ -61,10 +61,8 @@ func LoadExporterConfig(path string) (*ExporterConfig, error) {
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return nil, errors.New("exporter config must contain exactly one YAML document")
 	}
-	_, port, err := net.SplitHostPort(cfg.Listen)
-	numericPort, portErr := strconv.Atoi(port)
-	if err != nil || portErr != nil || numericPort < 1 || numericPort > 65535 {
-		return nil, errors.New("listen must be a host:port address with a port from 1 to 65535")
+	if err := ValidateExporterListen(cfg.Listen); err != nil {
+		return nil, err
 	}
 	if cfg.Timeout < time.Second || cfg.Timeout > 5*time.Minute {
 		return nil, errors.New("timeout must be between 1s and 5m")
@@ -134,6 +132,16 @@ func LoadExporterConfig(path string) (*ExporterConfig, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// ValidateExporterListen applies the same listener constraints to YAML and CLI overrides.
+func ValidateExporterListen(address string) error {
+	_, port, err := net.SplitHostPort(address)
+	numericPort, portErr := strconv.Atoi(port)
+	if err != nil || portErr != nil || numericPort < 1 || numericPort > 65535 {
+		return errors.New("listen must be a host:port address with a port from 1 to 65535")
+	}
+	return nil
 }
 
 func loadExporterConnection(path string) (Keenetic, error) {

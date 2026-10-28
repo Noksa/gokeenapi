@@ -132,3 +132,7 @@ Auth is automatic via `PersistentPreRunE`. Commands must never call `Auth()` dir
 | Call `Auth()` directly in test `BeforeEach` | use `setupMockRouter()` — it calls `Auth()` internally |
 | Store only YAML credentials and commit them | env vars; `chmod 600` on local YAML |
 | CIDR-only lines in bat-files | `route add <ip> MASK <mask> <gateway>` |
+
+## Local exporter Compose infrastructure
+
+`docker/infra-exporter-local/compose.yaml` runs a locally built exporter, pinned Prometheus/Grafana images, automatic datasource/dashboard provisioning, and persistent named volumes. Make targets `exporter-local-up` (requires `EXPORTER_CONFIG`), `exporter-local-down`, `exporter-local-status`, and `exporter-local-logs` call `scripts/exporter_local.sh`; it sources the existing theme common script. `EXPORTER_PROJECT` isolates stacks; `EXPORTER_PORT`, `PROMETHEUS_PORT`, `GRAFANA_PORT` override loopback-bound host ports. The runtime directory is gitignored. Root Docker Ginkgo specs cover the actual stack and provisioning. These new targets need no CI workflow changes: the existing recursive Ginkgo job discovers their integration tests.

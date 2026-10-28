@@ -200,3 +200,5 @@ var _ = Describe("MyCommand", func() {
 `setupMockRouter` accepts `gokeenrestapi.WithInterfaces(...)`, `WithRoutes(...)`, and other options listed in `mock-testing-guidelines.md`.
 
 Exporter uses isolated read-only sessions obtained through `Common.NewMonitoringSession`. These sessions own per-router resty/auth state and must not access `config.Cfg` or the CLI caches. The factory on the existing singleton is the entry point; commands do not instantiate clients.
+
+Local monitoring Compose files, Grafana provisioning, and EN/RU setup guides live in `docker/infra-exporter-local/`. `scripts/exporter_local.sh` is their Make entry point and generates only gitignored dashboard assets; never copy router secrets into the build context or runtime assets.

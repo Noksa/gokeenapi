@@ -241,6 +241,17 @@ curl http://127.0.0.1:9479/metrics
 
 ---
 
+Локальный стенд с автоматической загрузкой datasource и дашборда:
+
+```bash
+make exporter-local-up EXPORTER_CONFIG=/path/to/exporter.yaml
+make exporter-local-down
+```
+
+Откройте <http://127.0.0.1:3000/d/gokeenapi-keenetic>. Подробнее: [локальный Compose-стенд](docker/infra-exporter-local/README_RU.md). Флаг `exporter --listen <host:port>` переопределяет адрес из YAML без изменения файла.
+
+---
+
 ### 📚 Команды
 
 Вот некоторые вещи, которые вы можете делать с `gokeenapi`. Для полного списка команд и опций используйте флаг `--help`.

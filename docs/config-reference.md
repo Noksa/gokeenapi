@@ -244,3 +244,5 @@ scrape_configs:
 The example assumes Prometheus runs on the same host. Set a reachable `listen` address and target for other hosts or containers; the endpoint has no built-in authentication. Import [the Grafana dashboard](../grafana/keenetic.json) and select the Prometheus datasource. See [exporter_example.yaml](../exporter_example.yaml).
 
 Router responses are limited to 8 MiB of decompressed data per HTTP request. Larger responses become collection errors. Dashboard stat panels use Instant queries; current DNS QPS and cache ratio also require successful, fresh DNS collection.
+
+`exporter --listen <host:port>` overrides the YAML `listen` value for this process only; numeric ports 1–65535 are accepted. The [local Compose stack](../docker/infra-exporter-local/README.md) uses this to make the exporter reachable by Prometheus inside Docker without changing the config.
