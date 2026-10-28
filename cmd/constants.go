@@ -16,6 +16,7 @@ const (
 	CmdDeleteAllDnsRouting = "delete-all-dns-routing"
 	CmdExec                = "exec"
 	CmdScheduler           = "scheduler"
+	CmdExporter            = "exporter"
 	CmdVersion             = "version"
 )
 
@@ -47,4 +48,5 @@ var (
 	AliasesDeleteKnownHosts    = []string{"deleteknownhosts", "dkh"}
 	AliasesExec                = []string{"e"}
 	AliasesScheduler           = []string{"schedule", "sched"}
+	AliasesExporter            = []string{"metrics"}
 )

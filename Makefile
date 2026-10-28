@@ -164,6 +164,26 @@ docker-build-test: $(CYBER_CACHE) ## Build Docker image for testing (no push)
 		-f Dockerfile .
 	@source $(CYBER_CACHE) && cyber_ok "Docker image built successfully"
 
+##@ Local exporter monitoring
+
+export EXPORTER_CONFIG EXPORTER_PROJECT EXPORTER_PORT PROMETHEUS_PORT GRAFANA_PORT
+
+.PHONY: exporter-local-up
+exporter-local-up: $(CYBER_CACHE) ## Start local Grafana/Prometheus/exporter (EXPORTER_CONFIG=path)
+	@bash "$(ROOT_DIR)/scripts/exporter_local.sh" up
+
+.PHONY: exporter-local-down
+exporter-local-down: $(CYBER_CACHE) ## Stop local monitoring, preserve history
+	@bash "$(ROOT_DIR)/scripts/exporter_local.sh" down
+
+.PHONY: exporter-local-logs
+exporter-local-logs: $(CYBER_CACHE) ## Follow local monitoring logs
+	@bash "$(ROOT_DIR)/scripts/exporter_local.sh" logs
+
+.PHONY: exporter-local-status
+exporter-local-status: $(CYBER_CACHE) ## Show local monitoring service status
+	@bash "$(ROOT_DIR)/scripts/exporter_local.sh" status
+
 ##@ Maintenance
 
 .PHONY: tidy

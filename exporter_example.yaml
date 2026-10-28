@@ -1,0 +1,23 @@
+# gokeenapi exporter --config exporter_example.yaml
+# GET /metrics serves cached snapshots and never contacts a router.
+listen: "127.0.0.1:9479"
+timeout: 10s                 # Deadline for a complete collection cycle per router
+max_concurrent_routers: 4
+max_backoff: 5m              # Failed collectors retry less often; never faster than interval
+
+collectors:
+  system:     {interval: 30s, max_age: 1m}
+  dns:        {interval: 30s, max_age: 1m}
+  interfaces: {interval: 30s, max_age: 1m}
+  hosts:      {interval: 1m, max_age: 2m}
+  routing:    {interval: 5m, max_age: 10m}
+  info:       {interval: 1h, max_age: 2h}
+  # To disable a group: routing: {enabled: false}
+
+routers:
+  - name: home
+    config: config_example.yaml  # Relative to this file; only keenetic settings are loaded
+    # Optional, case-sensitive IDs. Recommended to limit interface work explicitly.
+    # interfaces: [ISP, Wireguard0]
+  # - name: office
+  #   config: office.yaml

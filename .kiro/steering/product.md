@@ -28,11 +28,12 @@ Names and aliases are defined in `cmd/constants.go`. Always add both `CmdXxx` (k
 | `update-awg` | `updateawg`, `uawg` | Update an existing AWG interface (`--conf-file`, `--interface-id`, optional `--dry-run`) |
 | `delete-known-hosts` | `deleteknownhosts`, `dkh` | Remove known host entries (regex supported) |
 | `exec` | `e` | Execute arbitrary Keenetic RCI parse commands |
+| `exporter` | `metrics` | Serve cached Prometheus metrics from multiple routers |
 | `scheduler` | `schedule`, `sched` | Run automated scheduled tasks from a scheduler YAML |
 | `show-interfaces` | `showinterfaces`, `si`, `showinterface`, `show-interface` | List router interfaces |
 | `version` | — | Print build version info |
 
-`PersistentPreRunE` in `cmd/root.go` skips config load and auth for `completion`, `help`, `scheduler`, and `version`.
+`PersistentPreRunE` in `cmd/root.go` skips config load and auth for `completion`, `help`, `scheduler`, `exporter`, and `version`.
 
 Route and DNS-routing commands take the interface from the YAML config, not from a CLI argument. `add-awg` / `update-awg` take `--conf-file` (and `update-awg` requires `--interface-id`).
 
@@ -130,3 +131,21 @@ Interface IDs are case-sensitive: `Wireguard0`, `Wireguard1`, `ISP`, `HomeNetwor
 - Selective routing: different traffic through different interfaces
 - Automated updates: scheduler refreshes route/domain lists from remote URLs
 - Multi-site management: one binary, many Keenetic routers
+
+## Exporter YAML (`exporter.yaml`)
+
+Schema: `pkg/config/exporter_config.go`. Example: `exporter_example.yaml`. EN/RU configuration references contain the full field and metric reference. Dashboard: `grafana/keenetic.json`.
+
+`exporter` / `metrics` skips normal root config/auth initialization. It loads its own YAML via `LoadExporterConfig`, accepts `GOKEENAPI_CONFIG`, and reads only connection settings from existing router YAMLs. Never mutate `config.Cfg` or use the CLI's global cookies/caches to poll multiple routers. Obtain isolated read-only sessions via `gokeenrestapi.Common.NewMonitoringSession`; construction does no network I/O.
+
+Defaults: `listen: 127.0.0.1:9479`, `timeout: 10s`, `max_concurrent_routers: 4`, `max_backoff: 5m`. Router entries require unique `name` and `config`; optional `interfaces` selects case-sensitive interface IDs. Paths resolve relative to exporter YAML. The existing credential environment overrides apply to all referenced routers.
+
+Collector settings are `enabled`, `interval`, `max_age`. Defaults: system/DNS/interfaces 30s, hosts 1m, routing 5m, info 1h; max_age is twice interval. Routing is scheduled/reported as independent static_routes/dns_groups/dns_routes collectors. Polling is serialized per router and bounded across routers; failures back off. HTTP `/metrics` only exposes cached successful snapshots, with health/freshness/timestamps; expired or unavailable measurements must never become fabricated zeroes. RCI `show` reads are batched in groups of at most 100; configuration paths use GET. Never resolve domain lists, read full running-config, or invoke mutating commands from exporter.
+
+Exporter HTTP serving uses `net/http`; outgoing router HTTP continues to use resty. Signal shutdown must drain command cleanup before main exits.
+
+`exporter --listen <host:port>` overrides YAML listen for this process with the same validation (numeric port 1–65535). The local Compose stack passes `--listen 0.0.0.0:9479`; host ports remain loopback-bound. `make exporter-local-up EXPORTER_CONFIG=...` mounts the config directory read-only; referenced router YAML paths must stay relative within that directory. Grafana provisions datasource/dashboard automatically from the canonical JSON via generated gitignored runtime assets. Down/status/logs do not require private config. Details: `docker/infra-exporter-local/README.md` and its RU pair.
+
+Exporter display labels use router descriptions/names with technical IDs retained for uniqueness. Add labels directly to existing series rather than metadata series or per-suffix DNS counters; renaming starts a new labelled series. Optional policy names use read-only `/rci/ip/policy` at 5m with 10m expiry and backoff, without invalidating core DNS statistics. Interface names expire with the interface collector. Used RAM excludes free/cache/buffers; physical link speed is optional and distinct from traffic.
+
+Opt-in test variables `GOKEENAPI_LIVE_EXPORTER_CONFIG`, `GOKEENAPI_LIVE_ROUTER_SSH`, `GOKEENAPI_LIVE_REPORT` enable the live router load experiment (absolute config/report paths, report must not exist and is reserved as 0600 before stopping the stand); ordinary tests must skip it. It stops and restores the sole Compose exporter in `EXPORTER_PROJECT` and uses a persistent SSH sampler instead of extra RCI probes. This test intentionally uses a real router, unlike normal API tests using the unified mock. See local Compose guides for procedure and limits.

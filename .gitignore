@@ -16,3 +16,4 @@ q.log
 **/testdata/rapid/**/*.fail
 .cyber.sh
 *.test
+/docker/infra-exporter-local/.runtime/

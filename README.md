@@ -224,6 +224,38 @@ See also: [scheduler_example.yaml](scheduler_example.yaml)
 
 ---
 
+## 📊 Prometheus exporter
+
+Run a single exporter for multiple routers using their existing connection YAML files:
+
+```bash
+./gokeenapi exporter --config exporter_example.yaml
+curl http://127.0.0.1:9479/metrics
+```
+
+Alias: `metrics`. The exporter polls in the background and serves cached snapshots; scraping `/metrics` adds no router API requests. Defaults are 30 seconds for DNS/system/interfaces, 1 minute for hosts, 5 minutes for routing, and 1 hour for identity. Each router has an isolated session, staggered polling, and bounded retries/concurrency.
+
+Metrics cover DNS requests/cache/upstreams, host counts, configured routes and DNS groups, selected interface state/traffic, CPU, memory, and uptime. Missing measurements are omitted; successful snapshots expire after `max_age`. Collection health and timestamps remain available. Queried domain names and individual client identities are not exported. Configured DNS suffixes may appear in upstream display labels.
+
+Grafana uses interface descriptions/names and connection-policy descriptions from the router, with IDs retained for uniqueness. DNS upstream labels identify transport, actual encrypted endpoint and configured suffixes when available. These labels enrich existing series without separate metadata metrics or per-suffix counters; renaming an object starts a new labelled series. The dashboard excludes historical series without the new display labels; Prometheus history is preserved. Used RAM excludes free memory, cache and buffers, matching Keenetic. Physical link speed is shown where reported, separately from measured traffic.
+
+Import [grafana/keenetic.json](grafana/keenetic.json) into Grafana and select your Prometheus datasource. See the [exporter configuration and metric reference](docs/config-reference.md#prometheus-exporter) and [example YAML](exporter_example.yaml). The default metrics listener is local-only; configure a trusted listening address when scraping from another host or container.
+
+---
+
+Local stack with automatic datasource and dashboard provisioning:
+
+```bash
+make exporter-local-up EXPORTER_CONFIG=/path/to/exporter.yaml
+make exporter-local-down
+```
+
+The [live load experiment](docker/infra-exporter-local/README.md#measure-router-load) accepts an exporter config with one router and all collectors enabled, plus SSH access to that same router. Reports require a new absolute file path and use mode `0600`; existing files and links are never overwritten.
+
+Open <http://127.0.0.1:3000/d/gokeenapi-keenetic>. See the [local Compose stack](docker/infra-exporter-local/README.md). `exporter --listen <host:port>` overrides the YAML listener without changing the file.
+
+---
+
 ### 📚 Commands
 
 Here are some of the things you can do with `gokeenapi`. For a full list of commands and options, use the `--help` flag.

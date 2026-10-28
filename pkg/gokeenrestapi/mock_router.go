@@ -134,23 +134,29 @@ type MockRouterState struct {
 // MockRouter is a comprehensive mock implementation of the Keenetic router API.
 // It maintains stateful behavior and supports all API endpoints for testing.
 type MockRouter struct {
-	mu                  sync.RWMutex
-	interfaces          map[string]*MockInterface
-	scInterfaces        map[string]*MockScInterface
-	routes              []MockRoute
-	dnsRecords          map[string]string
-	hotspotDevices      []MockHost
-	authRealm           string
-	authChallenge       string
-	sessionCookie       string
-	systemMode          MockSystemMode
-	dnsRoutingGroups    []MockDnsRoutingGroup
-	dnsProxyRoutes      []MockDnsProxyRoute
-	initialState        MockRouterState
-	staticRunningConfig []string
-	version             string
-	rciBodyOverride     []byte
-	components          map[string]gokeenrestapimodels.Component
+	mu                      sync.RWMutex
+	interfaces              map[string]*MockInterface
+	scInterfaces            map[string]*MockScInterface
+	routes                  []MockRoute
+	dnsRecords              map[string]string
+	hotspotDevices          []MockHost
+	authRealm               string
+	authChallenge           string
+	sessionCookie           string
+	systemMode              MockSystemMode
+	dnsRoutingGroups        []MockDnsRoutingGroup
+	dnsProxyRoutes          []MockDnsProxyRoute
+	initialState            MockRouterState
+	staticRunningConfig     []string
+	version                 string
+	rciBodyOverride         []byte
+	components              map[string]gokeenrestapimodels.Component
+	monitoringResponses     map[string]MockMonitoringResponse
+	monitoringObserver      func(string, string)
+	monitoringLogin         string
+	monitoringPassword      string
+	monitoringAuthenticated bool
+	monitoringBatchDisabled bool
 }
 
 // MockRouterOption is a functional option for configuring the mock router.
@@ -402,7 +408,7 @@ func NewMockRouterServer(opts ...MockRouterOption) *httptest.Server {
 	mux.HandleFunc("/rci/show/system/mode", m.handleSystemMode)
 	mux.HandleFunc("/rci/", m.handleParse)
 
-	return httptest.NewServer(mux)
+	return httptest.NewServer(m.monitoringHandler(mux))
 }
 
 // SetupMockRouterForTest is a convenience function for test suites.
