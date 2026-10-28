@@ -51,6 +51,7 @@ func parseDNS(body json.RawMessage) ([]sample, error) {
 			return nil, errors.New("unrecognized DNS proxy statistics")
 		}
 		upstreams := make(map[[2]string]bool)
+		names := dnsUpstreamNames(proxy)
 		for line := range strings.SplitSeq(proxy.Statistics, "\n") {
 			fields := strings.Fields(line)
 			if len(fields) != 8 {
@@ -69,6 +70,11 @@ func parseDNS(body json.RawMessage) ([]sample, error) {
 			}
 			upstreams[key] = true
 			labels := map[string]string{"proxy": proxy.Name, "server": fields[0], "port": fields[1]}
+			endpoint, _ := dnsEndpoint(fields[0], fields[1])
+			labels["upstream_name"] = names[endpoint]
+			if labels["upstream_name"] == "" {
+				labels["upstream_name"] = "DNS " + endpoint
+			}
 			for i, field := range []struct{ name, help string }{
 				{"keenetic_dns_upstream_requests_total", "DNS requests sent to an upstream resolver."},
 				{"keenetic_dns_upstream_responses_total", "Answers received from an upstream resolver."},

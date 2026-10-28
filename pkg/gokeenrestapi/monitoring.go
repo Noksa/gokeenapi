@@ -173,7 +173,7 @@ func failPendingMonitoringResults(results []MonitoringResult, err error) {
 
 func validMonitoringQuery(q MonitoringQuery) bool {
 	switch q.Path {
-	case "/rci/show/system", "/rci/show/dns-proxy", "/rci/show/interface", "/rci/show/ip/hotspot", "/rci/show/version", "/rci/ip/route", "/rci/object-group/fqdn", "/rci/dns-proxy/route":
+	case "/rci/show/system", "/rci/show/dns-proxy", "/rci/show/interface", "/rci/show/ip/hotspot", "/rci/show/version", "/rci/ip/route", "/rci/ip/policy", "/rci/object-group/fqdn", "/rci/dns-proxy/route":
 		return q.Interface == ""
 	case "/rci/show/interface/stat":
 		return strings.TrimSpace(q.Interface) != ""

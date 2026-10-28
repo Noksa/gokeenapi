@@ -187,6 +187,13 @@ AllowedIPs = 0.0.0.0/0
 
 ## Prometheus exporter
 
+Подписи берутся автоматически из роутера: `interface_name` выбирается из `description`, затем `interface-name`, затем ID; непустое имя сопровождается ID в скобках. Та же подпись используется в метриках интерфейсов и маршрутов при включённом сборе интерфейсов. У маршрутов без явно указанного интерфейса используется подпись `Unspecified interface`. `proxy_name` использует описание политики. `upstream_name` показывает DNS/DoT/DoH, реальный upstream и отсортированный список настроенных суффиксов (ограничен 256 символами). Несколько суффиксов не создают дополнительные счётчики. Отдельных `*_info` для подписей нет. Запросы дашборда исключают исторические ряды без меток имён; сохранённая история не удаляется. Технические метки `interface`, `proxy`, `server`, `port` сохраняют уникальность; изменение описания создаёт новый ряд с изменёнными метками.
+
+DNS-метаданные и имена интерфейсов читаются из уже собираемых ответов. Для именованных DNS-политик дополнительно запрашивается небольшой `/rci/ip/policy` раз в 5 минут; ошибки вызывают backoff, а последнее успешное имя хранится до 10 минут. Имена интерфейсов действуют не дольше `interfaces.max_age`. При отключённом сборе интерфейсов, отсутствии, устаревании или неоднозначности метаданных показываются ID/технические адреса, а счётчики продолжают работать. Соответствие локального DNS-порта зашифрованному серверу устанавливается по конфигурации, без догадок по номеру порта. DoH-подписи содержат только хост/порт; учётные данные, путь, query и fragment не экспортируются. История DNS-запросов не собирается. Привязка DNS к интерфейсу не доказывает фактический маршрут пакетов.
+
+`keenetic_memory_used_bytes = total − free − cache − buffers`, как показатель ОЗУ в Keenetic; вычисляется только при наличии всех компонентов и непротиворечивом результате. `used / total` даёт долю занятой памяти. `free` не является Linux `MemAvailable`.
+
+
 `gokeenapi exporter --config exporter.yaml` (алиас `metrics`) загружает отдельный YAML exporter. Поддерживается `GOKEENAPI_CONFIG`; явный `--config` имеет приоритет. Файл ссылается на обычные YAML роутеров, но загружает только настройки подключения `keenetic`, без раскрытия маршрутов, файлов доменов и URL. Выполняются только операции чтения RCI; конфигурация роутера не сохраняется.
 
 | Поле | По умолчанию | Значение |
@@ -222,7 +229,8 @@ AllowedIPs = 0.0.0.0/0
 | `keenetic_interface_up`, `keenetic_interface_connected` | Административное состояние и фактическая связность выбранных интерфейсов |
 | `keenetic_interface_receive_bytes_total`, `keenetic_interface_transmit_bytes_total` | Счётчики байтов; `8 * rate(...[5m])` даёт бит/с |
 | `keenetic_interface_receive_packets_total`, `keenetic_interface_transmit_packets_total` | Счётчики пакетов; соответствующие `*_errors_total` и `*_dropped_total` публикуются при наличии |
-| `keenetic_cpu_load_ratio`, `keenetic_uptime_seconds`, `keenetic_memory_{total,free,cache,buffers}_bytes` | CPU, uptime и память в базовых единицах |
+| `keenetic_interface_speed_bits_per_second` | Согласованная скорость физического соединения; только при наличии значения у поднятого линка, не предел скорости VPN |
+| `keenetic_cpu_load_ratio`, `keenetic_uptime_seconds`, `keenetic_memory_{total,used,free,cache,buffers}_bytes` | CPU, uptime и память в базовых единицах |
 | `keenetic_connections_capacity`, `keenetic_connections_free` | Вместимость таблицы соединений и свободные записи |
 | `keenetic_router_info{model,version}` | Модель и версия роутера, значение 1 |
 | `keenetic_collector_success`, `keenetic_collector_fresh`, `keenetic_collector_duration_seconds`, `keenetic_collector_errors_total` | Успешность, свежесть, длительность цикла до этого коллектора и количество ошибок |

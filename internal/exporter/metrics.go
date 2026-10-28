@@ -105,6 +105,12 @@ func parseSystem(body json.RawMessage) ([]sample, error) {
 	if len(samples) == 0 {
 		return nil, errors.New("no supported system statistics")
 	}
+	if system.MemoryTotal.Valid && system.MemoryFree.Valid && system.MemoryCache.Valid && system.MemoryBuffers.Valid {
+		used := system.MemoryTotal.Value - system.MemoryFree.Value - system.MemoryCache.Value - system.MemoryBuffers.Value
+		if used >= 0 {
+			samples = append(samples, gauge("keenetic_memory_used_bytes", "Used memory excluding cache and buffers, matching Keenetic system memory usage.", used*1024, nil))
+		}
+	}
 	return samples, nil
 }
 
@@ -211,9 +217,9 @@ func parseDNSRoutes(body json.RawMessage) ([]sample, error) {
 }
 
 func selectedInterfaces(body json.RawMessage, filter []string) ([]string, error) {
-	var interfaces map[string]gokeenrestapimodels.RciShowInterface
-	if json.Unmarshal(body, &interfaces) != nil || interfaces == nil {
-		return nil, errors.New("invalid interface list")
+	interfaces, err := monitoringInterfaces(body)
+	if err != nil {
+		return nil, err
 	}
 	var selected []string
 	for id, iface := range interfaces {
@@ -236,9 +242,9 @@ func selectedInterfaces(body json.RawMessage, filter []string) ([]string, error)
 }
 
 func parseInterfaces(bodies []json.RawMessage, ids []string) ([]sample, error) {
-	var interfaces map[string]gokeenrestapimodels.RciShowInterface
-	if json.Unmarshal(bodies[0], &interfaces) != nil || interfaces == nil {
-		return nil, errors.New("invalid interface list")
+	interfaces, err := monitoringInterfaces(bodies[0])
+	if err != nil {
+		return nil, err
 	}
 	if len(bodies) != len(ids)+1 {
 		return nil, errors.New("missing interface counter responses")

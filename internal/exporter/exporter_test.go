@@ -42,7 +42,7 @@ var _ = Describe("Exporter polling", func() {
 		Expect(err).NotTo(HaveOccurred())
 		e.poll(context.Background(), 0, time.Now())
 		Expect(requests.Load()).To(Equal(int64(1)))
-		Expect(scrape(e)).To(ContainSubstring(`keenetic_dns_requests_total{proxy="System",router="home"} 100`))
+		Expect(scrape(e)).To(ContainSubstring(`keenetic_dns_requests_total{proxy="System",proxy_name="System",router="home"} 100`))
 		var wg sync.WaitGroup
 		for range 20 {
 			wg.Go(func() { defer GinkgoRecover(); Expect(scrape(e)).To(ContainSubstring("keenetic_cpu_load_ratio")) })
@@ -225,8 +225,8 @@ var _ = Describe("Exporter interface collection", func() {
 		e.poll(context.Background(), 0, time.Now())
 		body := scrape(e)
 		Expect(requests.Load()).To(Equal(int64(2)))
-		Expect(body).To(ContainSubstring(`keenetic_interface_receive_bytes_total{interface="ISP",router="home"} 1024`))
-		Expect(body).To(ContainSubstring(`keenetic_interface_connected{interface="Wireguard0",router="home"} 0`))
+		Expect(body).To(ContainSubstring(`keenetic_interface_receive_bytes_total{interface="ISP",interface_name="ISP",router="home"} 1024`))
+		Expect(body).To(ContainSubstring(`keenetic_interface_connected{interface="Wireguard0",interface_name="Wireguard0",router="home"} 0`))
 		Expect(body).NotTo(ContainSubstring(`interface="WifiMaster0"`))
 		cfg.Routers[0].Interfaces = []string{"Wireguard0"}
 		selected, err := New(cfg)

@@ -187,6 +187,13 @@ AllowedIPs = 0.0.0.0/0
 
 ## Prometheus exporter
 
+Display labels come automatically from the router: `interface_name` chooses `description`, then `interface-name`, then ID; a nonempty name includes the ID in parentheses. Interface and route metrics share this label when interface collection is enabled. Routes with no explicit interface use `Unspecified interface`. `proxy_name` uses the policy description. `upstream_name` identifies DNS/DoT/DoH, the real upstream and sorted configured suffixes (bounded to 256 characters). Multiple suffixes do not create additional counters. No separate `*_info` metrics are added for names. Dashboard queries exclude historical series missing display labels; stored history is preserved. Technical labels `interface`, `proxy`, `server`, `port` preserve uniqueness; description changes start a new labelled series.
+
+DNS metadata and interface names reuse responses already collected. Named DNS policies add a small `/rci/ip/policy` read every 5 minutes; failures back off and the last successful names expire after 10 minutes. Interface names expire with `interfaces.max_age`. With interface collection disabled, or missing, expired or ambiguous metadata, labels fall back to IDs/technical endpoints while counters continue working. Local encrypted DNS mappings come from configuration, never guessed port ranges. DoH labels contain host/port only; credentials, paths, query and fragments are excluded. DNS query history is not collected. A configured DNS interface does not prove actual packet egress.
+
+`keenetic_memory_used_bytes = total − free − cache − buffers`, matching Keenetic RAM usage; emitted only when all components exist and the result is consistent. `used / total` gives utilization. `free` is not Linux `MemAvailable`.
+
+
 `gokeenapi exporter --config exporter.yaml` (alias `metrics`) loads a separate exporter YAML. `GOKEENAPI_CONFIG` is also supported; an explicit `--config` wins. It references ordinary router YAML files but reads only their `keenetic` connection settings, without expanding routes, domain files, or URLs. It performs read-only RCI operations and never saves router configuration.
 
 | Field | Default | Meaning |
@@ -222,7 +229,8 @@ Polling is independent of scraping. At most one cycle per router is active; late
 | `keenetic_interface_up`, `keenetic_interface_connected` | Administrative state and operational connectivity of selected interfaces |
 | `keenetic_interface_receive_bytes_total`, `keenetic_interface_transmit_bytes_total` | Native byte counters; use `8 * rate(...[5m])` for bits/s |
 | `keenetic_interface_receive_packets_total`, `keenetic_interface_transmit_packets_total` | Packet counters; corresponding `*_errors_total` and `*_dropped_total` are exported where present |
-| `keenetic_cpu_load_ratio`, `keenetic_uptime_seconds`, `keenetic_memory_{total,free,cache,buffers}_bytes` | CPU utilization, uptime, and memory in base units |
+| `keenetic_interface_speed_bits_per_second` | Negotiated physical link speed, only when reported on an up link; not a VPN bandwidth limit |
+| `keenetic_cpu_load_ratio`, `keenetic_uptime_seconds`, `keenetic_memory_{total,used,free,cache,buffers}_bytes` | CPU utilization, uptime, and memory in base units |
 | `keenetic_connections_capacity`, `keenetic_connections_free` | Connection tracking capacity and free entries |
 | `keenetic_router_info{model,version}` | Router identity, value 1 |
 | `keenetic_collector_success`, `keenetic_collector_fresh`, `keenetic_collector_duration_seconds`, `keenetic_collector_errors_total` | Collector health, freshness, cycle duration through that collector, and failure count |

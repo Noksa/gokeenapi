@@ -19,7 +19,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 3,
   "editable": true,
   "refresh": "30s",
   "time": {
@@ -88,7 +88,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum(rate(keenetic_dns_requests_total{router=~\"$router\"}[5m]))) and (min(keenetic_collector_success{collector=\"dns\",router=~\"$router\"}) == 1) and (min(keenetic_collector_fresh{collector=\"dns\",router=~\"$router\"}) == 1)",
+          "expr": "(sum(rate(keenetic_dns_requests_total{router=~\"$router\",proxy_name!=\"\"}[5m]))) and (min(keenetic_collector_success{collector=\"dns\",router=~\"$router\"}) == 1) and (min(keenetic_collector_fresh{collector=\"dns\",router=~\"$router\"}) == 1)",
           "legendFormat": "DNS QPS",
           "datasource": {
             "type": "prometheus",
@@ -146,7 +146,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum(rate(keenetic_dns_cache_hits_total{router=~\"$router\"}[5m])) / sum(rate(keenetic_dns_requests_total{router=~\"$router\"}[5m]))) and (min(keenetic_collector_success{collector=\"dns\",router=~\"$router\"}) == 1) and (min(keenetic_collector_fresh{collector=\"dns\",router=~\"$router\"}) == 1)",
+          "expr": "(sum(rate(keenetic_dns_cache_hits_total{router=~\"$router\",proxy_name!=\"\"}[5m])) / sum(rate(keenetic_dns_requests_total{router=~\"$router\",proxy_name!=\"\"}[5m]))) and (min(keenetic_collector_success{collector=\"dns\",router=~\"$router\"}) == 1) and (min(keenetic_collector_fresh{collector=\"dns\",router=~\"$router\"}) == 1)",
           "legendFormat": "Cache hit ratio",
           "datasource": {
             "type": "prometheus",
@@ -462,8 +462,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(keenetic_dns_requests_total{router=~\"$router\"}[5m])",
-          "legendFormat": "{{router}} / {{proxy}} received",
+          "expr": "rate(keenetic_dns_requests_total{router=~\"$router\",proxy_name!=\"\"}[5m])",
+          "legendFormat": "{{router}} / {{proxy_name}} received",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -471,8 +471,8 @@
         },
         {
           "refId": "B",
-          "expr": "rate(keenetic_dns_forwarded_requests_total{router=~\"$router\"}[5m])",
-          "legendFormat": "{{router}} / {{proxy}} forwarded",
+          "expr": "rate(keenetic_dns_forwarded_requests_total{router=~\"$router\",proxy_name!=\"\"}[5m])",
+          "legendFormat": "{{router}} / {{proxy_name}} forwarded",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -522,8 +522,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "keenetic_dns_upstream_response_duration_seconds{router=~\"$router\"}",
-          "legendFormat": "{{router}} / {{proxy}} / {{server}}:{{port}}",
+          "expr": "keenetic_dns_upstream_response_duration_seconds{router=~\"$router\",proxy_name!=\"\",upstream_name!=\"\"}",
+          "legendFormat": "{{router}} / {{proxy_name}} / {{upstream_name}}",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -573,8 +573,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(keenetic_dns_upstream_nxdomain_total{router=~\"$router\"}[5m])",
-          "legendFormat": "{{router}} / {{proxy}} / {{server}}:{{port}}",
+          "expr": "rate(keenetic_dns_upstream_nxdomain_total{router=~\"$router\",proxy_name!=\"\",upstream_name!=\"\"}[5m])",
+          "legendFormat": "{{router}} / {{proxy_name}} / {{upstream_name}}",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -693,8 +693,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "8 * rate(keenetic_interface_receive_bytes_total{router=~\"$router\"}[5m])",
-          "legendFormat": "{{router}} / {{interface}} RX",
+          "expr": "8 * rate(keenetic_interface_receive_bytes_total{router=~\"$router\",interface_name!=\"\"}[5m])",
+          "legendFormat": "{{router}} / {{interface_name}} RX",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -702,8 +702,8 @@
         },
         {
           "refId": "B",
-          "expr": "8 * rate(keenetic_interface_transmit_bytes_total{router=~\"$router\"}[5m])",
-          "legendFormat": "{{router}} / {{interface}} TX",
+          "expr": "8 * rate(keenetic_interface_transmit_bytes_total{router=~\"$router\",interface_name!=\"\"}[5m])",
+          "legendFormat": "{{router}} / {{interface_name}} TX",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -753,8 +753,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "keenetic_interface_connected{router=~\"$router\"}",
-          "legendFormat": "{{router}} / {{interface}} connected",
+          "expr": "keenetic_interface_connected{router=~\"$router\",interface_name!=\"\"}",
+          "legendFormat": "{{router}} / {{interface_name}} connected",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -762,8 +762,8 @@
         },
         {
           "refId": "B",
-          "expr": "keenetic_interface_up{router=~\"$router\"}",
-          "legendFormat": "{{router}} / {{interface}} administrative",
+          "expr": "keenetic_interface_up{router=~\"$router\",interface_name!=\"\"}",
+          "legendFormat": "{{router}} / {{interface_name}} administrative",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -984,8 +984,35 @@
         },
         {
           "refId": "B",
+          "expr": "keenetic_memory_used_bytes{router=~\"$router\"}",
+          "legendFormat": "{{router}} used",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "C",
           "expr": "keenetic_memory_free_bytes{router=~\"$router\"}",
           "legendFormat": "{{router}} free",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "D",
+          "expr": "keenetic_memory_cache_bytes{router=~\"$router\"}",
+          "legendFormat": "{{router}} cache",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "E",
+          "expr": "keenetic_memory_buffers_bytes{router=~\"$router\"}",
+          "legendFormat": "{{router}} buffers",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -1000,7 +1027,8 @@
         "tooltip": {
           "mode": "multi"
         }
-      }
+      },
+      "description": "Used RAM excludes free, cache and buffers, matching Keenetic system memory. Free is unused RAM, not MemAvailable."
     },
     {
       "id": 17,
@@ -1205,6 +1233,293 @@
           "mode": "multi"
         }
       }
+    },
+    {
+      "id": 21,
+      "title": "Memory utilization",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 65
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "keenetic_memory_used_bytes{router=~\"$router\"} / keenetic_memory_total_bytes{router=~\"$router\"}",
+          "legendFormat": "{{router}} used",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "Used RAM / total, matching Keenetic system memory percentage."
+    },
+    {
+      "id": 22,
+      "title": "Physical link speed",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 65
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "keenetic_interface_speed_bits_per_second{router=~\"$router\",interface_name!=\"\"}",
+          "legendFormat": "{{router}} / {{interface_name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "Negotiated link speed when reported; this is not measured throughput or a VPN bandwidth limit."
+    },
+    {
+      "id": 23,
+      "title": "Static routes by interface",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 73
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "keenetic_static_routes{router=~\"$router\",interface_name!=\"\"}",
+          "legendFormat": "{{router}} / {{interface_name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "Configured static routes, not traffic or resolved DNS destinations."
+    },
+    {
+      "id": 24,
+      "title": "DNS rules by group and interface",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 73
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "keenetic_dns_routes{router=~\"$router\",interface_name!=\"\"}",
+          "legendFormat": "{{router}} / {{group}} / {{interface_name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "Configured DNS-routing rules, not matched connections."
+    },
+    {
+      "id": 25,
+      "title": "Interface errors and drops / second",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 81
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(keenetic_interface_receive_errors_total{router=~\"$router\",interface_name!=\"\"}[5m])",
+          "legendFormat": "{{router}} / {{interface_name}} receive_errors",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "rate(keenetic_interface_transmit_errors_total{router=~\"$router\",interface_name!=\"\"}[5m])",
+          "legendFormat": "{{router}} / {{interface_name}} transmit_errors",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "rate(keenetic_interface_receive_dropped_total{router=~\"$router\",interface_name!=\"\"}[5m])",
+          "legendFormat": "{{router}} / {{interface_name}} receive_dropped",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "refId": "D",
+          "expr": "rate(keenetic_interface_transmit_dropped_total{router=~\"$router\",interface_name!=\"\"}[5m])",
+          "legendFormat": "{{router}} / {{interface_name}} transmit_dropped",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "Native error and drop counter rates; unavailable counters remain absent."
     }
   ],
   "annotations": {

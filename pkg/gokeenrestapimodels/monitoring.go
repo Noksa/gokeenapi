@@ -50,8 +50,32 @@ type MonitoringDNS struct {
 
 // MonitoringDNSProxy contains a proxy name and ndnproxy statistics text.
 type MonitoringDNSProxy struct {
-	Name       string `json:"proxy-name"`
-	Statistics string `json:"proxy-stat"`
+	Name          string          `json:"proxy-name"`
+	Statistics    string          `json:"proxy-stat"`
+	Configuration json.RawMessage `json:"proxy-config"`
+	TLS           json.RawMessage `json:"proxy-tls"`
+	HTTPS         json.RawMessage `json:"proxy-https"`
+}
+
+// MonitoringInterface adds optional display and physical link metadata.
+// Raw speed tolerates unsupported firmware formats without losing counters.
+type MonitoringInterface struct {
+	RciShowInterface
+	InterfaceName json.RawMessage `json:"interface-name"`
+	Speed         json.RawMessage `json:"speed"`
+}
+
+// MonitoringPolicy contains only a connection policy's display description.
+type MonitoringPolicy struct {
+	Description string `json:"description"`
+}
+
+// MonitoringDNSServer contains optional configured encrypted upstream metadata.
+type MonitoringDNSServer struct {
+	Address string           `json:"address"`
+	URL     string           `json:"url"`
+	SNI     string           `json:"sni"`
+	Port    MonitoringNumber `json:"port"`
 }
 
 // MonitoringHosts preserves optional activity and registration information.

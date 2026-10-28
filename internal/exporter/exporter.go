@@ -27,12 +27,20 @@ type Exporter struct {
 }
 
 type target struct {
-	name       string
-	interfaces []string
-	session    *gokeenrestapi.MonitoringSession
-	pollMu     sync.Mutex
-	mu         sync.RWMutex
-	collectors []*collectorState
+	name                 string
+	interfaces           []string
+	session              *gokeenrestapi.MonitoringSession
+	pollMu               sync.Mutex
+	mu                   sync.RWMutex
+	collectors           []*collectorState
+	interfaceNames       map[string]string
+	interfaceNamesAt     time.Time
+	interfaceNamesMaxAge time.Duration
+	policyNames          map[string]string
+	policyNamesAt        time.Time
+	policyNext           time.Time
+	policyFailures       uint
+	namedPolicies        bool
 }
 
 type collectorState struct {
@@ -87,6 +95,9 @@ func New(cfg *config.ExporterConfig) (*Exporter, error) {
 				return nil, errors.New("invalid collector interval or max_age")
 			}
 			t.collectors = append(t.collectors, &collectorState{name: name, settings: settings})
+			if name == "interfaces" {
+				t.interfaceNamesMaxAge = settings.MaxAge
+			}
 		}
 		if len(t.collectors) == 0 {
 			session.Close()
@@ -145,6 +156,9 @@ func (e *Exporter) Run(ctx context.Context) {
 						next = c.next
 					}
 				}
+				if t.namedPolicies && t.policyNext.Before(next) {
+					next = t.policyNext
+				}
 				t.mu.RUnlock()
 			}
 		})
@@ -202,8 +216,9 @@ func (e *Exporter) poll(ctx context.Context, index int, now time.Time) {
 			due = append(due, c)
 		}
 	}
+	policyDue := t.namedPolicies && !now.Before(t.policyNext)
 	t.mu.RUnlock()
-	if len(due) == 0 {
+	if len(due) == 0 && !policyDue {
 		return
 	}
 	select {
@@ -229,6 +244,9 @@ func (e *Exporter) poll(ctx context.Context, index int, now time.Time) {
 				samples, err = e.interfaceSamples(pollCtx, t, result.Data)
 			} else {
 				samples, err = parseSamples(c.name, []json.RawMessage{result.Data}, nil)
+			}
+			if c.name == "dns" && err == nil {
+				t.rememberDNSPolicies(result.Data)
 			}
 		}
 		finished := time.Now()
@@ -259,6 +277,11 @@ func (e *Exporter) poll(ctx context.Context, index int, now time.Time) {
 		if err == nil && hadAttempt && !wasSuccess {
 			gokeenlog.InfoSubStepf("Router %q, collector %s recovered", t.name, c.name)
 		}
+	}
+	{
+		metadataCtx, metadataCancel := context.WithTimeout(pollCtx, min(2*time.Second, e.cfg.Timeout/5))
+		defer metadataCancel()
+		e.refreshPolicies(metadataCtx, t, now)
 	}
 }
 
@@ -305,7 +328,9 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 				metrics = append(metrics, gauge("keenetic_collector_last_attempt_timestamp_seconds", "Unix time of the last collection attempt.", float64(c.attempted.UnixNano())/1e9, labels))
 			}
 			if fresh {
-				metrics = append(metrics, c.samples...)
+				for _, s := range c.samples {
+					metrics = append(metrics, t.namedSample(s, now))
+				}
 			}
 		}
 		t.mu.RUnlock()

@@ -53,3 +53,19 @@ make exporter-local-down EXPORTER_PROJECT=keenetic-lab
 ```
 
 `GOKEENAPI_KEENETIC_LOGIN` and `GOKEENAPI_KEENETIC_PASSWORD`, if set in the shell, are forwarded only to the exporter and override credentials for every router. Existing YAML credentials work without those variables. The stack never copies router passwords into generated files or images.
+
+## Measure router load
+
+The opt-in experiment requires Go and Entware SSH (`awk`, `usleep`). Any valid exporter YAML with exactly one router and all collectors enabled is supported (omitted settings use defaults). SSH must target that same router; the test does not verify API/SSH identity. Use normal intervals; stop any other host processes/external exporters polling that router first. The test requires exactly one running Compose exporter and verifies its project (`EXPORTER_PROJECT`, default `gokeenapi-exporter-local`). It temporarily stops that container and restores it through cleanup, including ordinary test interruption/failure. After a forced process kill, check the stack manually.
+
+```bash
+GOKEENAPI_LIVE_EXPORTER_CONFIG="$(pwd)/custom/exporter_lab.yaml" \
+GOKEENAPI_LIVE_ROUTER_SSH=root@router.example \
+GOKEENAPI_LIVE_REPORT="$(pwd)/custom/exporter-load-$(date +%Y%m%d-%H%M%S).json" \
+go run github.com/onsi/ginkgo/v2/ginkgo --procs=1 \
+  --focus='Live exporter router load' -v ./internal/exporter
+```
+
+Config and report paths must be absolute. Keep local configs and reports under gitignored `custom/` (or outside the checkout). The report must be a new file: existing files, symlinks and hardlinks are rejected before the stack is stopped. It is reserved with mode `0600`; a failed experiment may leave an empty report. Only the report basename is added to Ginkgo output; credentials and configuration contents are never serialized.
+
+One persistent SSH session samples `/proc/stat` and `/proc/meminfo` every 250 ms without API requests. Phases: baseline 30 s, normal polling 120 s (including the initial collection of all collectors), cache-only scrapes at about 100/s for 30 s, recovery 30 s. The cache phase must add zero API requests. JSON records CPU, memory and cumulative request counts to correlate spikes with polling; console output includes mean/p95/maximum CPU. Used memory here uses Linux MemTotal, so absolute usage can differ from Keenetic; compare changes. Background traffic and the SSH sampler exist throughout; one run cannot establish the cause of every spike. Peaks shorter than 250 ms are averaged. Without these variables the test skips and never contacts a real router.

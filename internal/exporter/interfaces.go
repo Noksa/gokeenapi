@@ -8,6 +8,10 @@ import (
 )
 
 func (*Exporter) interfaceSamples(ctx context.Context, t *target, body json.RawMessage) ([]sample, error) {
+	speeds, err := t.rememberInterfaces(body)
+	if err != nil {
+		return nil, err
+	}
 	ids, err := selectedInterfaces(body, t.interfaces)
 	if err != nil {
 		return nil, err
@@ -26,5 +30,6 @@ func (*Exporter) interfaceSamples(ctx context.Context, t *target, body json.RawM
 			bodies = append(bodies, result.Data)
 		}
 	}
-	return parseSamples("interfaces", bodies, ids)
+	samples, err := parseSamples("interfaces", bodies, ids)
+	return append(samples, speeds...), err
 }
